@@ -1,0 +1,22 @@
+# Default evaluation settings shared across tasks.
+# CLI flags override values in this file.
+
+num_envs: 256
+device: "cuda:0"
+seed: 42
+
+# Number of simulation steps. null = pick a sensible default per task type
+# (2000 for grasp, 5000 for rotation; see eval.env_setup.default_eval_steps).
+num_steps: null
+
+# Checkpoint discovery (used by batch eval).
+checkpoint_pattern: "model_*.pt"
+wandb_cache_root: "logs/rsl_rl"
+
+# Object patching (optional). null = task default.
+object: null
+scale: null
+
+# Batch eval behavior.
+skip_existing: true
+max_checkpoints: null

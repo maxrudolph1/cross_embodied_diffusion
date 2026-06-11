@@ -1,0 +1,21 @@
+<mujoco model="apple">
+  <compiler meshdir="."/>
+
+  <asset>
+    <mesh name="apple" file="apple.stl"/>
+    <mesh name="apple_collision_hull_000" file="apple_collision_hull_000.stl"/>
+    <mesh name="apple_collision_hull_001" file="apple_collision_hull_001.stl"/>
+  </asset>
+
+  <worldbody>
+    <body name="object">
+      <freejoint name="object_joint"/>
+      <geom name="object_visual" type="mesh" mesh="apple"
+            contype="0" conaffinity="0" group="2" rgba="0.9 0.9 0.8 1" mass="0"/>
+      <geom name="apple_collision_hull_000_collision" type="mesh" mesh="apple_collision_hull_000"
+            mass="0.0250" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="apple_collision_hull_001_collision" type="mesh" mesh="apple_collision_hull_001"
+            mass="0.0250" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+    </body>
+  </worldbody>
+</mujoco>

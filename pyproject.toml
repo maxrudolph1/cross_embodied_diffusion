@@ -1,0 +1,58 @@
+[project]
+name = "mjlab-hand"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "ruoyiqiao", email = "ryqiao1317@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "mjlab>=1.4.0,<2.0.0",
+    "nvitop>=1.6.2",
+    "rsl-rl-lib==5.2.0",
+    "trimesh>=4.0.0",
+]
+
+[project.scripts]
+mjlab-hand = "mjlab_hand:main"
+train-object = "mjlab_hand.cli.train_object:main"
+play-object = "mjlab_hand.cli.play_object:main"
+eval-policy = "mjlab_hand.cli.eval:main"
+
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple"
+default = true
+
+[tool.uv.sources]
+rsl-rl-lib = { git = "https://github.com/leggedrobotics/rsl_rl.git", tag = "v5.2.0" }
+
+[build-system]
+requires = ["uv_build>=0.10.8,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "colorama>=0.4.6",
+    "debugpy>=1.8.20",
+    "matplotlib>=3.8.0",
+    "plotly>=5.0.0",
+    "pre-commit>=4.6.0",
+    "pytest>=9.0.2",
+    "ruff>=0.15.12",
+    "tabulate>=0.9.0",
+]
+
+[project.entry-points."mjlab.tasks"]
+mjlab_hand = "mjlab_hand"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/mjlab_hand/in_hand_rotation/rotation_env_cfg.py" = ["F841"]
+"src/mjlab_hand/object/object.py" = ["E741"]

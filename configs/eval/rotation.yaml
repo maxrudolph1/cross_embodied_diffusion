@@ -1,0 +1,8 @@
+# In-hand rotation evaluation defaults.
+extends: defaults.yaml
+
+num_steps: 5000
+
+# Rotation distance tolerance (rad) and required consecutive steps inside tolerance.
+rotation_success_tolerance: 0.1
+rotation_success_steps: 10

@@ -1,0 +1,162 @@
+<mujoco model="elephant">
+  <compiler meshdir="."/>
+
+  <asset>
+    <mesh name="elephant" file="elephant.stl"/>
+    <mesh name="elephant_collision_hull_000" file="elephant_collision_hull_000.stl"/>
+    <mesh name="elephant_collision_hull_001" file="elephant_collision_hull_001.stl"/>
+    <mesh name="elephant_collision_hull_002" file="elephant_collision_hull_002.stl"/>
+    <mesh name="elephant_collision_hull_003" file="elephant_collision_hull_003.stl"/>
+    <mesh name="elephant_collision_hull_004" file="elephant_collision_hull_004.stl"/>
+    <mesh name="elephant_collision_hull_005" file="elephant_collision_hull_005.stl"/>
+    <mesh name="elephant_collision_hull_006" file="elephant_collision_hull_006.stl"/>
+    <mesh name="elephant_collision_hull_007" file="elephant_collision_hull_007.stl"/>
+    <mesh name="elephant_collision_hull_008" file="elephant_collision_hull_008.stl"/>
+    <mesh name="elephant_collision_hull_009" file="elephant_collision_hull_009.stl"/>
+    <mesh name="elephant_collision_hull_010" file="elephant_collision_hull_010.stl"/>
+    <mesh name="elephant_collision_hull_011" file="elephant_collision_hull_011.stl"/>
+    <mesh name="elephant_collision_hull_012" file="elephant_collision_hull_012.stl"/>
+    <mesh name="elephant_collision_hull_013" file="elephant_collision_hull_013.stl"/>
+    <mesh name="elephant_collision_hull_014" file="elephant_collision_hull_014.stl"/>
+    <mesh name="elephant_collision_hull_015" file="elephant_collision_hull_015.stl"/>
+    <mesh name="elephant_collision_hull_016" file="elephant_collision_hull_016.stl"/>
+    <mesh name="elephant_collision_hull_017" file="elephant_collision_hull_017.stl"/>
+    <mesh name="elephant_collision_hull_018" file="elephant_collision_hull_018.stl"/>
+    <mesh name="elephant_collision_hull_019" file="elephant_collision_hull_019.stl"/>
+    <mesh name="elephant_collision_hull_020" file="elephant_collision_hull_020.stl"/>
+    <mesh name="elephant_collision_hull_021" file="elephant_collision_hull_021.stl"/>
+    <mesh name="elephant_collision_hull_022" file="elephant_collision_hull_022.stl"/>
+    <mesh name="elephant_collision_hull_023" file="elephant_collision_hull_023.stl"/>
+    <mesh name="elephant_collision_hull_024" file="elephant_collision_hull_024.stl"/>
+    <mesh name="elephant_collision_hull_025" file="elephant_collision_hull_025.stl"/>
+    <mesh name="elephant_collision_hull_026" file="elephant_collision_hull_026.stl"/>
+    <mesh name="elephant_collision_hull_027" file="elephant_collision_hull_027.stl"/>
+    <mesh name="elephant_collision_hull_028" file="elephant_collision_hull_028.stl"/>
+    <mesh name="elephant_collision_hull_029" file="elephant_collision_hull_029.stl"/>
+    <mesh name="elephant_collision_hull_030" file="elephant_collision_hull_030.stl"/>
+    <mesh name="elephant_collision_hull_031" file="elephant_collision_hull_031.stl"/>
+    <mesh name="elephant_collision_hull_032" file="elephant_collision_hull_032.stl"/>
+    <mesh name="elephant_collision_hull_033" file="elephant_collision_hull_033.stl"/>
+    <mesh name="elephant_collision_hull_034" file="elephant_collision_hull_034.stl"/>
+    <mesh name="elephant_collision_hull_035" file="elephant_collision_hull_035.stl"/>
+    <mesh name="elephant_collision_hull_036" file="elephant_collision_hull_036.stl"/>
+    <mesh name="elephant_collision_hull_037" file="elephant_collision_hull_037.stl"/>
+    <mesh name="elephant_collision_hull_038" file="elephant_collision_hull_038.stl"/>
+    <mesh name="elephant_collision_hull_039" file="elephant_collision_hull_039.stl"/>
+    <mesh name="elephant_collision_hull_040" file="elephant_collision_hull_040.stl"/>
+    <mesh name="elephant_collision_hull_041" file="elephant_collision_hull_041.stl"/>
+    <mesh name="elephant_collision_hull_042" file="elephant_collision_hull_042.stl"/>
+    <mesh name="elephant_collision_hull_043" file="elephant_collision_hull_043.stl"/>
+    <mesh name="elephant_collision_hull_044" file="elephant_collision_hull_044.stl"/>
+    <mesh name="elephant_collision_hull_045" file="elephant_collision_hull_045.stl"/>
+    <mesh name="elephant_collision_hull_046" file="elephant_collision_hull_046.stl"/>
+    <mesh name="elephant_collision_hull_047" file="elephant_collision_hull_047.stl"/>
+    <mesh name="elephant_collision_hull_048" file="elephant_collision_hull_048.stl"/>
+  </asset>
+
+  <worldbody>
+    <body name="object">
+      <freejoint name="object_joint"/>
+      <geom name="object_visual" type="mesh" mesh="elephant"
+            contype="0" conaffinity="0" group="2" rgba="0.9 0.9 0.8 1" mass="0"/>
+      <geom name="elephant_collision_hull_000_collision" type="mesh" mesh="elephant_collision_hull_000"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_001_collision" type="mesh" mesh="elephant_collision_hull_001"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_002_collision" type="mesh" mesh="elephant_collision_hull_002"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_003_collision" type="mesh" mesh="elephant_collision_hull_003"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_004_collision" type="mesh" mesh="elephant_collision_hull_004"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_005_collision" type="mesh" mesh="elephant_collision_hull_005"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_006_collision" type="mesh" mesh="elephant_collision_hull_006"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_007_collision" type="mesh" mesh="elephant_collision_hull_007"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_008_collision" type="mesh" mesh="elephant_collision_hull_008"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_009_collision" type="mesh" mesh="elephant_collision_hull_009"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_010_collision" type="mesh" mesh="elephant_collision_hull_010"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_011_collision" type="mesh" mesh="elephant_collision_hull_011"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_012_collision" type="mesh" mesh="elephant_collision_hull_012"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_013_collision" type="mesh" mesh="elephant_collision_hull_013"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_014_collision" type="mesh" mesh="elephant_collision_hull_014"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_015_collision" type="mesh" mesh="elephant_collision_hull_015"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_016_collision" type="mesh" mesh="elephant_collision_hull_016"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_017_collision" type="mesh" mesh="elephant_collision_hull_017"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_018_collision" type="mesh" mesh="elephant_collision_hull_018"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_019_collision" type="mesh" mesh="elephant_collision_hull_019"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_020_collision" type="mesh" mesh="elephant_collision_hull_020"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_021_collision" type="mesh" mesh="elephant_collision_hull_021"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_022_collision" type="mesh" mesh="elephant_collision_hull_022"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_023_collision" type="mesh" mesh="elephant_collision_hull_023"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_024_collision" type="mesh" mesh="elephant_collision_hull_024"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_025_collision" type="mesh" mesh="elephant_collision_hull_025"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_026_collision" type="mesh" mesh="elephant_collision_hull_026"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_027_collision" type="mesh" mesh="elephant_collision_hull_027"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_028_collision" type="mesh" mesh="elephant_collision_hull_028"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_029_collision" type="mesh" mesh="elephant_collision_hull_029"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_030_collision" type="mesh" mesh="elephant_collision_hull_030"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_031_collision" type="mesh" mesh="elephant_collision_hull_031"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_032_collision" type="mesh" mesh="elephant_collision_hull_032"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_033_collision" type="mesh" mesh="elephant_collision_hull_033"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_034_collision" type="mesh" mesh="elephant_collision_hull_034"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_035_collision" type="mesh" mesh="elephant_collision_hull_035"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_036_collision" type="mesh" mesh="elephant_collision_hull_036"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_037_collision" type="mesh" mesh="elephant_collision_hull_037"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_038_collision" type="mesh" mesh="elephant_collision_hull_038"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_039_collision" type="mesh" mesh="elephant_collision_hull_039"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_040_collision" type="mesh" mesh="elephant_collision_hull_040"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_041_collision" type="mesh" mesh="elephant_collision_hull_041"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_042_collision" type="mesh" mesh="elephant_collision_hull_042"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_043_collision" type="mesh" mesh="elephant_collision_hull_043"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_044_collision" type="mesh" mesh="elephant_collision_hull_044"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_045_collision" type="mesh" mesh="elephant_collision_hull_045"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_046_collision" type="mesh" mesh="elephant_collision_hull_046"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_047_collision" type="mesh" mesh="elephant_collision_hull_047"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="elephant_collision_hull_048_collision" type="mesh" mesh="elephant_collision_hull_048"
+            mass="0.0010" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+    </body>
+  </worldbody>
+</mujoco>

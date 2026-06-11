@@ -1,0 +1,195 @@
+<mujoco model="piggy_bank">
+  <compiler meshdir="."/>
+
+  <asset>
+    <mesh name="piggy_bank" file="piggy_bank.stl"/>
+    <mesh name="piggy_bank_collision_hull_000" file="piggy_bank_collision_hull_000.stl"/>
+    <mesh name="piggy_bank_collision_hull_001" file="piggy_bank_collision_hull_001.stl"/>
+    <mesh name="piggy_bank_collision_hull_002" file="piggy_bank_collision_hull_002.stl"/>
+    <mesh name="piggy_bank_collision_hull_003" file="piggy_bank_collision_hull_003.stl"/>
+    <mesh name="piggy_bank_collision_hull_004" file="piggy_bank_collision_hull_004.stl"/>
+    <mesh name="piggy_bank_collision_hull_005" file="piggy_bank_collision_hull_005.stl"/>
+    <mesh name="piggy_bank_collision_hull_006" file="piggy_bank_collision_hull_006.stl"/>
+    <mesh name="piggy_bank_collision_hull_007" file="piggy_bank_collision_hull_007.stl"/>
+    <mesh name="piggy_bank_collision_hull_008" file="piggy_bank_collision_hull_008.stl"/>
+    <mesh name="piggy_bank_collision_hull_009" file="piggy_bank_collision_hull_009.stl"/>
+    <mesh name="piggy_bank_collision_hull_010" file="piggy_bank_collision_hull_010.stl"/>
+    <mesh name="piggy_bank_collision_hull_011" file="piggy_bank_collision_hull_011.stl"/>
+    <mesh name="piggy_bank_collision_hull_012" file="piggy_bank_collision_hull_012.stl"/>
+    <mesh name="piggy_bank_collision_hull_013" file="piggy_bank_collision_hull_013.stl"/>
+    <mesh name="piggy_bank_collision_hull_014" file="piggy_bank_collision_hull_014.stl"/>
+    <mesh name="piggy_bank_collision_hull_015" file="piggy_bank_collision_hull_015.stl"/>
+    <mesh name="piggy_bank_collision_hull_016" file="piggy_bank_collision_hull_016.stl"/>
+    <mesh name="piggy_bank_collision_hull_017" file="piggy_bank_collision_hull_017.stl"/>
+    <mesh name="piggy_bank_collision_hull_018" file="piggy_bank_collision_hull_018.stl"/>
+    <mesh name="piggy_bank_collision_hull_019" file="piggy_bank_collision_hull_019.stl"/>
+    <mesh name="piggy_bank_collision_hull_020" file="piggy_bank_collision_hull_020.stl"/>
+    <mesh name="piggy_bank_collision_hull_021" file="piggy_bank_collision_hull_021.stl"/>
+    <mesh name="piggy_bank_collision_hull_022" file="piggy_bank_collision_hull_022.stl"/>
+    <mesh name="piggy_bank_collision_hull_023" file="piggy_bank_collision_hull_023.stl"/>
+    <mesh name="piggy_bank_collision_hull_024" file="piggy_bank_collision_hull_024.stl"/>
+    <mesh name="piggy_bank_collision_hull_025" file="piggy_bank_collision_hull_025.stl"/>
+    <mesh name="piggy_bank_collision_hull_026" file="piggy_bank_collision_hull_026.stl"/>
+    <mesh name="piggy_bank_collision_hull_027" file="piggy_bank_collision_hull_027.stl"/>
+    <mesh name="piggy_bank_collision_hull_028" file="piggy_bank_collision_hull_028.stl"/>
+    <mesh name="piggy_bank_collision_hull_029" file="piggy_bank_collision_hull_029.stl"/>
+    <mesh name="piggy_bank_collision_hull_030" file="piggy_bank_collision_hull_030.stl"/>
+    <mesh name="piggy_bank_collision_hull_031" file="piggy_bank_collision_hull_031.stl"/>
+    <mesh name="piggy_bank_collision_hull_032" file="piggy_bank_collision_hull_032.stl"/>
+    <mesh name="piggy_bank_collision_hull_033" file="piggy_bank_collision_hull_033.stl"/>
+    <mesh name="piggy_bank_collision_hull_034" file="piggy_bank_collision_hull_034.stl"/>
+    <mesh name="piggy_bank_collision_hull_035" file="piggy_bank_collision_hull_035.stl"/>
+    <mesh name="piggy_bank_collision_hull_036" file="piggy_bank_collision_hull_036.stl"/>
+    <mesh name="piggy_bank_collision_hull_037" file="piggy_bank_collision_hull_037.stl"/>
+    <mesh name="piggy_bank_collision_hull_038" file="piggy_bank_collision_hull_038.stl"/>
+    <mesh name="piggy_bank_collision_hull_039" file="piggy_bank_collision_hull_039.stl"/>
+    <mesh name="piggy_bank_collision_hull_040" file="piggy_bank_collision_hull_040.stl"/>
+    <mesh name="piggy_bank_collision_hull_041" file="piggy_bank_collision_hull_041.stl"/>
+    <mesh name="piggy_bank_collision_hull_042" file="piggy_bank_collision_hull_042.stl"/>
+    <mesh name="piggy_bank_collision_hull_043" file="piggy_bank_collision_hull_043.stl"/>
+    <mesh name="piggy_bank_collision_hull_044" file="piggy_bank_collision_hull_044.stl"/>
+    <mesh name="piggy_bank_collision_hull_045" file="piggy_bank_collision_hull_045.stl"/>
+    <mesh name="piggy_bank_collision_hull_046" file="piggy_bank_collision_hull_046.stl"/>
+    <mesh name="piggy_bank_collision_hull_047" file="piggy_bank_collision_hull_047.stl"/>
+    <mesh name="piggy_bank_collision_hull_048" file="piggy_bank_collision_hull_048.stl"/>
+    <mesh name="piggy_bank_collision_hull_049" file="piggy_bank_collision_hull_049.stl"/>
+    <mesh name="piggy_bank_collision_hull_050" file="piggy_bank_collision_hull_050.stl"/>
+    <mesh name="piggy_bank_collision_hull_051" file="piggy_bank_collision_hull_051.stl"/>
+    <mesh name="piggy_bank_collision_hull_052" file="piggy_bank_collision_hull_052.stl"/>
+    <mesh name="piggy_bank_collision_hull_053" file="piggy_bank_collision_hull_053.stl"/>
+    <mesh name="piggy_bank_collision_hull_054" file="piggy_bank_collision_hull_054.stl"/>
+    <mesh name="piggy_bank_collision_hull_055" file="piggy_bank_collision_hull_055.stl"/>
+    <mesh name="piggy_bank_collision_hull_056" file="piggy_bank_collision_hull_056.stl"/>
+    <mesh name="piggy_bank_collision_hull_057" file="piggy_bank_collision_hull_057.stl"/>
+    <mesh name="piggy_bank_collision_hull_058" file="piggy_bank_collision_hull_058.stl"/>
+    <mesh name="piggy_bank_collision_hull_059" file="piggy_bank_collision_hull_059.stl"/>
+  </asset>
+
+  <worldbody>
+    <body name="object">
+      <freejoint name="object_joint"/>
+      <geom name="object_visual" type="mesh" mesh="piggy_bank"
+            contype="0" conaffinity="0" group="2" rgba="0.9 0.9 0.8 1" mass="0"/>
+      <geom name="piggy_bank_collision_hull_000_collision" type="mesh" mesh="piggy_bank_collision_hull_000"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_001_collision" type="mesh" mesh="piggy_bank_collision_hull_001"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_002_collision" type="mesh" mesh="piggy_bank_collision_hull_002"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_003_collision" type="mesh" mesh="piggy_bank_collision_hull_003"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_004_collision" type="mesh" mesh="piggy_bank_collision_hull_004"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_005_collision" type="mesh" mesh="piggy_bank_collision_hull_005"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_006_collision" type="mesh" mesh="piggy_bank_collision_hull_006"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_007_collision" type="mesh" mesh="piggy_bank_collision_hull_007"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_008_collision" type="mesh" mesh="piggy_bank_collision_hull_008"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_009_collision" type="mesh" mesh="piggy_bank_collision_hull_009"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_010_collision" type="mesh" mesh="piggy_bank_collision_hull_010"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_011_collision" type="mesh" mesh="piggy_bank_collision_hull_011"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_012_collision" type="mesh" mesh="piggy_bank_collision_hull_012"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_013_collision" type="mesh" mesh="piggy_bank_collision_hull_013"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_014_collision" type="mesh" mesh="piggy_bank_collision_hull_014"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_015_collision" type="mesh" mesh="piggy_bank_collision_hull_015"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_016_collision" type="mesh" mesh="piggy_bank_collision_hull_016"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_017_collision" type="mesh" mesh="piggy_bank_collision_hull_017"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_018_collision" type="mesh" mesh="piggy_bank_collision_hull_018"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_019_collision" type="mesh" mesh="piggy_bank_collision_hull_019"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_020_collision" type="mesh" mesh="piggy_bank_collision_hull_020"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_021_collision" type="mesh" mesh="piggy_bank_collision_hull_021"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_022_collision" type="mesh" mesh="piggy_bank_collision_hull_022"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_023_collision" type="mesh" mesh="piggy_bank_collision_hull_023"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_024_collision" type="mesh" mesh="piggy_bank_collision_hull_024"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_025_collision" type="mesh" mesh="piggy_bank_collision_hull_025"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_026_collision" type="mesh" mesh="piggy_bank_collision_hull_026"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_027_collision" type="mesh" mesh="piggy_bank_collision_hull_027"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_028_collision" type="mesh" mesh="piggy_bank_collision_hull_028"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_029_collision" type="mesh" mesh="piggy_bank_collision_hull_029"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_030_collision" type="mesh" mesh="piggy_bank_collision_hull_030"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_031_collision" type="mesh" mesh="piggy_bank_collision_hull_031"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_032_collision" type="mesh" mesh="piggy_bank_collision_hull_032"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_033_collision" type="mesh" mesh="piggy_bank_collision_hull_033"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_034_collision" type="mesh" mesh="piggy_bank_collision_hull_034"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_035_collision" type="mesh" mesh="piggy_bank_collision_hull_035"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_036_collision" type="mesh" mesh="piggy_bank_collision_hull_036"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_037_collision" type="mesh" mesh="piggy_bank_collision_hull_037"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_038_collision" type="mesh" mesh="piggy_bank_collision_hull_038"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_039_collision" type="mesh" mesh="piggy_bank_collision_hull_039"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_040_collision" type="mesh" mesh="piggy_bank_collision_hull_040"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_041_collision" type="mesh" mesh="piggy_bank_collision_hull_041"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_042_collision" type="mesh" mesh="piggy_bank_collision_hull_042"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_043_collision" type="mesh" mesh="piggy_bank_collision_hull_043"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_044_collision" type="mesh" mesh="piggy_bank_collision_hull_044"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_045_collision" type="mesh" mesh="piggy_bank_collision_hull_045"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_046_collision" type="mesh" mesh="piggy_bank_collision_hull_046"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_047_collision" type="mesh" mesh="piggy_bank_collision_hull_047"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_048_collision" type="mesh" mesh="piggy_bank_collision_hull_048"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_049_collision" type="mesh" mesh="piggy_bank_collision_hull_049"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_050_collision" type="mesh" mesh="piggy_bank_collision_hull_050"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_051_collision" type="mesh" mesh="piggy_bank_collision_hull_051"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_052_collision" type="mesh" mesh="piggy_bank_collision_hull_052"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_053_collision" type="mesh" mesh="piggy_bank_collision_hull_053"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_054_collision" type="mesh" mesh="piggy_bank_collision_hull_054"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_055_collision" type="mesh" mesh="piggy_bank_collision_hull_055"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_056_collision" type="mesh" mesh="piggy_bank_collision_hull_056"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_057_collision" type="mesh" mesh="piggy_bank_collision_hull_057"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_058_collision" type="mesh" mesh="piggy_bank_collision_hull_058"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="piggy_bank_collision_hull_059_collision" type="mesh" mesh="piggy_bank_collision_hull_059"
+            mass="0.0008" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+    </body>
+  </worldbody>
+</mujoco>

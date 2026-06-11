@@ -1,0 +1,8 @@
+# Grasp-task evaluation defaults.
+extends: defaults.yaml
+
+num_steps: 2000
+
+# Goal distance tolerance (m) and required consecutive steps inside tolerance.
+grasp_success_tolerance: 0.03
+grasp_success_steps: 10

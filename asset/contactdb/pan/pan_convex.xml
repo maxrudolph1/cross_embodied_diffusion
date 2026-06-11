@@ -1,0 +1,57 @@
+<mujoco model="pan">
+  <compiler meshdir="."/>
+
+  <asset>
+    <mesh name="pan" file="pan.stl"/>
+    <mesh name="pan_collision_hull_000" file="pan_collision_hull_000.stl"/>
+    <mesh name="pan_collision_hull_001" file="pan_collision_hull_001.stl"/>
+    <mesh name="pan_collision_hull_002" file="pan_collision_hull_002.stl"/>
+    <mesh name="pan_collision_hull_003" file="pan_collision_hull_003.stl"/>
+    <mesh name="pan_collision_hull_004" file="pan_collision_hull_004.stl"/>
+    <mesh name="pan_collision_hull_005" file="pan_collision_hull_005.stl"/>
+    <mesh name="pan_collision_hull_006" file="pan_collision_hull_006.stl"/>
+    <mesh name="pan_collision_hull_007" file="pan_collision_hull_007.stl"/>
+    <mesh name="pan_collision_hull_008" file="pan_collision_hull_008.stl"/>
+    <mesh name="pan_collision_hull_009" file="pan_collision_hull_009.stl"/>
+    <mesh name="pan_collision_hull_010" file="pan_collision_hull_010.stl"/>
+    <mesh name="pan_collision_hull_011" file="pan_collision_hull_011.stl"/>
+    <mesh name="pan_collision_hull_012" file="pan_collision_hull_012.stl"/>
+    <mesh name="pan_collision_hull_013" file="pan_collision_hull_013.stl"/>
+  </asset>
+
+  <worldbody>
+    <body name="object">
+      <freejoint name="object_joint"/>
+      <geom name="object_visual" type="mesh" mesh="pan"
+            contype="0" conaffinity="0" group="2" rgba="0.9 0.9 0.8 1" mass="0"/>
+      <geom name="pan_collision_hull_000_collision" type="mesh" mesh="pan_collision_hull_000"
+            mass="0.0036" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="pan_collision_hull_001_collision" type="mesh" mesh="pan_collision_hull_001"
+            mass="0.0036" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="pan_collision_hull_002_collision" type="mesh" mesh="pan_collision_hull_002"
+            mass="0.0036" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="pan_collision_hull_003_collision" type="mesh" mesh="pan_collision_hull_003"
+            mass="0.0036" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="pan_collision_hull_004_collision" type="mesh" mesh="pan_collision_hull_004"
+            mass="0.0036" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="pan_collision_hull_005_collision" type="mesh" mesh="pan_collision_hull_005"
+            mass="0.0036" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="pan_collision_hull_006_collision" type="mesh" mesh="pan_collision_hull_006"
+            mass="0.0036" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="pan_collision_hull_007_collision" type="mesh" mesh="pan_collision_hull_007"
+            mass="0.0036" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="pan_collision_hull_008_collision" type="mesh" mesh="pan_collision_hull_008"
+            mass="0.0036" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="pan_collision_hull_009_collision" type="mesh" mesh="pan_collision_hull_009"
+            mass="0.0036" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="pan_collision_hull_010_collision" type="mesh" mesh="pan_collision_hull_010"
+            mass="0.0036" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="pan_collision_hull_011_collision" type="mesh" mesh="pan_collision_hull_011"
+            mass="0.0036" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="pan_collision_hull_012_collision" type="mesh" mesh="pan_collision_hull_012"
+            mass="0.0036" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+      <geom name="pan_collision_hull_013_collision" type="mesh" mesh="pan_collision_hull_013"
+            mass="0.0036" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+    </body>
+  </worldbody>
+</mujoco>

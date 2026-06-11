@@ -1,0 +1,18 @@
+<mujoco model="pyramid_large">
+  <compiler meshdir="."/>
+
+  <asset>
+    <mesh name="pyramid_large" file="pyramid_large.stl"/>
+    <mesh name="pyramid_large_collision_hull_000" file="pyramid_large_collision_hull_000.stl"/>
+  </asset>
+
+  <worldbody>
+    <body name="object">
+      <freejoint name="object_joint"/>
+      <geom name="object_visual" type="mesh" mesh="pyramid_large"
+            contype="0" conaffinity="0" group="2" rgba="0.9 0.9 0.8 1" mass="0"/>
+      <geom name="pyramid_large_collision_hull_000_collision" type="mesh" mesh="pyramid_large_collision_hull_000"
+            mass="0.0500" condim="6" friction="1.0 0.002 0.002" priority="1"/>
+    </body>
+  </worldbody>
+</mujoco>
