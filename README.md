@@ -92,7 +92,7 @@ uv run eval-policy --task InHand-Rotation-Allegro --wandb-run-path entity/projec
 
 ## Citation
 
-If you use this helpful, please consider cite:
+If you find this project useful, please consider citing it:
 
 ```bibtex
 @article{liu2026contactexplorer,
