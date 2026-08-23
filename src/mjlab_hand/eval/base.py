@@ -121,13 +121,13 @@ def run_eval(
 
 def _policy_input(obs, device: torch.device) -> torch.Tensor:
     """Normalize policy input across wrapper variants."""
-    if isinstance(obs, dict):
-        # RSL-RL wrapper returns a dict; try common keys
+    # TensorDict is Mapping-like but not a dict subclass.
+    if isinstance(obs, dict) or (hasattr(obs, "keys") and hasattr(obs, "__getitem__")):
         for key in ("actor", "policy", "obs"):
             if key in obs:
                 return obs[key].to(device)
         raise KeyError(
-            f"None of {('actor', 'policy', 'obs')} found in obs dict; got {list(obs.keys())}"
+            f"None of {('actor', 'policy', 'obs')} found in obs; got {list(obs.keys())}"
         )
     if isinstance(obs, (list, tuple)):
         return obs[0].to(device)

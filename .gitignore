@@ -67,3 +67,9 @@ logs/
 wandb/
 
 .vscode/
+
+# Local experiment artifacts (do not commit)
+data/
+outputs/
+slurm_jobs/
+*.mp4
