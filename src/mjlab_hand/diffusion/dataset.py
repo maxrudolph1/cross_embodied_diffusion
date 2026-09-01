@@ -116,6 +116,31 @@ class TrajectoryStore:
             out.append((int(s), int(e), succ))
         return out
 
+    def source_step_bounds(self) -> list[tuple[int, int, str]]:
+        """Per-source (start, end, task) step ranges for a mixed dataset.
+
+        Recovered from the cumulative `extra.sources[i].n_steps` written by
+        `build_mixed_dataset.py`. Raises if the counts do not sum to
+        `n_steps`, rather than silently mis-attributing samples to the wrong
+        source.
+        """
+        extra = json.loads(self.root.attrs.get("extra", "{}"))
+        sources = extra.get("sources")
+        if not sources:
+            raise RuntimeError(f"{self.path} has no 'extra.sources' attrs -- not a mixed dataset")
+        bounds: list[tuple[int, int, str]] = []
+        start = 0
+        for src in sources:
+            n = int(src["n_steps"])
+            end = start + n
+            bounds.append((start, end, str(src.get("task", ""))))
+            start = end
+        if start != self.n_steps:
+            raise RuntimeError(
+                f"{self.path}: source step counts sum to {start}, but n_steps={self.n_steps}"
+            )
+        return bounds
+
     def summary(self) -> dict[str, Any]:
         episodes = self.episode_slices()
         n_succ = sum(1 for *_, s in episodes if s)
@@ -142,6 +167,7 @@ class DiffusionDataset(Dataset):
         action_horizon: int = 8,
         success_only: bool = True,
         pad_before: bool = True,
+        ambient_tmin: list[int] | None = None,
     ):
         self.store = store
         self.obs_horizon = obs_horizon
@@ -162,6 +188,29 @@ class DiffusionDataset(Dataset):
         self.obs = np.asarray(store.data["obs"][:], dtype=np.float32)
         self.action = np.asarray(store.data["action"][:], dtype=np.float32)
 
+        self.ambient_tmin: np.ndarray | None = None
+        if ambient_tmin is not None:
+            bounds = store.source_step_bounds()  # raises if not a mixed dataset
+            if len(ambient_tmin) != len(bounds):
+                raise ValueError(
+                    f"ambient_tmin has {len(ambient_tmin)} entries but dataset has "
+                    f"{len(bounds)} sources"
+                )
+            # Per-episode t_min resolved from the episode's step offset, not
+            # its index, so this stays correct after success_only drops
+            # episodes and shifts indices around.
+            per_episode_tmin = []
+            for start, _end, _succ in self.episodes:
+                tmin = None
+                for (b_start, b_end, _task), t in zip(bounds, ambient_tmin, strict=True):
+                    if b_start <= start < b_end:
+                        tmin = t
+                        break
+                if tmin is None:
+                    raise RuntimeError(f"episode at step {start} not within any source range")
+                per_episode_tmin.append(tmin)
+            self.ambient_tmin = np.asarray(per_episode_tmin, dtype=np.int64)
+
     def __len__(self) -> int:
         return len(self.indices)
 
@@ -181,7 +230,10 @@ class DiffusionDataset(Dataset):
                 j = end - start - 1
             act_idx.append(start + j)
 
-        return {
+        out = {
             "obs": torch.from_numpy(self.obs[obs_idx]),
             "action": torch.from_numpy(self.action[act_idx]),
         }
+        if self.ambient_tmin is not None:
+            out["t_min"] = torch.tensor(int(self.ambient_tmin[epi_i]), dtype=torch.long)
+        return out

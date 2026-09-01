@@ -73,28 +73,53 @@ class DiffusionPolicy(torch.nn.Module):
         out = a.gather(0, t)
         return out.reshape(t.shape[0], *((1,) * (len(x_shape) - 1)))
 
-    def compute_loss(self, obs: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+    def compute_loss(
+        self,
+        obs: torch.Tensor,
+        action: torch.Tensor,
+        t_min: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         """
         Args:
             obs: (B, To, Do)
             action: (B, Ta, Da)
+            t_min: (B,) optional per-sample minimum diffusion timestep for
+                ambient gating (source data is admitted only at t >= t_min).
+                When None, timesteps are sampled uniformly over the full
+                schedule (original behaviour, exact).
         """
         b = obs.shape[0]
         device = obs.device
+        T = self.cfg.num_train_timesteps
         nobs = self.obs_normalizer.normalize(obs).reshape(b, -1)
         naction = self.action_normalizer.normalize(action)
 
         noise = torch.randn_like(naction)
-        timesteps = torch.randint(
-            0, self.cfg.num_train_timesteps, (b,), device=device, dtype=torch.long
-        )
+        if t_min is None:
+            timesteps = torch.randint(0, T, (b,), device=device, dtype=torch.long)
+            weight = None
+        else:
+            t_min = t_min.to(device=device, dtype=torch.long)
+            span = (T - t_min).clamp(min=0)
+            u = torch.rand(b, device=device)
+            timesteps = (t_min + (u * span).long()).clamp(max=T - 1)
+            # w = (T - t_min) / T keeps the per-timestep gradient density at
+            # 1/T for every admitted t, i.e. identical to the ungated case
+            # restricted to [t_min, T) -- see CHANGES.md item 24.
+            weight = (T - t_min).to(dtype=naction.dtype) / T
+
         noisy = (
             self._extract(self.sqrt_alphas_cumprod, timesteps, naction.shape) * naction
             + self._extract(self.sqrt_one_minus_alphas_cumprod, timesteps, naction.shape)
             * noise
         )
         pred = self.noise_pred_net(noisy, timesteps, nobs)
-        return F.mse_loss(pred, noise)
+
+        if weight is None:
+            return F.mse_loss(pred, noise)
+
+        per_sample = ((pred - noise) ** 2).mean(dim=tuple(range(1, noise.ndim)))
+        return (per_sample * weight).sum() / weight.sum().clamp_min(1e-8)
 
     @torch.no_grad()
     def predict_action(self, obs: torch.Tensor) -> torch.Tensor:
@@ -122,22 +147,24 @@ class DiffusionPolicy(torch.nn.Module):
             b, self.cfg.action_horizon, self.cfg.action_dim, device=device
         )
         timesteps = self.inference_timesteps.tolist()
-        # Reverse diffusion from high noise -> low noise.
+        # Reverse diffusion from high noise -> low noise via DDIM (eta=0).
+        # `inference_timesteps` is a strided subsequence of the training
+        # schedule, so a single-step ancestral update is invalid here (it
+        # only holds for a t -> t-1 transition); DDIM uses cumulative alphas
+        # at the two *inference* timesteps and is valid for arbitrary
+        # strides. See CHANGES.md item 1.
         for i in reversed(range(len(timesteps))):
-            t = torch.full((b,), int(timesteps[i]), device=device, dtype=torch.long)
+            t_cur = int(timesteps[i])
+            t = torch.full((b,), t_cur, device=device, dtype=torch.long)
             eps = self.noise_pred_net(x, t, nobs)
-            alpha = self.alphas[t]
-            alpha_bar = self.alphas_cumprod[t]
-            beta = self.betas[t]
-            alpha = alpha.view(-1, 1, 1)
-            alpha_bar = alpha_bar.view(-1, 1, 1)
-            beta = beta.view(-1, 1, 1)
-            x = (1.0 / torch.sqrt(alpha)) * (
-                x - ((1 - alpha) / torch.sqrt(1 - alpha_bar)) * eps
-            )
+            alpha_bar_t = self.alphas_cumprod[t_cur]
             if i > 0:
-                noise = torch.randn_like(x)
-                x = x + torch.sqrt(beta) * noise
+                alpha_bar_prev = self.alphas_cumprod[int(timesteps[i - 1])]
+            else:
+                alpha_bar_prev = torch.ones_like(alpha_bar_t)
+            x0 = (x - torch.sqrt(1.0 - alpha_bar_t) * eps) / torch.sqrt(alpha_bar_t)
+            x0 = x0.clamp(-1.0, 1.0)
+            x = torch.sqrt(alpha_bar_prev) * x0 + torch.sqrt(1.0 - alpha_bar_prev) * eps
 
         return self.action_normalizer.unnormalize(x)
 

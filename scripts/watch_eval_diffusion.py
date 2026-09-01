@@ -14,7 +14,6 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-
 EPOCH_RE = re.compile(r"\[epoch\s+(\d+)/(\d+)\]\s+loss=([0-9.eE+-]+)\s+steps=(\d+)")
 
 

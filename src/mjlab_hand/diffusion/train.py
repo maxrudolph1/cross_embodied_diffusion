@@ -31,12 +31,36 @@ class TrainConfig:
     num_train_timesteps: int = 100
     num_inference_steps: int = 16
     save_every_epochs: int = 10
+    # How often to write policy_latest.pt / policy_best.pt. A 265MB
+    # torch.save to NFS costs ~0.75s, comparable to a whole epoch at small
+    # data scales -- see CHANGES.md item 13. Always saved on the final epoch
+    # and immediately before any eval/render regardless of this cadence.
+    latest_every_epochs: int = 1
     seed: int = 0
-    # Optional in-loop env evaluation (disabled unless eval_task is set).
+    # Optional in-loop env evaluation (disabled unless eval_task/eval_specs is set).
     eval_task: str | None = None
+    # Multi-target eval: [{"task": ..., "onehot": [..] | None}, ...]. Lets a
+    # mixed-embodiment policy be scored against each embodiment it drives.
+    # `eval_task` alone is internally promoted to a single-element spec.
+    eval_specs: list[dict] | None = None
     eval_every_epochs: int = 10
     eval_num_envs: int = 32
     eval_num_steps: int = 1500
+    # Optional periodic mp4 rollout rendering.
+    render_every_epochs: int = 0
+    render_num_steps: int = 400
+    render_num_envs: int = 1
+    # Ambient diffusion: one t_min per source (dataset order) for a mixed
+    # dataset. Source i is admitted into the loss only at t >= ambient_tmin[i].
+    ambient_tmin: list[int] | None = None
+
+
+def _eval_specs(cfg: TrainConfig) -> list[dict]:
+    if cfg.eval_specs is not None:
+        return cfg.eval_specs
+    if cfg.eval_task is not None:
+        return [{"task": cfg.eval_task, "onehot": None}]
+    return []
 
 
 def train_diffusion(cfg: TrainConfig) -> Path:
@@ -53,6 +77,7 @@ def train_diffusion(cfg: TrainConfig) -> Path:
         obs_horizon=cfg.obs_horizon,
         action_horizon=cfg.action_horizon,
         success_only=cfg.success_only,
+        ambient_tmin=cfg.ambient_tmin,
     )
     loader = DataLoader(
         dataset,
@@ -61,6 +86,7 @@ def train_diffusion(cfg: TrainConfig) -> Path:
         num_workers=cfg.num_workers,
         pin_memory=device.type == "cuda",
         drop_last=True,
+        generator=torch.Generator().manual_seed(cfg.seed),
     )
 
     obs_norm = LinearNormalizer.fit(dataset.obs)
@@ -88,6 +114,9 @@ def train_diffusion(cfg: TrainConfig) -> Path:
         )
     )
 
+    specs = _eval_specs(cfg)
+    render_task = cfg.eval_task or (specs[0]["task"] if specs else None)
+
     global_step = 0
     best_loss = float("inf")
     latest_path = cfg.output_dir / "policy_latest.pt"
@@ -99,7 +128,8 @@ def train_diffusion(cfg: TrainConfig) -> Path:
         for batch in loader:
             obs = batch["obs"].to(device)
             action = batch["action"].to(device)
-            loss = policy.compute_loss(obs, action)
+            t_min = batch["t_min"].to(device) if "t_min" in batch else None
+            loss = policy.compute_loss(obs, action, t_min=t_min)
             opt.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(policy.parameters(), 1.0)
@@ -109,42 +139,80 @@ def train_diffusion(cfg: TrainConfig) -> Path:
 
         mean_loss = float(np.mean(losses)) if losses else float("nan")
         print(f"[epoch {epoch:04d}/{cfg.num_epochs}] loss={mean_loss:.6f} steps={global_step}")
-        policy.save(latest_path)
+
+        is_last = epoch == cfg.num_epochs
+        due = epoch % cfg.latest_every_epochs == 0 or is_last
+        if due:
+            policy.save(latest_path)
         if mean_loss < best_loss:
             best_loss = mean_loss
-            policy.save(cfg.output_dir / "policy_best.pt")
+            if due:
+                policy.save(cfg.output_dir / "policy_best.pt")
         if epoch % cfg.save_every_epochs == 0:
             policy.save(cfg.output_dir / f"policy_epoch_{epoch:04d}.pt")
 
-        if (
-            cfg.eval_task
-            and cfg.eval_every_epochs > 0
-            and epoch % cfg.eval_every_epochs == 0
-        ):
+        if specs and cfg.eval_every_epochs > 0 and epoch % cfg.eval_every_epochs == 0:
             from mjlab_hand.diffusion.evaluate import evaluate_diffusion_policy
 
-            print(f"[INFO] Running env eval at epoch {epoch}...")
+            # evaluate_diffusion_policy loads from disk; make sure it scores
+            # the current weights even if latest_every_epochs skipped this epoch.
+            policy.save(latest_path)
             policy.eval()
-            metrics = evaluate_diffusion_policy(
-                task=cfg.eval_task,
-                policy_path=latest_path,
-                num_envs=cfg.eval_num_envs,
-                num_steps=cfg.eval_num_steps,
-                device=str(device),
-                seed=cfg.seed + epoch,
-            )
-            row = {
-                "epoch": epoch,
-                "train_loss": mean_loss,
-                "train_steps": global_step,
-                "metrics": metrics,
-            }
-            with eval_jsonl.open("a") as f:
-                f.write(json.dumps(row) + "\n")
-            print(
-                f"[INFO] eval epoch={epoch} "
-                f"success_rate={metrics.get('success_rate', float('nan')):.3f}"
-            )
+            print(f"[INFO] Running env eval at epoch {epoch}...")
+            for spec in specs:
+                metrics = evaluate_diffusion_policy(
+                    task=spec["task"],
+                    policy_path=latest_path,
+                    num_envs=cfg.eval_num_envs,
+                    num_steps=cfg.eval_num_steps,
+                    device=str(device),
+                    seed=cfg.seed,
+                    onehot=spec.get("onehot"),
+                    reuse_env=True,
+                )
+                row = {
+                    "epoch": epoch,
+                    "train_loss": mean_loss,
+                    "train_steps": global_step,
+                    "eval_task": spec["task"],
+                    "onehot": spec.get("onehot"),
+                    "metrics": metrics,
+                }
+                with eval_jsonl.open("a") as f:
+                    f.write(json.dumps(row) + "\n")
+                headline = metrics.get(
+                    "success_rate", metrics.get("avg_successes_before_drop", float("nan"))
+                )
+                print(f"[INFO] eval epoch={epoch} task={spec['task']} headline={headline:.3f}")
+            policy.train()
+
+        if (
+            cfg.render_every_epochs > 0
+            and epoch % cfg.render_every_epochs == 0
+            and render_task is not None
+        ):
+            try:
+                from mjlab_hand.diffusion.evaluate import render_diffusion_rollout
+
+                policy.save(latest_path)
+                render_diffusion_rollout(
+                    task=render_task,
+                    policy_path=latest_path,
+                    output_dir=cfg.output_dir / "videos",
+                    num_steps=cfg.render_num_steps,
+                    num_envs=cfg.render_num_envs,
+                    device=str(device),
+                    seed=cfg.seed,
+                    tag=f"epoch{epoch:04d}",
+                    onehot=specs[0].get("onehot") if specs else None,
+                )
+            except Exception as exc:  # noqa: BLE001 - rendering must never kill training
+                print(f"[WARN] render failed at epoch {epoch}: {exc}")
+
+    if specs:
+        from mjlab_hand.diffusion.evaluate import close_cached_envs
+
+        close_cached_envs()
 
     print(f"[INFO] Training done. Best loss={best_loss:.6f}")
     print(f"[INFO] Saved {latest_path}")

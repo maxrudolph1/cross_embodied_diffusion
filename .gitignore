@@ -69,7 +69,28 @@ wandb/
 .vscode/
 
 # Local experiment artifacts (do not commit)
+# Checkpoints (265MB each), zarr stores, videos and thousands of per-task
+# Slurm logs stay out. But `slurm_jobs/*.sbatch` / `*.sh` (the
+# reproducibility record) and `outputs/plots/*.png` /
+# `outputs/analysis/*.json` (the figures and result JSON) are tracked --
+# the original repo ignored these two directories wholesale, which
+# excluded exactly that. See CHANGES.md item 23.
 data/
-outputs/
-slurm_jobs/
+*.pt
+*.zarr/
+warp_cache/
+
+slurm_jobs/*
+!slurm_jobs/*.sbatch
+!slurm_jobs/*.sh
+
+outputs/*
+!outputs/plots/
+!outputs/analysis/
+outputs/plots/*
+outputs/analysis/*
+!outputs/plots/*.png
+!outputs/analysis/*.json
+!outputs/analysis/*.md
+
 *.mp4

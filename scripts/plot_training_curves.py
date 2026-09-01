@@ -9,13 +9,12 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
-
 DEFAULT_TAGS = [
     "Train/mean_reward",
     "Train/mean_episode_length",
-    "Episode/success",
-    "Episode/num_successes",
-    "Loss/value_function",
+    "Metrics/grasp_metrics/object_height_beyond_table",
+    "Metrics/rotation/episode_success",
+    "Loss/value",
     "Loss/surrogate",
     "Loss/learning_rate",
     "Perf/total_fps",

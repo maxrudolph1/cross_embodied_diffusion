@@ -4,6 +4,47 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-09-01 — Reconstructed lost code from the logbook; GPU verification training
+
+`CHANGES.md`/`ANALYSIS.md`/`COLLECTIONS.md` documented ~40 source edits and ~20
+new scripts/Slurm jobs made on another box, but only the prose ever landed in
+this repo (`git log` here stops right after the base diffusion pipeline,
+commit `58946e8`; the commits `CHANGES.md` cites, e.g. `b3b458e`/`ad994ec`,
+don't exist in this repo's history). Reconstructed the actual code from those
+records: all of `src/mjlab_hand/diffusion/`'s documented fixes (DDIM sampler,
+ambient-diffusion gating, checkpoint I/O, one-hot conditioning, multi-target
+eval, rotation-success-filter fix), 19 new `scripts/`, 7 new Slurm job
+scripts, `.gitignore`, `CLAUDE.md`. Verified what's verifiable on this box's
+actual data (real regression test via `check_sampler.py` against the real
+smoke checkpoint reproduced the documented before/after MSE numbers almost
+exactly; real end-to-end tests of `build_mixed_dataset.py`,
+`source_step_bounds`/`ambient_tmin`, `select_experts.py`, `plot_seed_curves.py`,
+and the `train.py` checkpoint-cadence rewrite; unit tests of the
+`plot_mixed_matrix.py`/`plot_ambient_sweep.py` correctness fixes against the
+exact documented bug scenarios). Nothing was committed.
+
+Then launched real GPU verification: **rl-leap-rot-gpu-verify** (see
+`RUNS.md`), RL training on the local A40 (free, 0% util at start),
+confirming the reconstructed `mjlab_hand` task registration / `train` CLI
+path still works end-to-end (not something `CHANGES.md` touched, but a real
+dependency of it). Healthy: reward and `episode_success` climbing from a
+fresh policy within the first ~30 iterations, ~6.1s/iter steady state after
+~1min of Warp/JIT warmup -- confirmed over a 6-minute sampling window (iter
+17->64, reward 0.07->0.23).
+
+**Aborted at iter ~64**, user pointed out `logs/rsl_rl/leap_inhand_rotation/2026-08-23_02-26-38_slurm`
+and the Allegro equivalent already have `done` experts (`model_9999.pt`,
+08-23/08-24) -- retraining was redundant. Killed both the wrapper script and
+`train` process, freed the GPU, deleted the partial run dir / wandb run /
+console log. The verification goal (confirm the pipeline trains) was already
+met by the 64 iterations observed; no need for a trained checkpoint from
+this run specifically. Lesson: check `RUNS.md` for an existing `done` expert
+*before* launching a "verify it trains" run against a task that already has
+one -- a shorter/synthetic smoke check would have answered the same question
+without spending GPU time on a real task.
+
+---
+
 ## 2026-08-24 — Agent logbook added
 
 - Created `agent_logbook/` (`README.md`, `JOURNAL.md`, `RUNS.md`, `COLLECTIONS.md`) and always-on Cursor rule `.cursor/rules/agent-logbook.mdc`.

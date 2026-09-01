@@ -25,13 +25,13 @@ def main() -> None:
     args = parser.parse_args()
 
     import mjlab.tasks  # noqa: F401
-    import mjlab_hand  # noqa: F401
-
     from mjlab.envs import ManagerBasedRlEnv
     from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
     from mjlab.tasks.registry import load_env_cfg, load_rl_cfg, load_runner_cls
     from mjlab.utils.torch import configure_torch_backends
     from mjlab.utils.wrappers import VideoRecorder
+
+    import mjlab_hand  # noqa: F401
 
     configure_torch_backends()
     device = args.device or ("cuda:0" if torch.cuda.is_available() else "cpu")

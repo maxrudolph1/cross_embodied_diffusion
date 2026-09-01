@@ -44,10 +44,9 @@ def collect_demos(
     keep_failures: bool = False,
 ) -> dict:
     """Roll out an RL expert and write successful (optionally failed) episodes to zarr."""
+    import mjlab_hand  # noqa: F401
     from mjlab_hand.eval.config import EvalConfig
     from mjlab_hand.eval.env_setup import load_policy, make_runner, setup_eval_env
-
-    import mjlab_hand  # noqa: F401
 
     eval_cfg = EvalConfig(num_envs=num_envs, seed=seed, device=device)
     env, rl_cfg = setup_eval_env(task, eval_cfg, torch.device(device))
@@ -85,7 +84,17 @@ def collect_demos(
     def object_pos():
         return env.unwrapped.scene["object"].data.root_link_pos_w
 
-    has_pose = "pose" in env.unwrapped.command_manager.active_terms
+    def rotation_success() -> torch.Tensor:
+        return env.unwrapped.command_manager.get_term("rotation").metrics["episode_success"] > 0.5
+
+    active_terms = env.unwrapped.command_manager.active_terms
+    has_pose = "pose" in active_terms
+    has_rotation = not has_pose and "rotation" in active_terms
+    if not (has_pose or has_rotation):
+        print(
+            f"[WARN] No 'pose' or 'rotation' command term in {active_terms}; "
+            "every episode will be labelled successful."
+        )
     first_goal = goal_pos().clone() if has_pose else None
 
     written = 0
@@ -108,6 +117,8 @@ def collect_demos(
             near = dist < success_tolerance
             consecutive_near = torch.where(near, consecutive_near + 1, torch.zeros_like(consecutive_near))
             success_flag = success_flag | (consecutive_near >= success_steps)
+        elif has_rotation:
+            success_flag = success_flag | rotation_success()
 
         for i in range(num_envs):
             ep_obs[i].append(obs_np[i])
@@ -118,7 +129,7 @@ def collect_demos(
         for i in done_ids:
             if written >= num_episodes:
                 break
-            succ = bool(success_flag[i].item()) if has_pose else True
+            succ = bool(success_flag[i].item()) if (has_pose or has_rotation) else True
             if succ or keep_failures:
                 store.append_episode(
                     np.stack(ep_obs[i], axis=0),
@@ -144,7 +155,7 @@ def collect_demos(
         # Cap runaway episodes without natural termination.
         for i in range(num_envs):
             if len(ep_obs[i]) >= max_episode_steps and written < num_episodes:
-                succ = bool(success_flag[i].item()) if has_pose else True
+                succ = bool(success_flag[i].item()) if (has_pose or has_rotation) else True
                 if succ or keep_failures:
                     store.append_episode(
                         np.stack(ep_obs[i], axis=0),

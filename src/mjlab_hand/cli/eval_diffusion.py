@@ -17,6 +17,13 @@ def main() -> None:
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument(
+        "--onehot",
+        type=float,
+        nargs="+",
+        default=None,
+        help="Embodiment one-hot to append to obs, for policies trained on mixed-embodiment data.",
+    )
     args = parser.parse_args()
 
     from mjlab_hand.diffusion.evaluate import evaluate_diffusion_policy
@@ -28,6 +35,7 @@ def main() -> None:
         num_steps=args.num_steps,
         device=args.device,
         seed=args.seed,
+        onehot=args.onehot,
     )
     print(json.dumps(metrics, indent=2))
     if args.output is not None:
