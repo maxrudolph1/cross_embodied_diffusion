@@ -7,7 +7,6 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=128GB
 #SBATCH --time=24:00:00
-#SBATCH --exclude=sea112-rlcompute13
 #SBATCH --array=0-9
 
 # Trains one single-embodiment diffusion policy per (hand, size) array cell.
@@ -25,9 +24,14 @@
 #   EVAL_ENVS                       rollout eval env count (default 32)
 #   NUM_WORKERS                     DataLoader workers (default 8)
 #   EPOCHS_10K/50K/100K/400K/1M/10M override the per-scale epoch count
+#   EVAL_FINAL_ONLY=1                eval only at the last epoch (skips the
+#                                    midpoint eval) -- for a quick "does this
+#                                    policy work at all" check rather than a
+#                                    learning curve
 #
-# Eval fires exactly at the midpoint and the end (EVAL_EVERY = EPOCHS / 2),
-# at every scale. Checkpoint cadence (LATEST_EVERY) matches SAVE_EVERY.
+# Eval fires exactly at the midpoint and the end (EVAL_EVERY = EPOCHS / 2)
+# by default, at every scale, unless EVAL_FINAL_ONLY=1. Checkpoint cadence
+# (LATEST_EVERY) matches SAVE_EVERY.
 #
 # See CHANGES.md items 6d, 6f, 18, 27, 34.
 set -euo pipefail
@@ -80,7 +84,11 @@ case "$SIZE" in
   10M)  EPOCHS="${EPOCHS_10M:-20}";    SAVE_EVERY=2    ;;
   *)    echo "unknown size $SIZE" >&2; exit 1 ;;
 esac
-EVAL_EVERY=$(( EPOCHS / 2 ))
+if [[ "${EVAL_FINAL_ONLY:-0}" == "1" ]]; then
+  EVAL_EVERY="$EPOCHS"
+else
+  EVAL_EVERY=$(( EPOCHS / 2 ))
+fi
 LATEST_EVERY="$SAVE_EVERY"
 
 SEED="${SEED:-0}"

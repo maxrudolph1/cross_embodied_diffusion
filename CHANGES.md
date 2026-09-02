@@ -6,6 +6,59 @@ Newest first. Repo-relative paths. Artifacts and run registries live in
 
 ---
 
+## 2026-09-01 — Ambient diffusion: FIX — sampling order starved low-noise training
+
+Found by the user, not observed independently: the reconstructed ambient mechanism
+(items 24-26 below) sampled a training tuple first (uniformly across the whole
+mixed dataset, via the standard shuffling `DataLoader`) and only then drew its
+diffusion timestep from `[t_min_row, T)`. That order is wrong whenever the
+admitted-everywhere (target) data is a small fraction of the mixed dataset --
+which is exactly the ambient sweep's own design (e.g. N=10k target + 400k
+source, target = 2.4% of rows). The probability that *any* training step lands
+below a given `t` becomes `p_target * (t/T)`, not `t/T`: a factor of `p_target`
+below the intended schedule. At N=10k this is a ~40x suppression of low-noise
+training -- exactly the regime where, per `ANALYSIS.md`, embodiment identity is
+realized and target-specific fine detail must be learned.
+
+**Fix: sample the timestep first, then sample uniformly among the training
+tuples valid at that timestep** (target tuples are always valid; source tuples
+only once `t >= t_min_source`). Since `t` is now drawn independent of
+everything else, its marginal is uniform by construction -- no reweighting is
+needed downstream, which let the per-example `(T-t_min)/T` weight in
+`compute_loss` be deleted entirely (it fixed *loss scale* for a row already
+selected under the old, wrong order; it did nothing about selection
+*frequency*, which is what was actually broken).
+
+- `src/mjlab_hand/diffusion/policy.py`: `compute_loss(obs, action, timesteps=None)`
+  replaces the old `t_min` parameter. If `timesteps` is given, use it directly
+  (plain `F.mse_loss`, no weighting). If `None`, sample uniformly over
+  `[0, T)` -- unchanged ungated behaviour.
+- `src/mjlab_hand/diffusion/dataset.py`: `DiffusionDataset` no longer returns
+  `t_min` from `__getitem__`. New `sample_ambient_batch(batch_size,
+  num_train_timesteps, rng)`: draws timesteps first, then for each one uses
+  `np.searchsorted` on a precomputed sort-by-`t_min` index (`_build_ambient_index`)
+  to find how many windows are valid, and picks uniformly among them. O(log N)
+  per query; ~2.5ms for a 256-batch against a 383k-row mixed dataset --
+  negligible next to the GPU forward/backward pass.
+- `src/mjlab_hand/diffusion/train.py`: when `cfg.ambient_tmin` is set, the
+  epoch loop bypasses the `DataLoader` entirely (a fixed-row Dataset +
+  shuffling sampler can't express "pick the tuple after the timestep") and
+  calls `dataset.sample_ambient_batch` directly, `len(dataset)//batch_size`
+  times per epoch to keep epoch semantics comparable to the non-ambient path.
+
+**Verified concretely** (10k LEAP target + 400k Allegro source, unconditioned,
+`t_min=[0, 50]`, 200k timestep draws): old (row-first) order put only 2.5-3.4%
+of the intended mass below t=50 (ratio 0.025-0.034 vs the ideal 1.0) and ~2x
+the intended mass at t>=50; new (timestep-first) order lands within 2% of
+ideal at every checked t from 0 to 99. A 3-epoch real training run on this
+mixed dataset with the fix completed cleanly (loss 0.084 -> 0.035 -> 0.028).
+
+No ambient sweep has been run with either the old or the fixed sampler on this
+box -- the `ANALYSIS.md` ambient-diffusion findings are from the other box's
+runs and predate this fix; whether they used the same broken order is unknown.
+
+---
+
 ## 2026-08-31 — logbook reconciliation (retroactive: commits `b3b458e`, `ad994ec`)
 
 These entries were written on 2026-08-31 for work committed on 08-27 and 08-31 that

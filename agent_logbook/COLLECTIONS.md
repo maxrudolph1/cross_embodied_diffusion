@@ -11,6 +11,51 @@ provenance.
 | demo-allegro-smoke | Grasp-Allegro | `data/demos/grasp_allegro_expert.zarr` | `logs/rsl_rl/allegro_grasp/2026-08-22_10-37-45_initial/model_5600.pt` | 100 | 50,000 | 100/100 | artifacts lost | 64 envs, collection_steps=1000. obs_dim=115, action_dim=22 |
 | demo-allegro-full | Grasp-Allegro | `data/demos/grasp_allegro_expert_full.zarr` | `logs/rsl_rl/allegro_grasp/2026-08-22_10-37-45_initial/model_5700.pt` | 2000 | 998,360 | 1979/2000 | artifacts lost | 256 envs, collection_steps=4000. Used for `dp-allegro-full` |
 
+## Rotation BC scaling datasets: LEAP + Allegro, 10k/50k/100k/200k/300k/400k (2026-09-01)
+
+12 datasets, built on the local A40 GPU (session `mjlab-hand-e0`) from the existing
+`done` rotation experts (`logs/rsl_rl/{leap,allegro}_inhand_rotation/2026-08-23_02-26-38_slurm/model_9999.pt`)
+-- these already existed, so no RL retraining was needed (a redundant RL
+verification run was started and correctly aborted first; see `JOURNAL.md`).
+
+Base collection via `collect-demos` (256 envs, `max_episode_steps=500`,
+episode count sized as `ceil(400000 / measured_steps_per_ep)` using the
+historical rotation rates from the 08-24 sweep, 485.9 LEAP / 484.5 Allegro),
+then `scripts/subsample_dataset.py` for the nested 300k/200k/100k/50k/10k
+subsets from each 400k base -- no re-collection per size, matching the
+established methodology (whole episodes, nested, one draw per hand).
+
+| Task | Dataset (`data/demos/`) | Episodes | Steps | Success |
+|------|--------------------------|----------|-------|---------|
+| InHand-Rotation-LEAP | `InHand-Rotation-LEAP_expert_400k.zarr` | 824 | 397,065 | 824/824 |
+| InHand-Rotation-LEAP | `InHand-Rotation-LEAP_expert_300k.zarr` | 619 | 300,002 | 619/619 |
+| InHand-Rotation-LEAP | `InHand-Rotation-LEAP_expert_200k.zarr` | 412 | 200,078 | 412/412 |
+| InHand-Rotation-LEAP | `InHand-Rotation-LEAP_expert_100k.zarr` | 204 | 99,980 | 204/204 |
+| InHand-Rotation-LEAP | `InHand-Rotation-LEAP_expert_50k.zarr` | 104 | 49,980 | 104/104 |
+| InHand-Rotation-LEAP | `InHand-Rotation-LEAP_expert_10k.zarr` | 24 | 9,980 | 24/24 |
+| InHand-Rotation-Allegro | `InHand-Rotation-Allegro_expert_400k.zarr` | 826 | 373,100 | 826/826 |
+| InHand-Rotation-Allegro | `InHand-Rotation-Allegro_expert_300k.zarr` | 665 | 299,918 | 665/665 |
+| InHand-Rotation-Allegro | `InHand-Rotation-Allegro_expert_200k.zarr` | 440 | 199,754 | 440/440 |
+| InHand-Rotation-Allegro | `InHand-Rotation-Allegro_expert_100k.zarr` | 210 | 100,075 | 210/210 |
+| InHand-Rotation-Allegro | `InHand-Rotation-Allegro_expert_50k.zarr` | 110 | 50,075 | 110/110 |
+| InHand-Rotation-Allegro | `InHand-Rotation-Allegro_expert_10k.zarr` | 30 | 10,075 | 30/30 |
+
+All `n_success == n_episodes` by construction (`--keep-failures` not used
+here); see the "How the filter was actually verified" note below for why
+that alone doesn't validate the rotation success filter -- it was validated
+separately when the filter fix itself was reconstructed (`CHANGES.md` item 9).
+
+Allegro's 400k base landed at 373,100 (93% of nominal) because its actual
+steps/episode on this checkpoint (~452) came in lower than the 08-24 sweep's
+measured rate (484.5) used to size the episode count -- consistent with the
+documented caveat that these rates drift with checkpoint quality. Not
+corrected for since the smaller sizes are subsampled from whatever the base
+actually contains, and all land within 0.1-0.4% of their own nominal target.
+
+Reproduce: `bash /path/to/build_rotation_bc_datasets.sh` (ad hoc script, not
+checked in -- see `slurm_jobs/train_diffusion.sbatch` for the equivalent
+Slurm-native pattern this was adapted from).
+
 ## COMPLETE: one dataset per task + embodiment (all 10 combos)
 
 Slurm array **`749475`** — all 10 `COMPLETED`, zero errors. Ran 2026-08-24 19:05 -> ~19:45 PDT,

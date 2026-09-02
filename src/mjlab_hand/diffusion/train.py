@@ -79,15 +79,30 @@ def train_diffusion(cfg: TrainConfig) -> Path:
         success_only=cfg.success_only,
         ambient_tmin=cfg.ambient_tmin,
     )
-    loader = DataLoader(
-        dataset,
-        batch_size=cfg.batch_size,
-        shuffle=True,
-        num_workers=cfg.num_workers,
-        pin_memory=device.type == "cuda",
-        drop_last=True,
-        generator=torch.Generator().manual_seed(cfg.seed),
-    )
+
+    # Ambient diffusion samples the diffusion timestep FIRST, then a training
+    # tuple valid at that timestep (see DiffusionDataset.sample_ambient_batch)
+    # -- the reverse order silently starves low-noise training whenever the
+    # admitted-everywhere (target) data is a small fraction of the mixed
+    # dataset. This can't be expressed as a DataLoader shuffle over fixed
+    # rows, so it bypasses the DataLoader entirely; ambient_rng is exhausted
+    # once per batch rather than once per dataset pass.
+    is_ambient = cfg.ambient_tmin is not None
+    loader: DataLoader | None = None
+    ambient_rng: np.random.Generator | None = None
+    num_batches_per_epoch = len(dataset) // cfg.batch_size
+    if is_ambient:
+        ambient_rng = np.random.default_rng(cfg.seed)
+    else:
+        loader = DataLoader(
+            dataset,
+            batch_size=cfg.batch_size,
+            shuffle=True,
+            num_workers=cfg.num_workers,
+            pin_memory=device.type == "cuda",
+            drop_last=True,
+            generator=torch.Generator().manual_seed(cfg.seed),
+        )
 
     obs_norm = LinearNormalizer.fit(dataset.obs)
     act_norm = LinearNormalizer.fit(dataset.action)
@@ -125,11 +140,19 @@ def train_diffusion(cfg: TrainConfig) -> Path:
     for epoch in range(1, cfg.num_epochs + 1):
         policy.train()
         losses = []
-        for batch in loader:
+        if is_ambient:
+            assert ambient_rng is not None
+            batches = (
+                dataset.sample_ambient_batch(cfg.batch_size, cfg.num_train_timesteps, ambient_rng)
+                for _ in range(num_batches_per_epoch)
+            )
+        else:
+            batches = loader
+        for batch in batches:
             obs = batch["obs"].to(device)
             action = batch["action"].to(device)
-            t_min = batch["t_min"].to(device) if "t_min" in batch else None
-            loss = policy.compute_loss(obs, action, t_min=t_min)
+            timesteps = batch["timesteps"].to(device) if "timesteps" in batch else None
+            loss = policy.compute_loss(obs, action, timesteps=timesteps)
             opt.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(policy.parameters(), 1.0)

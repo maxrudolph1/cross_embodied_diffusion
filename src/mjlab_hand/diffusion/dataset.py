@@ -189,6 +189,11 @@ class DiffusionDataset(Dataset):
         self.action = np.asarray(store.data["action"][:], dtype=np.float32)
 
         self.ambient_tmin: np.ndarray | None = None
+        # Per-window t_min and a sort-by-t_min index, built lazily the first
+        # time sample_ambient_batch is called (not needed for plain __getitem__).
+        self._window_tmin: np.ndarray | None = None
+        self._sorted_tmin: np.ndarray | None = None
+        self._sorted_order: np.ndarray | None = None
         if ambient_tmin is not None:
             bounds = store.source_step_bounds()  # raises if not a mixed dataset
             if len(ambient_tmin) != len(bounds):
@@ -214,8 +219,7 @@ class DiffusionDataset(Dataset):
     def __len__(self) -> int:
         return len(self.indices)
 
-    def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
-        epi_i, t_local = self.indices[idx]
+    def _window(self, epi_i: int, t_local: int) -> tuple[np.ndarray, np.ndarray]:
         start, end, _ = self.episodes[epi_i]
         obs_idx = []
         for k in range(self.obs_horizon):
@@ -229,11 +233,77 @@ class DiffusionDataset(Dataset):
             if j >= end - start:
                 j = end - start - 1
             act_idx.append(start + j)
+        return self.obs[obs_idx], self.action[act_idx]
 
-        out = {
-            "obs": torch.from_numpy(self.obs[obs_idx]),
-            "action": torch.from_numpy(self.action[act_idx]),
+    def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
+        epi_i, t_local = self.indices[idx]
+        obs_window, action_window = self._window(epi_i, t_local)
+        return {
+            "obs": torch.from_numpy(obs_window),
+            "action": torch.from_numpy(action_window),
         }
-        if self.ambient_tmin is not None:
-            out["t_min"] = torch.tensor(int(self.ambient_tmin[epi_i]), dtype=torch.long)
-        return out
+
+    def _build_ambient_index(self) -> None:
+        """Per-window t_min array (parallel to self.indices) plus a
+        sort-by-t_min index, so sample_ambient_batch can find "all windows
+        valid at timestep t" via a single searchsorted call."""
+        if self.ambient_tmin is None:
+            raise RuntimeError("dataset was not constructed with ambient_tmin")
+        window_tmin = np.asarray(
+            [self.ambient_tmin[epi_i] for epi_i, _t_local in self.indices], dtype=np.int64
+        )
+        order = np.argsort(window_tmin, kind="stable")
+        self._window_tmin = window_tmin
+        self._sorted_order = order
+        self._sorted_tmin = window_tmin[order]
+
+    def sample_ambient_batch(
+        self, batch_size: int, num_train_timesteps: int, rng: np.random.Generator
+    ) -> dict[str, torch.Tensor]:
+        """Sample a batch for ambient-diffusion training: timestep FIRST,
+        then a training tuple uniform among those valid at that timestep.
+
+        Sampling a tuple first and then a timestep conditioned on its own
+        t_min (the naive order) makes the probability that *any* step lands
+        below a given t proportional to the fraction of the dataset that is
+        admitted there -- e.g. with a 10k-target/400k-source mix, the target
+        is only ~2.4% of rows, so low-noise training would be suppressed by
+        ~40x versus the intended schedule. Sampling t first and then
+        choosing uniformly among the (possibly tiny, but always non-empty
+        because the target has t_min=0) set of currently-valid tuples keeps
+        every t equally likely, matching the ungated schedule exactly, and
+        gives the valid tuples at that t their full, undiluted share of
+        training regardless of how rare they are dataset-wide.
+        """
+        if self._sorted_tmin is None:
+            self._build_ambient_index()
+        assert self._sorted_tmin is not None and self._sorted_order is not None
+
+        timesteps = rng.integers(0, num_train_timesteps, size=batch_size)
+        # Number of windows with t_min <= t, for each sampled t (sorted_tmin
+        # is ascending, so this is exactly the count at the front of the array).
+        valid_counts = np.searchsorted(self._sorted_tmin, timesteps, side="right")
+        if np.any(valid_counts == 0):
+            raise RuntimeError(
+                "no training tuple is valid at some sampled timestep -- every source "
+                "must include a t_min=0 (fully-admitted) entry"
+            )
+        positions = (rng.random(batch_size) * valid_counts).astype(np.int64)
+        positions = np.clip(positions, 0, valid_counts - 1)
+        window_idx = self._sorted_order[positions]
+
+        obs_batch = np.empty((batch_size, self.obs_horizon, self.obs.shape[1]), dtype=np.float32)
+        action_batch = np.empty(
+            (batch_size, self.action_horizon, self.action.shape[1]), dtype=np.float32
+        )
+        for i, w in enumerate(window_idx):
+            epi_i, t_local = self.indices[w]
+            obs_window, action_window = self._window(epi_i, t_local)
+            obs_batch[i] = obs_window
+            action_batch[i] = action_window
+
+        return {
+            "obs": torch.from_numpy(obs_batch),
+            "action": torch.from_numpy(action_batch),
+            "timesteps": torch.from_numpy(timesteps.astype(np.int64)),
+        }

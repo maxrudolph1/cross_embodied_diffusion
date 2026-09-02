@@ -4,6 +4,29 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-09-01 (later) — Ambient diffusion sampling-order bug, found by the user
+
+User: "For each training sample, you need to first sample a diffusion time
+step, then sample a valid state action tuple so that you don't undersample
+the early (ie low noise) tuples." The ambient mechanism reconstructed earlier
+today (see below, and `CHANGES.md` items 24-26) sampled the tuple first (via
+a standard shuffling `DataLoader`) and the timestep second, conditioned on
+that tuple's `t_min`. Diagnosed why this is wrong: it makes the probability
+of ever training below a source's `t_min` proportional to the target's share
+of the *dataset*, not the schedule -- a ~40x suppression at the ambient
+sweep's own N=10k/400k-source scale. Fixed by inverting the order:
+`DiffusionDataset.sample_ambient_batch` now draws the timestep first, then
+picks uniformly among currently-valid tuples via a sorted-index searchsorted.
+`compute_loss` lost its `t_min`/reweighting path entirely -- once sampling is
+correct, no downstream weighting is needed. See `CHANGES.md` for the full
+writeup and the verification numbers (built a real 10k-target/400k-source
+mixed dataset from data already collected today; old order put 2.5-3.4% of
+the intended mass below t=50 where it should be ~50%, new order lands within
+2% of ideal everywhere; a 3-epoch real training run with the fix completed
+cleanly). Committed.
+
+---
+
 ## 2026-09-01 — Reconstructed lost code from the logbook; GPU verification training
 
 `CHANGES.md`/`ANALYSIS.md`/`COLLECTIONS.md` documented ~40 source edits and ~20

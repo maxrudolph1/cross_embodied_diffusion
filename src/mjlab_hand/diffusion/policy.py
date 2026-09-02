@@ -77,16 +77,22 @@ class DiffusionPolicy(torch.nn.Module):
         self,
         obs: torch.Tensor,
         action: torch.Tensor,
-        t_min: torch.Tensor | None = None,
+        timesteps: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Args:
             obs: (B, To, Do)
             action: (B, Ta, Da)
-            t_min: (B,) optional per-sample minimum diffusion timestep for
-                ambient gating (source data is admitted only at t >= t_min).
-                When None, timesteps are sampled uniformly over the full
-                schedule (original behaviour, exact).
+            timesteps: (B,) optional pre-sampled diffusion timesteps (long).
+                For ambient-diffusion training, the timestep must be sampled
+                *before* the training tuple -- see
+                `DiffusionDataset.sample_ambient_batch` -- so that low-noise
+                timesteps aren't undersampled just because few tuples are
+                valid there (sampling the tuple first and then a timestep
+                conditioned on it dilutes low-t training frequency by
+                whatever fraction of the dataset is admitted there, which is
+                exactly wrong). When None, timesteps are sampled uniformly
+                over the full schedule (original, ungated behaviour, exact).
         """
         b = obs.shape[0]
         device = obs.device
@@ -95,18 +101,10 @@ class DiffusionPolicy(torch.nn.Module):
         naction = self.action_normalizer.normalize(action)
 
         noise = torch.randn_like(naction)
-        if t_min is None:
+        if timesteps is None:
             timesteps = torch.randint(0, T, (b,), device=device, dtype=torch.long)
-            weight = None
         else:
-            t_min = t_min.to(device=device, dtype=torch.long)
-            span = (T - t_min).clamp(min=0)
-            u = torch.rand(b, device=device)
-            timesteps = (t_min + (u * span).long()).clamp(max=T - 1)
-            # w = (T - t_min) / T keeps the per-timestep gradient density at
-            # 1/T for every admitted t, i.e. identical to the ungated case
-            # restricted to [t_min, T) -- see CHANGES.md item 24.
-            weight = (T - t_min).to(dtype=naction.dtype) / T
+            timesteps = timesteps.to(device=device, dtype=torch.long)
 
         noisy = (
             self._extract(self.sqrt_alphas_cumprod, timesteps, naction.shape) * naction
@@ -114,12 +112,7 @@ class DiffusionPolicy(torch.nn.Module):
             * noise
         )
         pred = self.noise_pred_net(noisy, timesteps, nobs)
-
-        if weight is None:
-            return F.mse_loss(pred, noise)
-
-        per_sample = ((pred - noise) ** 2).mean(dim=tuple(range(1, noise.ndim)))
-        return (per_sample * weight).sum() / weight.sum().clamp_min(1e-8)
+        return F.mse_loss(pred, noise)
 
     @torch.no_grad()
     def predict_action(self, obs: torch.Tensor) -> torch.Tensor:
