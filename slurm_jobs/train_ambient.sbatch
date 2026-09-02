@@ -31,7 +31,7 @@
 #
 # See CHANGES.md items 24, 25, 26, 28.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "${SLURM_SUBMIT_DIR:?SLURM_SUBMIT_DIR not set -- run this via sbatch}"
 source .venv/bin/activate
 
 export LD_LIBRARY_PATH="/usr/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"

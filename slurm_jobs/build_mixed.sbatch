@@ -17,7 +17,7 @@
 #
 # See CHANGES.md item 17.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "${SLURM_SUBMIT_DIR:?SLURM_SUBMIT_DIR not set -- run this via sbatch}"
 source .venv/bin/activate
 
 FAMILY="${FAMILY:-grasp}"

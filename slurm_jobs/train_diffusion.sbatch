@@ -35,7 +35,7 @@
 #
 # See CHANGES.md items 6d, 6f, 18, 27, 34.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "${SLURM_SUBMIT_DIR:?SLURM_SUBMIT_DIR not set -- run this via sbatch}"
 source .venv/bin/activate
 
 # rlcompute (H200) nodes ship a stale /usr/local/cuda/compat libcuda that

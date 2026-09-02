@@ -18,7 +18,7 @@
 #
 # See CHANGES.md item 28 / ANALYSIS.md "Ambient-sweep diagonal datasets".
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "${SLURM_SUBMIT_DIR:?SLURM_SUBMIT_DIR not set -- run this via sbatch}"
 source .venv/bin/activate
 
 FAMILIES=(grasp rotation)
