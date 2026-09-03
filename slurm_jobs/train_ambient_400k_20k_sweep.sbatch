@@ -34,6 +34,11 @@
 #
 # See CHANGES.md items 24-26 and the 2026-09-01/02 JOURNAL.md entries for the
 # sampling-order fix this sweep exercises for the first time on a real run.
+#
+#   SEED  training seed (default 0). Appends "_s<SEED>" to the output dir /
+#         run name for SEED != 0, so a second/third seed doesn't collide
+#         with the seed-0 run. Submit once per seed as a separate sbatch
+#         call (this script itself only ever runs one seed per submission).
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:?SLURM_SUBMIT_DIR not set -- run this via sbatch}"
 source .venv/bin/activate
@@ -41,7 +46,10 @@ source .venv/bin/activate
 export LD_LIBRARY_PATH="/usr/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
-export WARP_CACHE_PATH="$PWD/warp_cache/train_ambient_400k_20k_task_${SLURM_ARRAY_TASK_ID}"
+# Keyed by array JOB id, not just task id: this script is submitted once per
+# seed, and concurrent submissions would otherwise reuse the same task ids
+# (0-21) and race on the same Warp kernel cache dir -- see CHANGES.md item 27.
+export WARP_CACHE_PATH="$PWD/warp_cache/train_ambient_400k_20k_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 mkdir -p "$WARP_CACHE_PATH"
 
 SIGMAS=(0 10 20 30 40 50 60 70 80 90 100)
@@ -63,12 +71,16 @@ else
   TAG="target-Allegro400k_source-LEAP20k"
 fi
 
-OUTPUT_DIR="outputs/ambient/${TAG}_sigma${SIGMA}"
+SEED="${SEED:-0}"
+SEED_SUFFIX=""
+[[ "$SEED" != "0" ]] && SEED_SUFFIX="_s${SEED}"
+
+OUTPUT_DIR="outputs/ambient/${TAG}_sigma${SIGMA}${SEED_SUFFIX}"
 EPOCHS=500
 SAVE_EVERY=50
 EVAL_EVERY="$EPOCHS"   # eval only at the final epoch
 
-echo "[INFO] direction=${TAG} sigma*=${SIGMA} dataset=${DATASET} output=${OUTPUT_DIR}"
+echo "[INFO] direction=${TAG} sigma*=${SIGMA} seed=${SEED} dataset=${DATASET} output=${OUTPUT_DIR}"
 
 EVAL_SPEC="[{\"task\": \"${TARGET_TASK}\", \"onehot\": null}, {\"task\": \"${SOURCE_TASK}\", \"onehot\": null}]"
 
@@ -82,7 +94,7 @@ train-diffusion \
   --eval-every-epochs "$EVAL_EVERY" \
   --eval-num-envs 32 \
   --ambient-tmin 0 "$SIGMA" \
-  --seed 0 \
+  --seed "$SEED" \
   --wandb-project mjlab \
-  --wandb-run-name "ambient_${TAG}_sigma${SIGMA}" \
-  --wandb-tags ambient rotation "$TARGET_TASK" "sigma${SIGMA}"
+  --wandb-run-name "ambient_${TAG}_sigma${SIGMA}${SEED_SUFFIX}" \
+  --wandb-tags ambient rotation "$TARGET_TASK" "sigma${SIGMA}" "seed${SEED}"
