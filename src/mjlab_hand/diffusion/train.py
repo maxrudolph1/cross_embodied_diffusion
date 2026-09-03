@@ -53,6 +53,10 @@ class TrainConfig:
     # Ambient diffusion: one t_min per source (dataset order) for a mixed
     # dataset. Source i is admitted into the loss only at t >= ambient_tmin[i].
     ambient_tmin: list[int] | None = None
+    # WandB logging. Disabled (None) by default; set wandb_project to enable.
+    wandb_project: str | None = None
+    wandb_run_name: str | None = None
+    wandb_tags: list[str] | None = None
 
 
 def _eval_specs(cfg: TrainConfig) -> list[dict]:
@@ -132,6 +136,17 @@ def train_diffusion(cfg: TrainConfig) -> Path:
     specs = _eval_specs(cfg)
     render_task = cfg.eval_task or (specs[0]["task"] if specs else None)
 
+    wandb_run = None
+    if cfg.wandb_project is not None:
+        import wandb
+
+        wandb_run = wandb.init(
+            project=cfg.wandb_project,
+            name=cfg.wandb_run_name,
+            tags=cfg.wandb_tags,
+            config={**asdict(cfg), "dataset": str(cfg.dataset), "output_dir": str(cfg.output_dir)},
+        )
+
     global_step = 0
     best_loss = float("inf")
     latest_path = cfg.output_dir / "policy_latest.pt"
@@ -162,6 +177,8 @@ def train_diffusion(cfg: TrainConfig) -> Path:
 
         mean_loss = float(np.mean(losses)) if losses else float("nan")
         print(f"[epoch {epoch:04d}/{cfg.num_epochs}] loss={mean_loss:.6f} steps={global_step}")
+        if wandb_run is not None:
+            wandb_run.log({"train/loss": mean_loss, "train/steps": global_step}, step=epoch)
 
         is_last = epoch == cfg.num_epochs
         due = epoch % cfg.latest_every_epochs == 0 or is_last
@@ -207,6 +224,11 @@ def train_diffusion(cfg: TrainConfig) -> Path:
                     "success_rate", metrics.get("avg_successes_before_drop", float("nan"))
                 )
                 print(f"[INFO] eval epoch={epoch} task={spec['task']} headline={headline:.3f}")
+                if wandb_run is not None:
+                    safe_task = spec["task"].replace("/", "_")
+                    wandb_run.log(
+                        {f"eval/{safe_task}/{k}": v for k, v in metrics.items()}, step=epoch
+                    )
             policy.train()
 
         if (
@@ -236,6 +258,10 @@ def train_diffusion(cfg: TrainConfig) -> Path:
         from mjlab_hand.diffusion.evaluate import close_cached_envs
 
         close_cached_envs()
+
+    if wandb_run is not None:
+        wandb_run.summary["best_loss"] = best_loss
+        wandb_run.finish()
 
     print(f"[INFO] Training done. Best loss={best_loss:.6f}")
     print(f"[INFO] Saved {latest_path}")

@@ -56,6 +56,14 @@ def main() -> None:
         help="One t_min per source (dataset order) for a mixed dataset, e.g. "
         "'--ambient-tmin 0 50' admits source 0 everywhere and source 1 only at t >= 50.",
     )
+    parser.add_argument(
+        "--wandb-project",
+        type=str,
+        default=None,
+        help="If set, log this run to WandB under this project name.",
+    )
+    parser.add_argument("--wandb-run-name", type=str, default=None)
+    parser.add_argument("--wandb-tags", type=str, nargs="+", default=None)
     args = parser.parse_args()
 
     from mjlab_hand.diffusion.train import TrainConfig, train_diffusion
@@ -86,6 +94,9 @@ def main() -> None:
             render_num_steps=args.render_num_steps,
             render_num_envs=args.render_num_envs,
             ambient_tmin=args.ambient_tmin,
+            wandb_project=args.wandb_project,
+            wandb_run_name=args.wandb_run_name,
+            wandb_tags=args.wandb_tags,
         )
     )
 
