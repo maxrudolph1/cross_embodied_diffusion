@@ -4,6 +4,30 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-09-02 — First real Slurm-trained BC policies: dp-leap-rot-400k, dp-allegro-rot-400k
+
+Jobs `80853` (LEAP) / `80854` (Allegro) -- the resubmit after fixing the
+`SLURM_SUBMIT_DIR` bug (see the entry below) -- both ran to completion
+overnight, 7-8h each, on separate GPU allocations (ran concurrently once
+both got scheduled). Real, working BC rotation policies: LEAP reaches 2.31
+goals before dropping on average, Allegro 1.62, both well above zero and in
+the same ballpark as the historical ~27%-of-expert finding noted in
+`ANALYSIS.md` for rotation BC. See `RUNS.md` for full numbers.
+
+Backfill's displayed `StartTime` estimate (~1.8 days) was badly pessimistic
+both times -- the first attempt (80250/80251, which failed on the
+`SLURM_SUBMIT_DIR` bug) actually started ~3h after submission despite the
+same estimate, and this successful pair started within a few hours too.
+Don't take the scheduler's `StartTime` field as the real ETA on this
+cluster; check back periodically instead of trusting it.
+
+This also closes the loop on the ambient-sampling-bug fix from the
+previous entry: these two runs used the *ordinary* (non-ambient) training
+path, so they don't exercise `sample_ambient_batch` -- that fix is still
+unverified by any long real run, only the short smoke test recorded there.
+
+---
+
 ## 2026-09-01 (later) — Ambient diffusion sampling-order bug, found by the user
 
 User: "For each training sample, you need to first sample a diffusion time
