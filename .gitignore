@@ -84,6 +84,7 @@ slurm_jobs/*
 !slurm_jobs/*.sbatch
 !slurm_jobs/*.sh
 
+outputs
 outputs/*
 !outputs/plots/
 !outputs/analysis/
