@@ -4,6 +4,28 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-09-07 — Launched RL expert completion pass, all 10 combos
+
+User asked for expert policies for all 5 embodiments x both tasks. Audited actual on-disk
+state first (the `RUNS.md`/`COLLECTIONS.md` 2026-08-24 snapshot doesn't match this box -- see
+the 2026-09-01 reconstruction entry below; verified real checkpoints and real `data/demos/`
+contents directly). Found 4 of 10 combos already `done` at `model_9999.pt` (rotation:
+Allegro/LEAP/Shadow/Wuji); the other 6 (all 5 grasp hands + rotation-Sharpa) had only partial
+checkpoints (iters 3800-7500) or, for Grasp-Shadow, none at all (prior Warp-cache failure).
+
+Asked the user two scoping questions rather than assuming: (1) retrain the 4 already-done
+combos too, or leave them -- chose leave them; (2) resume the 6 partial runs from checkpoint
+(`--agent.resume`/`--agent.load-run` are supported by `train`) or restart fresh -- chose
+restart fresh for all 6.
+
+Wrote `slurm_jobs/train_rl_experts.sbatch` (array `0-5`, one task per missing combo,
+`run-name slurm2` so new runs land in fresh dirs rather than overwriting the partial ones) and
+submitted it: Slurm job `84348`. See `RUNS.md` for the per-task table and script details.
+Currently pending on priority (cluster already running the ambient sweep, job `82903`, plus
+unrelated `flock` jobs `84302-84304`).
+
+---
+
 ## 2026-09-02 — First real Slurm-trained BC policies: dp-leap-rot-400k, dp-allegro-rot-400k
 
 Jobs `80853` (LEAP) / `80854` (Allegro) -- the resubmit after fixing the

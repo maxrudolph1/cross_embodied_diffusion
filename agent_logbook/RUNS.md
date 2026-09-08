@@ -18,6 +18,12 @@ Status snapshot: **2026-08-24**. Artifact roots are gitignored; paths are relati
 | rl-sharpa-rot | InHand-Rotation-Sharpa | `logs/rsl_rl/sharpa_in_hand_rotation/2026-08-23_02-26-38_slurm` | 2048 envs, 10k iters, Slurm task 7 | `model_6000.pt` | incomplete / stalled? | |
 | rl-wuji-rot | InHand-Rotation-Wuji | `logs/rsl_rl/wuji_inhand_rotation/2026-08-23_02-26-38_slurm` | 2048 envs, 10k iters, Slurm task 8 | `model_9999.pt` | done | |
 | rl-leap-rot-gpu-verify | InHand-Rotation-LEAP | _(deleted)_ | 2048 envs, 10k iters, seed 42, run `gpu_verify`; local GPU A40 | `model_0.pt` | **aborted** | Launched to confirm the reconstructed pipeline trains end-to-end on real GPU (see `CHANGES.md`); killed at iter ~64 once it was pointed out `rl-leap-rot` (below, `done`, `model_9999.pt`) already exists -- redundant. Confirmed healthy first (reward 0.07->0.23 in 64 iters, ~6.1s/iter) before stopping; that's the useful outcome, not a trained checkpoint. Run dir, wandb run, and console log deleted |
+| rl-allegro-grasp-v2 | Grasp-Allegro | `logs/rsl_rl/allegro_grasp/<pending>_slurm2` | 2048 envs, 10k iters, seed 42, run `slurm2`; Slurm array `84348` task 0 | — | **queued** (2026-09-07) | Fresh restart (user chose restart over resume); prior `rl-allegro-grasp` above stalled at `model_6600.pt` |
+| rl-leap-grasp-v2 | Grasp-LEAP | `logs/rsl_rl/leap_grasp/<pending>_slurm2` | 2048 envs, 10k iters, seed 42, run `slurm2`; Slurm array `84348` task 1 | — | **queued** (2026-09-07) | Fresh restart; prior `rl-leap-grasp` stalled at `model_6400.pt` |
+| rl-shadow-grasp-v2 | Grasp-Shadow | `logs/rsl_rl/shadow_grasp/<pending>_slurm2` | 2048 envs, 10k iters, seed 42, run `slurm2`; Slurm array `84348` task 2 | — | **queued** (2026-09-07) | First attempt (`rl-shadow-grasp` above) failed on shared Warp cache; this array gives every task its own `WARP_CACHE_PATH` |
+| rl-sharpa-grasp-v2 | Grasp-Sharpa | `logs/rsl_rl/sharpa_grasp/<pending>_slurm2` | 2048 envs, 10k iters, seed 42, run `slurm2`; Slurm array `84348` task 3 | — | **queued** (2026-09-07) | Fresh restart; prior `rl-sharpa-grasp` stalled at `model_3800.pt` |
+| rl-wuji-grasp-v2 | Grasp-Wuji | `logs/rsl_rl/wuji_grasp/<pending>_slurm2` | 2048 envs, 10k iters, seed 42, run `slurm2`; Slurm array `84348` task 4 | — | **queued** (2026-09-07) | Fresh restart; prior `rl-wuji-grasp` stalled at `model_7500.pt` |
+| rl-sharpa-rot-v2 | InHand-Rotation-Sharpa | `logs/rsl_rl/sharpa_in_hand_rotation/<pending>_slurm2` | 2048 envs, 10k iters, seed 42, run `slurm2`; Slurm array `84348` task 5 | — | **queued** (2026-09-07) | Fresh restart; prior `rl-sharpa-rot` stalled at `model_6800.pt` |
 
 ### Slurm batch
 
@@ -25,6 +31,16 @@ Status snapshot: **2026-08-24**. Artifact roots are gitignored; paths are relati
 - Submit: `sbatch slurm_jobs/array_20260823_022315/submission.sh`
 - Resources: 1 GPU, 16 CPUs, 128GB, 36h, partition `allnodes`, array `0-8`
 - Skipped Grasp-Allegro (already on local GPU)
+
+### Slurm batch — RL expert completion pass, `train_rl_experts.sbatch` (2026-09-07)
+
+- Submit: `sbatch slurm_jobs/train_rl_experts.sbatch`
+- Job `84348`, array `0-5`, one task per missing/incomplete combo (see table above)
+- Resources: 1 GPU, 16 CPUs, 128GB, 36h, partition `allnodes`
+- Per-task `WARP_CACHE_PATH` (fixes the original Grasp-Shadow failure), `LD_LIBRARY_PATH=/usr/lib64` (fixes CUDA error 803 on rlcompute H200 nodes)
+- All 6 restarted from scratch (not resumed) at user's explicit choice, run-name `slurm2` so they land in fresh timestamped dirs alongside the earlier partial runs rather than overwriting them
+- Once done, rerun `scripts/select_experts.py` to refresh `outputs/experts*.json` before using these as demo-collection sources
+- **Logger mistake**: script used `--agent.logger tensorboard` (copied from the old array pattern) instead of `train`'s actual default (`wandb`) -- none of the 6 runs stream to wandb live. Fixed retroactively: `wandb sync --sync-tensorboard -p mjlab <rundir>` imports a tfevents dir as a wandb run after the fact. Grasp-Wuji (task 4, finished first) synced manually -> `https://wandb.ai/maxrudolph/mjlab/runs/xlek6ud9`. The other 5 are handled by a background watcher, `nohup`'d independent of any single tool call (survives the multi-hour training window): polls `sacct` every 10 min, syncs each task's run dir the moment it reaches `COMPLETED`/`FAILED`/etc. Script + logs (not checked in, scratch dir): `sync_rl_experts_wandb.sh`, `wandb_sync.log`, `sync_watcher.log`.
 
 ### Plots / videos (RL)
 
