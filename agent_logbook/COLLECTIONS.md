@@ -384,6 +384,79 @@ target and nested with the existing subsets.
 
 Note how few episodes 50k is: **100-106 demonstrations**.
 
+## 1M-transition datasets from currently-finished experts (2026-09-09)
+
+User: collect 1M-transition datasets for every task/embodiment pair using already-expert
+checkpoints. Not all 10 pairs have a finished expert yet (see `agent_logbook/RUNS.md` for the
+node-011 driver saga) -- as of submission, only these 7 are done or effectively done:
+
+`sbatch slurm_jobs/collect_1M.sbatch`, job `85711`, array `0-6`, 256 envs, `max_episode_steps=500`,
+output to **`/datastor2/mrudolph/mjlab_hand_demos/`** (per explicit user request -- NOT the
+gitignored `data/demos/` every earlier collection in this repo used).
+
+| Task | Checkpoint | Target episodes |
+|------|-----------|------------------|
+| Grasp-Wuji | `logs/rsl_rl/wuji_grasp/2026-09-08_02-26-59_slurm2/model_9999.pt` | 2010 |
+| Grasp-Sharpa | `logs/rsl_rl/sharpa_grasp/2026-09-09_10-45-03_slurm2/model_10800.pt` | 2010 |
+| InHand-Rotation-Allegro | `.../allegro_inhand_rotation/2026-08-23_02-26-38_slurm/model_9999.pt` | 2065 |
+| InHand-Rotation-LEAP | `.../leap_inhand_rotation/2026-08-23_02-26-38_slurm/model_9999.pt` | 2059 |
+| InHand-Rotation-Shadow | `.../shadow_inhand_rotation/2026-08-23_02-26-38_slurm/model_9999.pt` | 2175 |
+| InHand-Rotation-Sharpa | `.../sharpa_in_hand_rotation/2026-09-08_02-27-58_slurm2/model_9999.pt` | 2132 |
+| InHand-Rotation-Wuji | `.../wuji_inhand_rotation/2026-08-23_02-26-38_slurm/model_9999.pt` | 2107 |
+
+Grasp-Sharpa wasn't formally "done" at submit time (still training toward 12500 under job
+`85163` task 3) but its `model_10800.pt` was a stable, already-written file -- treated as
+expert-ready. It then finished its full 12500 iterations (`model_12499.pt`) while `85711`
+was still sitting in the Slurm queue (never started) -- cancelled just that one array index
+(`scancel 85711_1`) and resubmitted it standalone as `slurm_jobs/collect_1M_sharpa_grasp.sbatch`
+(job `85725`) pointed at the real final checkpoint, so this dataset comes from the fully-
+trained expert, not the mid-training snapshot. Episode counts use grasp's project-wide
+~498 steps/episode cap and this project's historical per-hand rotation rates (see the
+scaling-dataset section above); Shadow/Sharpa/Wuji rotation rates were measured on different
+(earlier) checkpoints than these, so actual `n_steps` may drift from the 1M target more than
+the Allegro/LEAP scaling sets did.
+
+**Grasp-Allegro finished shortly after `85711` was submitted** (job `85382` task 0,
+`model_9999.pt`) -- collected separately via `slurm_jobs/collect_1M_allegro.sbatch`, job
+`85718`, same methodology (256 envs, 2010 episodes, same output dir).
+
+Grasp-LEAP and Grasp-Shadow finished training shortly after (job `85382` tasks 1/2,
+`model_9999.pt` each) -- collected via `slurm_jobs/collect_1M_leap.sbatch` (job `85766`) and
+`slurm_jobs/collect_1M_shadow.sbatch` (job `85773`), same methodology. This completes all 10
+task/embodiment pairs at the 1M-transition scale, all in `/datastor2/mrudolph/mjlab_hand_demos/`:
+
+| Dataset | Checkpoint | Episodes (target) |
+|---|---|---|
+| `Grasp-Allegro_expert_1M.zarr` | `allegro_grasp/2026-09-09_19-57-05_slurm2/model_9999.pt` | 2010 |
+| `Grasp-LEAP_expert_1M.zarr` | `leap_grasp/2026-09-09_21-37-04_slurm2/model_9999.pt` | 2010 |
+| `Grasp-Shadow_expert_1M.zarr` | `shadow_grasp/2026-09-09_23-25-05_slurm2/model_9999.pt` | 2010 |
+| `Grasp-Sharpa_expert_1M.zarr` | `sharpa_grasp/2026-09-09_10-45-03_slurm2/model_12499.pt` | 2010 |
+| `Grasp-Wuji_expert_1M.zarr` | `wuji_grasp/2026-09-08_02-26-59_slurm2/model_9999.pt` | 2010 |
+| `InHand-Rotation-Allegro_expert_1M.zarr` | `allegro_inhand_rotation/2026-08-23_02-26-38_slurm/model_9999.pt` | 2065 |
+| `InHand-Rotation-LEAP_expert_1M.zarr` | `leap_inhand_rotation/2026-08-23_02-26-38_slurm/model_9999.pt` | 2059 |
+| `InHand-Rotation-Shadow_expert_1M.zarr` | `shadow_inhand_rotation/2026-08-23_02-26-38_slurm/model_9999.pt` | 2175 |
+| `InHand-Rotation-Sharpa_expert_1M.zarr` | `sharpa_in_hand_rotation/2026-09-08_02-27-58_slurm2/model_9999.pt` | 2132 |
+| `InHand-Rotation-Wuji_expert_1M.zarr` | `wuji_inhand_rotation/2026-08-23_02-26-38_slurm/model_9999.pt` | 2107 |
+
+Note these live outside the repo's usual `data/demos/` (gitignored anyway) -- on
+`/datastor2/mrudolph/`, per explicit user request, not `/scratch/cluster/...`.
+
+**The stale-driver problem broke collection too, not just training.** Grasp-Wuji's task in
+`85711` landed on `slurm-node-004` and hit the 4h job time limit having written only 6.8MB of
+an expected ~600MB dataset (`TIMEOUT`, not `COMPLETED` -- caught this by checking `sacct`
+state, not just watching for a completion message). Deleted the partial `.zarr` and resubmitted
+pinned to node-011 (`slurm_jobs/collect_1M_wuji_node011.sbatch`, job `85780`). Caught
+Grasp-LEAP's retry (job `85766`) about to repeat the same mistake -- it had just landed on
+node-004 again -- so killed and resubmitted both remaining retries (`collect_1M_leap.sbatch`,
+`collect_1M_shadow.sbatch`) with `--nodelist=slurm-node-011` added, rather than wait 4h each to
+find out. **Lesson: pin collection jobs to node-011 from the start, same as training** -- don't
+assume a one-off rollout is short enough to tolerate the bad driver; 2010 grasp episodes can
+still blow through a multi-hour time limit on a stale-driver node.
+
+The already-`COMPLETED` grasp/rotation collections (Allegro, Sharpa grasp; all 5 rotation) are
+confirmed genuine, not truncated -- each finished with a `requested_episodes` summary line
+matching its target, which a `TIMEOUT` kill does not produce.
+
 ## Still not collected
 
 - Multi-embodiment combined dataset for cross-hand diffusion — blocked on deciding how to

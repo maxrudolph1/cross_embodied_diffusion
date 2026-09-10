@@ -1,0 +1,39 @@
+#!/bin/bash
+#SBATCH --job-name=collect-1M-allegro
+#SBATCH --output=slurm_jobs/collect_1M/logs/allegro_task_%A.out
+#SBATCH --error=slurm_jobs/collect_1M/logs/allegro_task_%A.err
+#SBATCH --partition=allnodes
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=128GB
+#SBATCH --time=04:00:00
+#
+# Follow-up to collect_1M.sbatch (job 85711): Grasp-Allegro finished training
+# (model_9999.pt, job 85382 task 0) after that array was already submitted.
+# Same methodology: 256 envs, 2010 episodes (ceil(1e6/~498)), output to
+# /datastor2/mrudolph/mjlab_hand_demos/ per user request.
+set -euo pipefail
+cd "${SLURM_SUBMIT_DIR:?SLURM_SUBMIT_DIR not set -- run this via sbatch}"
+source .venv/bin/activate
+
+export LD_LIBRARY_PATH="/usr/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export MUJOCO_GL=egl
+export PYOPENGL_PLATFORM=egl
+export WARP_CACHE_PATH="$PWD/warp_cache/collect_1M_allegro"
+mkdir -p "$WARP_CACHE_PATH"
+
+OUT_DIR="/datastor2/mrudolph/mjlab_hand_demos"
+mkdir -p "$OUT_DIR"
+
+CHECKPOINT="logs/rsl_rl/allegro_grasp/2026-09-09_19-57-05_slurm2/model_9999.pt"
+OUTPUT="${OUT_DIR}/Grasp-Allegro_expert_1M.zarr"
+
+echo "[INFO] task=Grasp-Allegro checkpoint=${CHECKPOINT} episodes=2010 output=${OUTPUT}"
+
+stdbuf -oL -eL collect-demos \
+  --task Grasp-Allegro \
+  --checkpoint "$CHECKPOINT" \
+  --output "$OUTPUT" \
+  --num-envs 256 \
+  --num-episodes 2010 \
+  --max-episode-steps 500

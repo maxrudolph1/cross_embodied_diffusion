@@ -4,6 +4,108 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-09-09 (later still) — Pinned remaining grasp RL training to node-011 only
+
+Surveyed more nodes for the stale-driver issue (see entries above). Confirmed bad, in addition
+to node-004: **node-002, node-003, node-005, node-007, node-008 (also currently drained,
+`Reason=Kill task failed` since 2026-09-05), node-009** -- via direct `nvidia-smi` on running
+jobs and via the "CUDA version < 12.4" warning appearing in the **original 2026-08-23 array**
+(`72897`) logs too, on 5 different nodes. So this has been true since the very first Slurm
+array in this project; it just didn't show up as a problem because rotation tasks (lower
+per-step contact cost) only pay a mild penalty (5.7-11s/iter) while grasp tasks pay heavily
+(15-34s/iter). Only `slurm-node-011` (driver 580.173.02) confirmed clean.
+
+Node survey for 001/006/010 never completed -- the probe jobs sat PENDING (priority) for
+hours and got cancelled once the decision below made them moot. **Lesson: a job's
+`#SBATCH --output` path must be on storage the compute node can actually reach.** Wrote the
+probes' output to this session's `/tmp/claude-*/.../scratchpad/` dir, which isn't visible from
+compute nodes -- the jobs ran and exited 0, but the result files were never created. Anything
+meant to be read back after an sbatch job runs needs to live under the repo
+(`/scratch/cluster/.../mjlab_hand/...`) or another genuinely shared path, never a
+session-local scratch dir.
+
+User decision: **only run the remaining RL expert training on node-011**, accepting that it
+may queue rather than risk more bad-driver time. Cancelled `85163` tasks 0/1/2 (Allegro/LEAP/
+Shadow grasp, all on bad nodes) and resubmitted as `slurm_jobs/train_rl_experts_node011.sbatch`
+(job `85382`, array `0-2`, `#SBATCH --nodelist=slurm-node-011`), resuming from their current
+checkpoints (5800/5200/4900) with the iteration-count bug fixed this time -- passed the
+*remaining* budget (4200/4800/5100) as `--agent.max-iterations`, not 10000, since resume adds
+that value on top of the loaded checkpoint's iteration rather than treating it as an absolute
+target. `85163` task 3 (Grasp-Sharpa) had, by luck, already landed on node-011 directly and is
+running fast (~4.5s/iter) -- left alone rather than restarted, but it still carries the
+uncorrected overshoot bug (target 12500, not 10000); not fixed since killing a
+healthy fast-running task felt worse than the overshoot itself. Node-011 is often near-full
+(96/96 CPUs when `85382` was submitted, including this user's own long-running `flock` jobs
+`84302-84304`, 48 CPUs) so `85382` may sit pending for a while -- accepted tradeoff.
+
+---
+
+## 2026-09-09 (later) — Root cause of the 7-14x slowdown: stale driver on slurm-node-004
+
+User: "we need the actual algorithms to go much faster. there's something wrong here." Dug
+into why the 4 remaining tasks from array `84348` were so much slower than Grasp-Wuji/
+InHand-Rotation-Sharpa (tasks 4/5, which finished at 2.5s/iter and 5.5s/iter respectively).
+
+All 4 slow tasks landed on **`slurm-node-004`**; the 2 fast ones ran on `slurm-node-011`.
+Every slow task's `.err` log carries mujoco_warp's `check_toolkit_driver()` warning ("CUDA
+version < 12.4 detected ... conditional graph nodes are not available"); neither fast task's
+log does. Confirmed directly: `srun --jobid=<task's real JobId> --overlap --cpu-bind=none
+nvidia-smi --query-gpu=driver_version --format=csv` inside the *running* job's own allocation
+(the array-task alias like `84348_0` doesn't work as a `--jobid` for `srun --overlap`; need
+the real numeric JobId from `scontrol show job 84348_0 | grep JobId=`, e.g. `84368`) --
+node-004 reports driver **535.216.03** (CUDA 12.2 max). Ran the same `warp.init()` /
+`wp.is_conditional_graph_supported()` check interactively on node-011: driver **580.173.02**,
+CUDA 13.0, conditional graph capture **True**. Also ruled out the `LD_LIBRARY_PATH=/usr/lib64`
+env workaround (from `CLAUDE.md`, meant for H200 rlcompute nodes) as the cause -- reproduced
+it explicitly set on node-011 and conditional-graph support stayed `True`; neither node has a
+`libcuda` under `/usr/lib64` at all, so that prepend is a no-op on both. This is a genuine
+per-node driver mismatch on the cluster, not anything in this repo's code or env setup.
+
+**Fix applied:** cancelled the 4 tasks stuck on node-004 (`scancel 84348_0..3`, all were in
+`CG` afterward) and resubmitted as `slurm_jobs/train_rl_experts_resume.sbatch`, job `85163`,
+array `0-3`, `#SBATCH --exclude=slurm-node-004`, `--agent.resume True` (defaults for
+`--agent.load-run`/`--agent.load-checkpoint` pick the alphabetically-latest run dir / model
+file, unambiguous since each hand has exactly one `*_slurm2` dir) so the 2400-4900 iterations
+already trained are kept rather than restarted. Also dropped the accidental
+`--agent.logger tensorboard` override from the original script (see the wandb entry above) --
+these resumed runs use `train`'s actual default (`wandb`) and log live. Killed the background
+tensorboard->wandb sync watcher (pid 965893) since it would otherwise have synced the
+now-cancelled, truncated tensorboard logs for these 4 as if they were the final result.
+
+**Open follow-up:** only checked node-004 (bad) and node-011 (good) directly -- driver
+versions on node-001/002/003/005/006/007/009/010 are unknown. If a resumed task lands on
+another stale-driver node, the same "CUDA version < 12.4" line will show up in its `.err`
+within the first few log lines; check with the same `srun --jobid=<real JobId> --overlap
+--cpu-bind=none nvidia-smi --query-gpu=driver_version --format=csv` trick and add that node to
+`--exclude` too.
+
+---
+
+## 2026-09-09 — Don't trust `train`'s printed "Time elapsed"/"ETA"; use checkpoint mtimes
+
+Gave the user a "close to done" ETA for the `84348` RL array (see previous entry) sourced
+from the training script's own `.out` log lines (`Time elapsed: HH:MM:SS`, `ETA: HH:MM:SS`).
+User pushed back -- these jobs had been running ~25h per `sacct`, but the script's own
+"Time elapsed" showed under an hour. That field is **not cumulative since job start**; it
+appears to reset periodically while `sacct`'s elapsed and the `Iteration time` (instantaneous
+per-step) field stay trustworthy. Its "ETA" is derived from the same broken counter, so it was
+off by 10-25x (printed ~2-10h remaining vs. real ~26-76h).
+
+**Correct way to estimate remaining time for an in-progress RL run:** take two checkpoint
+files' mtimes (`stat -c '%y'`) and their iteration numbers from the filenames, compute real
+iter/hour from that, then `(max_iterations - current_iter) / rate`. Cross-check against the
+log's own `Iteration time` line -- it should roughly match `elapsed / iters_in_that_window`
+from the mtime method; if it does, trust the mtime-derived ETA over the script's printed one.
+
+Also surfaced: **Grasp-Sharpa (task 3) is running ~2x slower per iteration** than the other
+three still-running grasp tasks (36.2s/iter vs 18-21s/iter), with its log full of
+`contact match overflow: please increase Option.contact_sensor_maxmatch` warnings -- plausibly
+the cause of the slowdown, not yet confirmed. At current rate it's ~76h (~3.2 days) from
+iteration 10000, vs. ~26-34h for Allegro/LEAP/Shadow. Not yet restarted with a higher
+`contact_sensor_maxmatch` -- open question for the user.
+
+---
+
 ## 2026-09-07 — Launched RL expert completion pass, all 10 combos
 
 User asked for expert policies for all 5 embodiments x both tasks. Audited actual on-disk
