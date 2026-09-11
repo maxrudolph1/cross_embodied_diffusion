@@ -57,6 +57,19 @@ class TrainConfig:
     # Ambient diffusion: one t_min per source (dataset order) for a mixed
     # dataset. Source i is admitted into the loss only at t >= ambient_tmin[i].
     ambient_tmin: list[int] | None = None
+    # Held-out validation: fraction of *trajectories* (not individual states)
+    # per source withheld from training and used only to compute a
+    # validation loss (see DiffusionPolicy.action_reconstruction_loss). 0
+    # (default) disables validation entirely -- every existing sbatch script
+    # trains on 100% of its data exactly as before.
+    val_fraction: float = 0.0
+    val_seed: int = 0
+    val_every_epochs: int = 1
+    # DDIM sampling (num_inference_steps forward passes/batch) is much
+    # pricier than one training step; cap how many val batches run each
+    # check so validation stays a small fraction of an epoch's compute
+    # instead of doubling it. None = use the whole val set every time.
+    val_max_batches: int | None = 20
     # WandB logging. Disabled (None) by default; set wandb_project to enable.
     wandb_project: str | None = None
     wandb_run_name: str | None = None
@@ -88,7 +101,41 @@ def train_diffusion(cfg: TrainConfig) -> Path:
         action_horizon=cfg.action_horizon,
         success_only=cfg.success_only,
         ambient_tmin=cfg.ambient_tmin,
+        split="train",
+        val_fraction=cfg.val_fraction,
+        val_seed=cfg.val_seed,
     )
+
+    # Held-out trajectories for the validation loss (see TrainConfig.val_fraction).
+    # Built from the *same* store/split params as `dataset` above so the two
+    # partition the episode list into disjoint, complementary sets -- see
+    # `_train_val_split`. Normalizer fitting below uses `dataset` (the train
+    # split only), so val trajectories never leak into normalization stats.
+    val_loader: DataLoader | None = None
+    if cfg.val_fraction > 0:
+        val_dataset = DiffusionDataset(
+            store,
+            obs_horizon=cfg.obs_horizon,
+            action_horizon=cfg.action_horizon,
+            success_only=cfg.success_only,
+            split="val",
+            val_fraction=cfg.val_fraction,
+            val_seed=cfg.val_seed,
+        )
+        print(
+            f"[INFO] Val split: {len(val_dataset.episodes)} held-out trajectories, "
+            f"{len(val_dataset)} windows (train: {len(dataset.episodes)} trajectories, "
+            f"{len(dataset)} windows)"
+        )
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=cfg.batch_size,
+            shuffle=True,
+            num_workers=cfg.num_workers,
+            pin_memory=device.type == "cuda",
+            drop_last=False,
+            generator=torch.Generator().manual_seed(cfg.val_seed),
+        )
 
     # Ambient diffusion samples the diffusion timestep FIRST, then a training
     # tuple valid at that timestep (see DiffusionDataset.sample_ambient_batch)
@@ -231,6 +278,30 @@ def train_diffusion(cfg: TrainConfig) -> Path:
         print(f"[epoch {epoch:04d}/{cfg.num_epochs}] loss={mean_loss:.6f} steps={global_step}")
         if wandb_run is not None:
             wandb_run.log({"train/loss": mean_loss, "train/steps": global_step}, step=epoch)
+
+        if (
+            val_loader is not None
+            and cfg.val_every_epochs > 0
+            and epoch % cfg.val_every_epochs == 0
+        ):
+            policy.eval()
+            val_losses = []
+            for i, batch in enumerate(val_loader):
+                if cfg.val_max_batches is not None and i >= cfg.val_max_batches:
+                    break
+                obs = batch["obs"].to(device)
+                action = batch["action"].to(device)
+                action_mask = batch["action_mask"].to(device) if "action_mask" in batch else None
+                val_losses.append(
+                    float(policy.action_reconstruction_loss(obs, action, action_mask))
+                )
+            policy.train()
+            mean_val_loss = float(np.mean(val_losses)) if val_losses else float("nan")
+            print(f"[epoch {epoch:04d}/{cfg.num_epochs}] val_action_loss={mean_val_loss:.6f}")
+            if wandb_run is not None:
+                wandb_run.log({"val/action_loss": mean_val_loss}, step=epoch)
+            with (cfg.output_dir / "val_metrics.jsonl").open("a") as f:
+                f.write(json.dumps({"epoch": epoch, "val_action_loss": mean_val_loss}) + "\n")
 
         is_last = epoch == cfg.num_epochs
         due = epoch % cfg.latest_every_epochs == 0 or is_last

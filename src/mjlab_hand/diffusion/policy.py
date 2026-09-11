@@ -152,6 +152,34 @@ class DiffusionPolicy(torch.nn.Module):
         return (sq_err * mask).sum() / mask.sum().clamp_min(1.0)
 
     @torch.no_grad()
+    def action_reconstruction_loss(
+        self,
+        obs: torch.Tensor,
+        action: torch.Tensor,
+        action_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Validation metric: MSE between the fully denoised predicted
+        action and the ground-truth action, both in real (unnormalized)
+        action units.
+
+        Unlike `compute_loss` (the training objective), which only checks
+        one-step noise prediction at a random timestep and never produces an
+        actual action, this runs the same DDIM reverse-diffusion sampling
+        used at inference (`predict_action`) end-to-end and compares its
+        output directly to the expert action -- the quantity a BC policy is
+        actually judged on. `action` must be in the same units `dataset`
+        yields (i.e. not pre-normalized by the caller); `predict_action`
+        already unnormalizes its output to match. `action_mask` excludes
+        zero-padded cross-embodiment dims, same convention as `compute_loss`.
+        """
+        pred = self.predict_action(obs)
+        sq_err = (pred - action) ** 2
+        if action_mask is None:
+            return sq_err.mean()
+        mask = action_mask.to(device=pred.device, dtype=pred.dtype)[:, None, :].expand_as(pred)
+        return (sq_err * mask).sum() / mask.sum().clamp_min(1.0)
+
+    @torch.no_grad()
     def predict_action(self, obs: torch.Tensor) -> torch.Tensor:
         """
         Args:

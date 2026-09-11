@@ -183,6 +183,70 @@ class TrajectoryStore:
         }
 
 
+def _episode_source_ids(
+    episodes: list[tuple[int, int, bool]], store: "TrajectoryStore"
+) -> np.ndarray:
+    """Which source (embodiment) each episode belongs to, so a train/val
+    split can be stratified per source rather than landing unevenly (or
+    entirely) on one embodiment. Falls back to a single group for a plain
+    single-embodiment dataset, which has no `extra.sources` at all.
+    """
+    bounds: list[tuple[int, int]] | None = None
+    try:
+        bounds = [(s, e) for s, e, _obs_dim, _act_dim in store.source_real_dims()]
+    except RuntimeError:
+        try:
+            bounds = [(s, e) for s, e, _task in store.source_step_bounds()]
+        except RuntimeError:
+            bounds = None
+    if bounds is None:
+        return np.zeros(len(episodes), dtype=np.int64)
+    ids = np.empty(len(episodes), dtype=np.int64)
+    for i, (start, _end, _succ) in enumerate(episodes):
+        for j, (b_start, b_end) in enumerate(bounds):
+            if b_start <= start < b_end:
+                ids[i] = j
+                break
+        else:
+            raise RuntimeError(f"episode at step {start} not within any source range")
+    return ids
+
+
+def _train_val_split(
+    episodes: list[tuple[int, int, bool]],
+    store: "TrajectoryStore",
+    val_fraction: float,
+    val_seed: int,
+) -> np.ndarray:
+    """Deterministic episode-level train/val split.
+
+    Held out at the *trajectory* level, not per-state/per-window: splitting
+    individual (obs, action) windows would let near-identical neighboring
+    states from the same episode leak across the train/val boundary, making
+    the validation loss an overly optimistic measure of generalization.
+    Stratified per source (see `_episode_source_ids`) so every embodiment in
+    a cross-embodiment dataset contributes its own held-out trajectories.
+
+    Returns a bool array (parallel to `episodes`), True where that episode
+    is in the val split. Deterministic in `val_seed`, so a `DiffusionDataset`
+    built with `split="train"` and one built with `split="val"` (same store,
+    val_fraction, val_seed) partition the episode list into disjoint,
+    complementary sets without sharing any state.
+    """
+    source_ids = _episode_source_ids(episodes, store)
+    is_val = np.zeros(len(episodes), dtype=bool)
+    rng = np.random.default_rng(val_seed)
+    for src in np.unique(source_ids):
+        idx = np.flatnonzero(source_ids == src)
+        perm = rng.permutation(idx)
+        n = len(perm)
+        if n <= 1:
+            continue  # can't hold out a trajectory and still have any left to train on
+        n_val = min(max(1, int(round(n * val_fraction))), n - 1)
+        is_val[perm[:n_val]] = True
+    return is_val
+
+
 class DiffusionDataset(Dataset):
     """Sample (obs_horizon, action_horizon) windows from trajectories."""
 
@@ -195,6 +259,9 @@ class DiffusionDataset(Dataset):
         success_only: bool = True,
         pad_before: bool = True,
         ambient_tmin: list[int] | None = None,
+        split: str = "train",
+        val_fraction: float = 0.0,
+        val_seed: int = 0,
     ):
         self.store = store
         self.obs_horizon = obs_horizon
@@ -205,6 +272,26 @@ class DiffusionDataset(Dataset):
             self.episodes = store.episode_slices(success_only=False)
         if not self.episodes:
             raise RuntimeError(f"No episodes found in {store.path}")
+
+        # Held-out validation split, by whole trajectory (see
+        # `_train_val_split`). val_fraction=0 (default) is a pure no-op --
+        # every existing caller that doesn't pass split/val_fraction trains
+        # on 100% of episodes exactly as before.
+        self.split = split
+        self.val_fraction = val_fraction
+        if val_fraction > 0:
+            if split not in ("train", "val"):
+                raise ValueError(f"split must be 'train' or 'val', got {split!r}")
+            is_val = _train_val_split(self.episodes, store, val_fraction, val_seed)
+            keep = is_val if split == "val" else ~is_val
+            self.episodes = [e for e, k in zip(self.episodes, keep, strict=True) if k]
+            if not self.episodes:
+                raise RuntimeError(
+                    f"{split!r} split of {store.path} is empty (val_fraction={val_fraction}) "
+                    "-- too few episodes per source to hold any out"
+                )
+        elif split == "val":
+            raise ValueError("split='val' requires val_fraction > 0")
 
         # Padded cross-embodiment dataset: each episode belongs wholly to one
         # source (episodes are never split across the concatenation

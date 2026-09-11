@@ -57,6 +57,24 @@ def main() -> None:
         "'--ambient-tmin 0 50' admits source 0 everywhere and source 1 only at t >= 50.",
     )
     parser.add_argument(
+        "--val-fraction",
+        type=float,
+        default=0.0,
+        help="Fraction of trajectories per source held out for a validation "
+        "loss (denoised-action MSE on held-out episodes, not held-out "
+        "individual states). 0 (default) disables validation.",
+    )
+    parser.add_argument("--val-seed", type=int, default=0)
+    parser.add_argument("--val-every-epochs", type=int, default=1)
+    parser.add_argument(
+        "--val-max-batches",
+        type=int,
+        default=20,
+        help="Cap on validation batches per check (DDIM sampling is far "
+        "costlier per batch than a training step). Pass -1 to use the "
+        "whole val set every time.",
+    )
+    parser.add_argument(
         "--wandb-project",
         type=str,
         default=None,
@@ -94,6 +112,10 @@ def main() -> None:
             render_num_steps=args.render_num_steps,
             render_num_envs=args.render_num_envs,
             ambient_tmin=args.ambient_tmin,
+            val_fraction=args.val_fraction,
+            val_seed=args.val_seed,
+            val_every_epochs=args.val_every_epochs,
+            val_max_batches=None if args.val_max_batches < 0 else args.val_max_batches,
             wandb_project=args.wandb_project,
             wandb_run_name=args.wandb_run_name,
             wandb_tags=args.wandb_tags,

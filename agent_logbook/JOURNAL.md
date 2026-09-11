@@ -4,6 +4,56 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-09-11 — Real validation loss: held-out trajectories, denoised-action MSE
+
+User pointed out the existing `"train_loss"` in `eval_metrics.jsonl` isn't a validation loss at
+all -- no held-out split existed, and it's a noise-prediction MSE, not a measure of actual
+action-reconstruction quality. Asked for both fixed: a val split from held-out *trajectories*
+(not held-out individual states), and a validation loss computed over **denoised actions**, not
+predicted noise.
+
+- `DiffusionDataset` gained `split`/`val_fraction`/`val_seed`. Split is at the **episode** level,
+  not the window level -- splitting individual (obs, action) windows would let near-identical
+  neighboring states from the same trajectory leak across train/val, understating how much the
+  val loss actually measures generalization. `_train_val_split` partitions episodes with a seeded
+  `np.random.default_rng(val_seed).permutation`, **stratified per source** (`_episode_source_ids`,
+  reusing `source_real_dims()`/`source_step_bounds()` with a single-group fallback for plain
+  datasets) so a cross-embodiment or onehot-mixed dataset holds out trajectories from every
+  embodiment, not just whichever source happens to shuffle to the front. `val_fraction=0.0`
+  (default) is a pure no-op -- every existing caller/script that doesn't pass these kwargs trains
+  on 100% of episodes exactly as before; confirmed via smoke test that a plain `DiffusionDataset()`
+  call still gets all episodes.
+- `DiffusionPolicy.action_reconstruction_loss`: runs the *actual* DDIM reverse-diffusion sampling
+  (`predict_action`, same code path used at rollout time) on held-out obs windows, then MSE against
+  the ground-truth action -- both in real (unnormalized) action units. Deliberately not a
+  cheaper single-step x0 estimate from one random noisy timestep (which the training loss's
+  machinery would have made trivial to bolt on) -- the user asked for denoised actions, and the
+  thing a BC policy is actually judged on is what it outputs after full sampling, not a partial
+  one-step reconstruction.
+- `TrainConfig` gained `val_fraction`/`val_seed`/`val_every_epochs`/`val_max_batches` (default 20 --
+  DDIM sampling is far pricier per batch than one training step, so validation is capped to a
+  small slice of an epoch's compute rather than doubling it) and CLI flags in
+  `cli/train_diffusion.py`. Val loss is written to a new `val_metrics.jsonl` (epoch,
+  val_action_loss) and wandb (`val/action_loss`), printed alongside the train-loss line each
+  epoch. Deliberately did **not** change `policy_best.pt` checkpoint selection (still lowest
+  train loss) -- the ask was for a validation signal to look at, not a change to what "best"
+  means; flagged to the user as an easy follow-up if wanted.
+- Normalizer fitting (`LinearNormalizer.fit(dataset.obs/.action)` in the non-padded path) now
+  fits from the train-split dataset only when `val_fraction > 0`, not the full store -- otherwise
+  val trajectories' own statistics would leak into the normalization the model is trained under,
+  which is itself a subtle form of train/val contamination independent of the loss/split fix.
+
+**Verified via a synthetic smoke test** (not committed -- ad hoc script, small random
+single-embodiment + fake 2-source mixed `TrajectoryStore`s): train/val episode sets are disjoint
+and sum to the full episode count; `val_fraction=0` reproduces the old all-episodes behavior
+exactly; `split="val"` with `val_fraction=0` raises rather than silently returning nothing;
+the 2-source split gives both sources nonzero held-out episodes; a real 2-epoch CPU
+`train_diffusion` run with `val_fraction=0.2` writes non-NaN `val_action_loss` to
+`val_metrics.jsonl` every epoch. Not yet run against a real dataset/GPU job -- next real
+cross-embodiment or scaling run should pass `--val-fraction` to pick this up.
+
+---
+
 ## 2026-09-10 — New cross-embodiment BC scheme: pad-to-max + per-source static normalization + masked loss
 
 User: one diffusion policy per task family (Grasp, InHand-Rotation) that takes obs from an
