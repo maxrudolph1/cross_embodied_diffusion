@@ -2,13 +2,53 @@
 
 from __future__ import annotations
 
+import json
 from collections import deque
+from dataclasses import dataclass
 from pathlib import Path
 
 import torch
 
 from mjlab_hand.diffusion.policy import DiffusionPolicy
 from mjlab_hand.eval.base import _policy_input, run_eval, select_evaluator
+
+
+@dataclass
+class EmbodimentStats:
+    """One source embodiment's static normalization stats + real dims, as
+    written by `build_padded_dataset.py` / `train_diffusion.py` into
+    `source_stats.json`. Used at eval time to normalize a live env's raw
+    (real-dim) obs and un-normalize/un-pad the policy's predicted action --
+    the exact inverse of what `build_padded_dataset.py` did at training
+    time, so the same static per-embodiment stats are used in both places.
+    """
+
+    embodiment: str
+    task: str
+    obs_dim: int
+    action_dim: int
+    obs_mean: torch.Tensor
+    obs_std: torch.Tensor
+    action_mean: torch.Tensor
+    action_std: torch.Tensor
+
+    @classmethod
+    def load(cls, source_stats_path: Path, embodiment: str) -> "EmbodimentStats":
+        payload = json.loads(Path(source_stats_path).read_text())
+        for src in payload["sources"]:
+            if src["embodiment"] == embodiment or src["task"] == embodiment:
+                return cls(
+                    embodiment=src["embodiment"],
+                    task=src["task"],
+                    obs_dim=int(src["obs_dim"]),
+                    action_dim=int(src["action_dim"]),
+                    obs_mean=torch.tensor(src["obs_mean"], dtype=torch.float32),
+                    obs_std=torch.tensor(src["obs_std"], dtype=torch.float32),
+                    action_mean=torch.tensor(src["action_mean"], dtype=torch.float32),
+                    action_std=torch.tensor(src["action_std"], dtype=torch.float32),
+                )
+        available = [s["embodiment"] for s in payload["sources"]]
+        raise KeyError(f"{embodiment!r} not found in {source_stats_path}; available: {available}")
 
 # Cache of (env, rl_cfg) keyed by (task, num_envs, device) for reuse across
 # in-training eval calls. Not closed by evaluate_diffusion_policy when
@@ -31,6 +71,7 @@ class DiffusionActionChunkPolicy:
         device: torch.device,
         replan_every: int | None = None,
         onehot: list[float] | None = None,
+        embodiment_stats: EmbodimentStats | None = None,
     ):
         self.policy = policy
         self.device = device
@@ -45,6 +86,20 @@ class DiffusionActionChunkPolicy:
             if onehot is not None
             else None
         )
+        # Cross-embodiment padded scheme: normalize this embodiment's raw obs
+        # with its own static stats before padding to the policy's (larger)
+        # padded width, and invert the same static stats -- un-normalize,
+        # then slice off the padded tail -- on the policy's predicted action.
+        # Mutually exclusive with `onehot` (that's the 2-source mixed
+        # scheme's conditioning path; this is the N-source padded scheme's
+        # normalization path).
+        self.embodiment_stats = embodiment_stats
+        if embodiment_stats is not None:
+            assert onehot is None, "onehot and embodiment_stats are mutually exclusive"
+            self._obs_mean = embodiment_stats.obs_mean.to(device)
+            self._obs_std = embodiment_stats.obs_std.to(device)
+            self._action_mean = embodiment_stats.action_mean.to(device)
+            self._action_std = embodiment_stats.action_std.to(device)
 
     def reset(self, num_envs: int) -> None:
         del num_envs
@@ -58,6 +113,11 @@ class DiffusionActionChunkPolicy:
             obs_t = obs_t.reshape(obs_t.shape[0], -1)
         if self.onehot is not None:
             obs_t = torch.cat([obs_t, self.onehot.expand(obs_t.shape[0], -1)], dim=1)
+        elif self.embodiment_stats is not None:
+            obs_t = (obs_t - self._obs_mean) / self._obs_std
+            pad = self.policy.cfg.obs_dim - obs_t.shape[1]
+            if pad > 0:
+                obs_t = torch.nn.functional.pad(obs_t, (0, pad))
         if self._obs_hist is None:
             self._obs_hist = deque(
                 [obs_t.clone() for _ in range(self.obs_horizon)],
@@ -80,10 +140,25 @@ class DiffusionActionChunkPolicy:
         action = self._action_queue[:, 0]
         self._action_queue = self._action_queue[:, 1:]
         self._steps_since_replan += 1
+        if self.embodiment_stats is not None:
+            real_dim = self.embodiment_stats.action_dim
+            action = action[:, :real_dim] * self._action_std + self._action_mean
         return action
 
 
-def _warn_obs_mismatch(policy: DiffusionPolicy, env_obs_dim: int, onehot: list[float] | None) -> None:
+def _warn_obs_mismatch(
+    policy: DiffusionPolicy,
+    env_obs_dim: int,
+    onehot: list[float] | None,
+    embodiment_stats: EmbodimentStats | None = None,
+) -> None:
+    if embodiment_stats is not None:
+        if embodiment_stats.obs_dim != env_obs_dim:
+            print(
+                f"[WARN] embodiment_stats obs_dim={embodiment_stats.obs_dim} "
+                f"does not match env obs_dim={env_obs_dim} for {embodiment_stats.embodiment!r}"
+            )
+        return
     expected = policy.cfg.obs_dim - (len(onehot) if onehot else 0)
     if expected != env_obs_dim:
         print(
@@ -103,8 +178,18 @@ def evaluate_diffusion_policy(
     device: str = "cuda:0",
     seed: int = 0,
     onehot: list[float] | None = None,
+    embodiment: str | None = None,
     reuse_env: bool = False,
 ) -> dict[str, float]:
+    """
+    Args:
+        embodiment: for a cross-embodiment padded policy (see
+            `build_padded_dataset.py`), the source embodiment name to
+            evaluate as (must match an entry in `source_stats.json` next to
+            `policy_path`). Loads that embodiment's static normalization
+            stats and drives the env through them -- mutually exclusive with
+            `onehot` (the older 2-source mixed scheme's conditioning path).
+    """
     import mjlab_hand  # noqa: F401
     from mjlab_hand.eval.config import EvalConfig
     from mjlab_hand.eval.env_setup import setup_eval_env
@@ -112,6 +197,11 @@ def evaluate_diffusion_policy(
     device_t = torch.device(device if torch.cuda.is_available() else "cpu")
     policy = DiffusionPolicy.load(policy_path, device=device_t)
     policy.eval()
+
+    embodiment_stats = None
+    if embodiment is not None:
+        stats_path = Path(policy_path).parent / "source_stats.json"
+        embodiment_stats = EmbodimentStats.load(stats_path, embodiment)
 
     cache_key = (task, num_envs, str(device_t))
     if reuse_env and cache_key in _ENV_CACHE:
@@ -123,7 +213,7 @@ def evaluate_diffusion_policy(
             _ENV_CACHE[cache_key] = (env, _rl_cfg)
 
     env_obs_dim = int(env.num_obs) if hasattr(env, "num_obs") else policy.cfg.obs_dim
-    _warn_obs_mismatch(policy, env_obs_dim, onehot)
+    _warn_obs_mismatch(policy, env_obs_dim, onehot, embodiment_stats)
 
     EvaluatorCls = select_evaluator(env)
 
@@ -134,7 +224,9 @@ def evaluate_diffusion_policy(
         rotation_success_steps = None
 
     evaluator = EvaluatorCls(env, _Args(), device_t)
-    chunk_policy = DiffusionActionChunkPolicy(policy, device_t, onehot=onehot)
+    chunk_policy = DiffusionActionChunkPolicy(
+        policy, device_t, onehot=onehot, embodiment_stats=embodiment_stats
+    )
     chunk_policy.reset(num_envs)
 
     metrics = run_eval(env, chunk_policy, evaluator, num_steps, device_t)
@@ -155,6 +247,7 @@ def render_diffusion_rollout(
     seed: int = 0,
     tag: str = "rollout",
     onehot: list[float] | None = None,
+    embodiment: str | None = None,
 ) -> Path | None:
     """Record an mp4 of a diffusion-policy rollout. Requires MUJOCO_GL=egl.
 
@@ -176,6 +269,11 @@ def render_diffusion_rollout(
 
     policy = DiffusionPolicy.load(policy_path, device=device_t)
     policy.eval()
+
+    embodiment_stats = None
+    if embodiment is not None:
+        stats_path = Path(policy_path).parent / "source_stats.json"
+        embodiment_stats = EmbodimentStats.load(stats_path, embodiment)
 
     env_cfg = load_env_cfg(task, play=True)
     rl_cfg = load_rl_cfg(task)
@@ -199,9 +297,11 @@ def render_diffusion_rollout(
     env = RslRlVecEnvWrapper(raw_env, clip_actions=rl_cfg.clip_actions)
 
     env_obs_dim = int(env.num_obs) if hasattr(env, "num_obs") else policy.cfg.obs_dim
-    _warn_obs_mismatch(policy, env_obs_dim, onehot)
+    _warn_obs_mismatch(policy, env_obs_dim, onehot, embodiment_stats)
 
-    chunk_policy = DiffusionActionChunkPolicy(policy, device_t, onehot=onehot)
+    chunk_policy = DiffusionActionChunkPolicy(
+        policy, device_t, onehot=onehot, embodiment_stats=embodiment_stats
+    )
     chunk_policy.reset(num_envs)
 
     obs, _ = env.reset()

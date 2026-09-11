@@ -11,7 +11,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from mjlab_hand.diffusion.dataset import DiffusionDataset, TrajectoryStore
-from mjlab_hand.diffusion.normalizer import LinearNormalizer
+from mjlab_hand.diffusion.normalizer import GaussianNormalizer, LinearNormalizer
 from mjlab_hand.diffusion.policy import DiffusionPolicy, DiffusionPolicyConfig
 
 
@@ -39,9 +39,13 @@ class TrainConfig:
     seed: int = 0
     # Optional in-loop env evaluation (disabled unless eval_task/eval_specs is set).
     eval_task: str | None = None
-    # Multi-target eval: [{"task": ..., "onehot": [..] | None}, ...]. Lets a
-    # mixed-embodiment policy be scored against each embodiment it drives.
-    # `eval_task` alone is internally promoted to a single-element spec.
+    # Multi-target eval: [{"task": ..., "onehot": [..] | None}, ...] for the
+    # 2-source onehot-mixed scheme, or [{"task": ..., "embodiment": "..."},
+    # ...] for the N-source padded cross-embodiment scheme (embodiment must
+    # match a name in the dataset's source_stats.json). Lets a
+    # mixed/cross-embodiment policy be scored against each embodiment it
+    # drives. `eval_task` alone is internally promoted to a single-element
+    # spec (no onehot/embodiment).
     eval_specs: list[dict] | None = None
     eval_every_epochs: int = 10
     eval_num_envs: int = 32
@@ -75,6 +79,8 @@ def train_diffusion(cfg: TrainConfig) -> Path:
     store = TrajectoryStore(cfg.dataset, mode="r")
     summary = store.summary()
     print(f"[INFO] Dataset: {summary}")
+    extra = json.loads(store.root.attrs.get("extra", "{}"))
+    is_padded = bool(extra.get("padded"))
 
     dataset = DiffusionDataset(
         store,
@@ -92,6 +98,16 @@ def train_diffusion(cfg: TrainConfig) -> Path:
     # rows, so it bypasses the DataLoader entirely; ambient_rng is exhausted
     # once per batch rather than once per dataset pass.
     is_ambient = cfg.ambient_tmin is not None
+    if is_ambient and is_padded:
+        # sample_ambient_batch bypasses the DataLoader/__getitem__ path
+        # entirely (see its docstring), so it doesn't emit action_mask --
+        # combining it with the padded scheme would silently let padded
+        # action dims leak into the loss. Not needed for the current
+        # cross-embodiment work; refuse rather than train something wrong.
+        raise NotImplementedError(
+            "ambient_tmin + a padded (cross-embodiment) dataset is not supported: "
+            "sample_ambient_batch does not produce action_mask"
+        )
     loader: DataLoader | None = None
     ambient_rng: np.random.Generator | None = None
     num_batches_per_epoch = len(dataset) // cfg.batch_size
@@ -108,8 +124,26 @@ def train_diffusion(cfg: TrainConfig) -> Path:
             generator=torch.Generator().manual_seed(cfg.seed),
         )
 
-    obs_norm = LinearNormalizer.fit(dataset.obs)
-    act_norm = LinearNormalizer.fit(dataset.action)
+    if is_padded:
+        # Data is already per-source normalized (mean 0, var 1, fit
+        # statically per embodiment) and zero-padded by
+        # build_padded_dataset.py -- normalizing again here, against the
+        # *pooled* mixture, would mix scales across embodiments and defeat
+        # the whole point of per-source static normalization. The policy's
+        # obs/action normalizers are therefore pure identities; real
+        # normalization already happened upstream, once, and is reused
+        # unchanged at eval time via source_stats.json (written below).
+        obs_norm: LinearNormalizer | GaussianNormalizer = GaussianNormalizer.identity(
+            int(summary["obs_dim"])
+        )
+        act_norm: LinearNormalizer | GaussianNormalizer = GaussianNormalizer.identity(
+            int(summary["action_dim"])
+        )
+        normalizer_type = "gaussian"
+    else:
+        obs_norm = LinearNormalizer.fit(dataset.obs)
+        act_norm = LinearNormalizer.fit(dataset.action)
+        normalizer_type = "linear"
 
     policy_cfg = DiffusionPolicyConfig(
         obs_dim=int(summary["obs_dim"]),
@@ -118,6 +152,7 @@ def train_diffusion(cfg: TrainConfig) -> Path:
         action_horizon=cfg.action_horizon,
         num_train_timesteps=cfg.num_train_timesteps,
         num_inference_steps=cfg.num_inference_steps,
+        normalizer_type=normalizer_type,
     )
     policy = DiffusionPolicy(policy_cfg).to(device)
     policy.set_normalizers(obs_norm, act_norm)
@@ -132,6 +167,22 @@ def train_diffusion(cfg: TrainConfig) -> Path:
             default=str,
         )
     )
+    if is_padded:
+        # Self-contained copy of the per-embodiment normalization stats +
+        # real dims, so eval-time code (CrossEmbodimentActionChunkPolicy)
+        # doesn't need the original training dataset zarr on disk -- only
+        # this policy's output_dir.
+        (cfg.output_dir / "source_stats.json").write_text(
+            json.dumps(
+                {
+                    "task_family": extra.get("task_family"),
+                    "max_obs_dim": extra.get("max_obs_dim"),
+                    "max_action_dim": extra.get("max_action_dim"),
+                    "sources": extra.get("sources"),
+                },
+                indent=2,
+            )
+        )
 
     specs = _eval_specs(cfg)
     render_task = cfg.eval_task or (specs[0]["task"] if specs else None)
@@ -167,7 +218,8 @@ def train_diffusion(cfg: TrainConfig) -> Path:
             obs = batch["obs"].to(device)
             action = batch["action"].to(device)
             timesteps = batch["timesteps"].to(device) if "timesteps" in batch else None
-            loss = policy.compute_loss(obs, action, timesteps=timesteps)
+            action_mask = batch["action_mask"].to(device) if "action_mask" in batch else None
+            loss = policy.compute_loss(obs, action, timesteps=timesteps, action_mask=action_mask)
             opt.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(policy.parameters(), 1.0)
@@ -208,6 +260,7 @@ def train_diffusion(cfg: TrainConfig) -> Path:
                     device=str(device),
                     seed=cfg.seed,
                     onehot=spec.get("onehot"),
+                    embodiment=spec.get("embodiment"),
                     reuse_env=True,
                 )
                 row = {
@@ -250,6 +303,7 @@ def train_diffusion(cfg: TrainConfig) -> Path:
                     seed=cfg.seed,
                     tag=f"epoch{epoch:04d}",
                     onehot=specs[0].get("onehot") if specs else None,
+                    embodiment=specs[0].get("embodiment") if specs else None,
                 )
             except Exception as exc:  # noqa: BLE001 - rendering must never kill training
                 print(f"[WARN] render failed at epoch {epoch}: {exc}")

@@ -457,6 +457,42 @@ The already-`COMPLETED` grasp/rotation collections (Allegro, Sharpa grasp; all 5
 confirmed genuine, not truncated -- each finished with a `requested_episodes` summary line
 matching its target, which a `TIMEOUT` kill does not produce.
 
+**All 10/10 task/embodiment pairs complete as of 2026-09-10 09:48.** Final sizes in
+`/datastor2/mrudolph/mjlab_hand_demos/` (~4GB total): Grasp-Allegro 433M, Grasp-LEAP 459M,
+Grasp-Shadow 667M, Grasp-Sharpa 544M, Grasp-Wuji 521M, InHand-Rotation-Allegro 260M,
+InHand-Rotation-LEAP 287M, InHand-Rotation-Shadow 337M, InHand-Rotation-Sharpa 333M,
+InHand-Rotation-Wuji 329M.
+
+## Cross-embodiment padded datasets (2026-09-10)
+
+Built by `scripts/build_padded_dataset.py` for the new pad-to-max-dim BC scheme (see
+`agent_logbook/JOURNAL.md`, "New cross-embodiment BC scheme"). Each pools all 5 embodiments of
+one task family into a single obs/action space, zero-padded to the family's max dim, each
+source normalized (mean 0, var 1) with its own static stats before padding.
+
+| Dataset | Steps | Episodes | obs/act dim | Sources (10k each unless noted) |
+|---|---|---|---|---|
+| `padded/Grasp-AllHands.zarr` | 5,001,608 | 10,050 | 189/28 | full 1M sets |
+| `padded/InHand-Rotation-AllHands.zarr` | 4,897,978 | 10,538 | 89/22 | full 1M sets |
+| `padded/Grasp-AllHands_50k.zarr` | 50,060 | 103 | 189/28 | `subsets_10k/Grasp-*_10k.zarr` |
+| `padded/InHand-Rotation-AllHands_50k.zarr` | 50,326 | 164 | 89/22 | `subsets_10k/InHand-Rotation-*_10k.zarr` |
+
+The 50k pair's inputs are `subsets_10k/<Task>_expert_10k.zarr` (10 datasets, ~10k steps each,
+20-41 episodes depending on hand), subsampled via the existing `scripts/subsample_dataset.py`
+from the 1M sets -- **not** produced by subsampling the already-pooled 5M dataset directly.
+That distinction matters: the pooled dataset is the straight concatenation of 5 ~1M-step
+blocks in source order, so `subsample_dataset.py`'s "take episodes from the front until you
+hit the target" logic would only ever pick from the first source (Allegro) and would also
+drop the `padded`/`sources` extra metadata that `TrajectoryStore.source_real_dims()` and the
+per-episode `action_mask` depend on. Subsampling per-embodiment first, then re-running
+`build_padded_dataset.py`, keeps every hand represented and regenerates correct provenance
+(including a fresh per-source normalizer fit on the smaller 10k data, not reused from the 1M
+fit -- each dataset's normalization is static to *that* dataset, per the original spec).
+
+All landed within 0.7% of the 50k target. Verified `source_real_dims()` and the per-episode
+`action_mask` reconstruct correctly on both (mask sums match each source's true action_dim:
+22/22/26/28/26 for grasp, 16/16/20/22/20 for rotation).
+
 ## Still not collected
 
 - Multi-embodiment combined dataset for cross-hand diffusion — blocked on deciding how to

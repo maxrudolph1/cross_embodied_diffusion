@@ -9,7 +9,7 @@ import torch
 import torch.nn.functional as F
 
 from mjlab_hand.diffusion.model import ConditionalUnet1D
-from mjlab_hand.diffusion.normalizer import LinearNormalizer
+from mjlab_hand.diffusion.normalizer import GaussianNormalizer, LinearNormalizer
 
 
 def cosine_beta_schedule(timesteps: int, s: float = 0.008) -> torch.Tensor:
@@ -31,18 +31,35 @@ class DiffusionPolicyConfig:
     num_inference_steps: int = 16
     down_dims: tuple[int, ...] = (256, 512, 1024)
     diffusion_step_embed_dim: int = 128
+    # "linear" (default): fit a LinearNormalizer from the training dataset as
+    # before. "gaussian": obs/action normalizers are GaussianNormalizer
+    # identities (mean=0, std=1) -- for the cross-embodiment padded scheme,
+    # where each source's data is already normalized (mean 0, var 1, fit
+    # per-source, statically) and zero-padded by `build_padded_dataset.py`
+    # before it ever reaches this class; normalizing again here (e.g. against
+    # the *pooled* mixture, or per-source stats a batch-mixed forward pass
+    # has no way to apply per-row) would be wrong. See `train_diffusion.py`.
+    normalizer_type: str = "linear"
 
 
 class DiffusionPolicy(torch.nn.Module):
     def __init__(self, cfg: DiffusionPolicyConfig):
         super().__init__()
         self.cfg = cfg
-        self.obs_normalizer = LinearNormalizer(
-            low=torch.zeros(cfg.obs_dim), high=torch.ones(cfg.obs_dim)
-        )
-        self.action_normalizer = LinearNormalizer(
-            low=torch.zeros(cfg.action_dim), high=torch.ones(cfg.action_dim)
-        )
+        if cfg.normalizer_type == "gaussian":
+            self.obs_normalizer: LinearNormalizer | GaussianNormalizer = GaussianNormalizer.identity(
+                cfg.obs_dim
+            )
+            self.action_normalizer: LinearNormalizer | GaussianNormalizer = (
+                GaussianNormalizer.identity(cfg.action_dim)
+            )
+        else:
+            self.obs_normalizer = LinearNormalizer(
+                low=torch.zeros(cfg.obs_dim), high=torch.ones(cfg.obs_dim)
+            )
+            self.action_normalizer = LinearNormalizer(
+                low=torch.zeros(cfg.action_dim), high=torch.ones(cfg.action_dim)
+            )
         self.noise_pred_net = ConditionalUnet1D(
             action_dim=cfg.action_dim,
             global_cond_dim=cfg.obs_dim * cfg.obs_horizon,
@@ -65,7 +82,11 @@ class DiffusionPolicy(torch.nn.Module):
         ).long()
         self.register_buffer("inference_timesteps", steps)
 
-    def set_normalizers(self, obs_norm: LinearNormalizer, act_norm: LinearNormalizer) -> None:
+    def set_normalizers(
+        self,
+        obs_norm: LinearNormalizer | GaussianNormalizer,
+        act_norm: LinearNormalizer | GaussianNormalizer,
+    ) -> None:
         self.obs_normalizer = obs_norm
         self.action_normalizer = act_norm
 
@@ -78,6 +99,7 @@ class DiffusionPolicy(torch.nn.Module):
         obs: torch.Tensor,
         action: torch.Tensor,
         timesteps: torch.Tensor | None = None,
+        action_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -93,6 +115,17 @@ class DiffusionPolicy(torch.nn.Module):
                 whatever fraction of the dataset is admitted there, which is
                 exactly wrong). When None, timesteps are sampled uniformly
                 over the full schedule (original, ungated behaviour, exact).
+            action_mask: (B, Da) optional 0/1 mask, 1 where `action`'s last
+                dim is a real (non-padded) value for that row's source
+                embodiment. Cross-embodiment padded datasets carry a
+                different real action_dim per source (see
+                `TrajectoryStore.source_real_dims`); the zero-padded tail has
+                no ground truth to regress and must not contribute to the
+                loss, so it's excluded here rather than trained toward zero
+                (which would bias the shared denoising net for no reason).
+                Broadcasts over the action horizon. When None, every element
+                contributes (plain, unmasked MSE -- unchanged behaviour for
+                every existing single-embodiment or onehot-mixed dataset).
         """
         b = obs.shape[0]
         device = obs.device
@@ -112,7 +145,11 @@ class DiffusionPolicy(torch.nn.Module):
             * noise
         )
         pred = self.noise_pred_net(noisy, timesteps, nobs)
-        return F.mse_loss(pred, noise)
+        if action_mask is None:
+            return F.mse_loss(pred, noise)
+        mask = action_mask.to(device=device, dtype=pred.dtype)[:, None, :].expand_as(pred)
+        sq_err = (pred - noise) ** 2
+        return (sq_err * mask).sum() / mask.sum().clamp_min(1.0)
 
     @torch.no_grad()
     def predict_action(self, obs: torch.Tensor) -> torch.Tensor:

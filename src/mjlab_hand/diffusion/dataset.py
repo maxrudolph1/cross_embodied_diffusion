@@ -141,6 +141,33 @@ class TrajectoryStore:
             )
         return bounds
 
+    def source_real_dims(self) -> list[tuple[int, int, int, int]]:
+        """Per-source (start, end, real_obs_dim, real_action_dim) for a
+        *padded* cross-embodiment dataset (see `build_padded_dataset.py`).
+
+        Distinct from `source_step_bounds()`: that one is for the 2-source
+        onehot-conditioned `mixed` scheme (same dims, different embodiment
+        label). This is for the N-source zero-padded scheme, where each
+        source keeps its own pre-padding obs/action width so a loss mask can
+        be reconstructed per row without storing a mask array on disk.
+        """
+        extra = json.loads(self.root.attrs.get("extra", "{}"))
+        sources = extra.get("sources")
+        if not sources or not extra.get("padded"):
+            raise RuntimeError(f"{self.path} has no padded 'extra.sources' attrs")
+        bounds: list[tuple[int, int, int, int]] = []
+        start = 0
+        for src in sources:
+            n = int(src["n_steps"])
+            end = start + n
+            bounds.append((start, end, int(src["obs_dim"]), int(src["action_dim"])))
+            start = end
+        if start != self.n_steps:
+            raise RuntimeError(
+                f"{self.path}: source step counts sum to {start}, but n_steps={self.n_steps}"
+            )
+        return bounds
+
     def summary(self) -> dict[str, Any]:
         episodes = self.episode_slices()
         n_succ = sum(1 for *_, s in episodes if s)
@@ -178,6 +205,31 @@ class DiffusionDataset(Dataset):
             self.episodes = store.episode_slices(success_only=False)
         if not self.episodes:
             raise RuntimeError(f"No episodes found in {store.path}")
+
+        # Padded cross-embodiment dataset: each episode belongs wholly to one
+        # source (episodes are never split across the concatenation
+        # boundary), so a per-episode action_mask -- 1 for that source's real
+        # action dims, 0 for the zero-padded rest -- is constant within an
+        # episode and cheap to precompute once here rather than looked up
+        # per __getitem__ call.
+        self.action_mask_per_episode: np.ndarray | None = None
+        try:
+            src_dims = store.source_real_dims()
+        except RuntimeError:
+            src_dims = None
+        if src_dims is not None:
+            action_dim = int(store.root.attrs.get("action_dim", 0))
+            masks = np.zeros((len(self.episodes), action_dim), dtype=np.float32)
+            for epi_i, (start, _end, _succ) in enumerate(self.episodes):
+                real_action_dim = None
+                for b_start, b_end, _real_obs, real_act in src_dims:
+                    if b_start <= start < b_end:
+                        real_action_dim = real_act
+                        break
+                if real_action_dim is None:
+                    raise RuntimeError(f"episode at step {start} not within any source range")
+                masks[epi_i, :real_action_dim] = 1.0
+            self.action_mask_per_episode = masks
 
         self.indices: list[tuple[int, int]] = []
         for epi_i, (start, end, _) in enumerate(self.episodes):
@@ -238,10 +290,13 @@ class DiffusionDataset(Dataset):
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         epi_i, t_local = self.indices[idx]
         obs_window, action_window = self._window(epi_i, t_local)
-        return {
+        out = {
             "obs": torch.from_numpy(obs_window),
             "action": torch.from_numpy(action_window),
         }
+        if self.action_mask_per_episode is not None:
+            out["action_mask"] = torch.from_numpy(self.action_mask_per_episode[epi_i])
+        return out
 
     def _build_ambient_index(self) -> None:
         """Per-window t_min array (parallel to self.indices) plus a

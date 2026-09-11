@@ -4,6 +4,100 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-09-10 — New cross-embodiment BC scheme: pad-to-max + per-source static normalization + masked loss
+
+User: one diffusion policy per task family (Grasp, InHand-Rotation) that takes obs from an
+arbitrary embodiment and outputs its action -- via padding to the family's max obs/action dim,
+careful static per-dataset normalization, and correct loss masking. Confirmed scope first
+(per-task-family pooling, not one policy across both tasks) via a scoping question -- the
+obs/action dims differ enough between task families (grasp max 189/28 vs rotation max 89/22)
+that a single global pad would waste most of rotation's capacity on grasp-only padding.
+
+This is a deliberate reversal of `build_mixed_dataset.py`'s stance ("refuses mismatched spaces
+rather than zero-padding") for a good reason: that script mixes exactly 2 same-dim embodiments
+with onehot conditioning, where padding really would conflate unrelated physical quantities.
+Here the pool is all 5 embodiments of one task, which necessarily have different dims, and
+zero-padding to the family max plus a real/pad mask is the only way to share one network.
+
+**New pieces** (all additive, existing single-embodiment / 2-source-mixed training paths
+unaffected -- verified via a full small-scale smoke test before running on real data):
+
+- `GaussianNormalizer` (`normalizer.py`): mean-0/var-1, `.fit()` per source dataset (never on
+  the pooled mixture), `.identity()` for a no-op pass-through.
+- `scripts/build_padded_dataset.py`: takes N source `.zarr` dirs (one task family, all 5
+  hands), fits a `GaussianNormalizer` per source from that source's own raw data, normalizes,
+  zero-pads obs/action to the family's max width (real dims front-packed, pad at the tail),
+  concatenates. Writes `extra.padded=True` + per-source `{embodiment, obs_dim, action_dim,
+  obs_mean/std, action_mean/std}` -- this provenance is what makes the loss mask and eval-time
+  normalization reproducible from stored data alone.
+- `TrajectoryStore.source_real_dims()`: reads that per-source real-dim provenance (parallel to
+  the existing `source_step_bounds()` used by the onehot-mixed/ambient scheme).
+- `DiffusionDataset`: when a store has `source_real_dims()`, precomputes a per-episode
+  `action_mask` (episodes never span a source boundary, so it's constant within an episode) and
+  includes it in every `__getitem__` batch.
+- `DiffusionPolicy.compute_loss(..., action_mask=...)`: masked MSE -- `(sq_err * mask).sum() /
+  mask.sum()` -- excludes padded action dims from the loss rather than training the network to
+  predict zero there (which would bias the shared denoiser for no reason). `None` (default)
+  reproduces the exact old unmasked behavior.
+- `DiffusionPolicyConfig.normalizer_type`: `"linear"` (default, old behavior) or `"gaussian"`.
+  A padded dataset uses `"gaussian"` with **identity** normalizers inside the policy --
+  normalization already happened once, statically, per-source, in `build_padded_dataset.py`;
+  normalizing again at the pooled level would mix embodiments' scales and defeat the purpose.
+  `train_diffusion.py` detects `extra.padded` and wires this automatically, plus writes
+  `source_stats.json` next to the checkpoint (self-contained -- eval doesn't need the original
+  training zarr on disk).
+- `CrossEmbodimentActionChunkPolicy` path in `evaluate.py` (folded into the existing
+  `DiffusionActionChunkPolicy` via an `embodiment_stats` arg, mutually exclusive with `onehot`):
+  at eval/rollout time, normalizes a live env's raw (real-dim) obs with that one embodiment's
+  static stats, zero-pads to the policy's width, predicts, un-normalizes and slices the
+  prediction back to that embodiment's real action_dim before it's sent to `env.step`. Wired
+  into `train_diffusion.py`'s existing in-loop `eval_specs` (`{"task": ..., "embodiment": ...}`
+  entries) so periodic training-time eval scores each embodiment separately.
+- Ambient-diffusion (`--ambient-tmin`) + padded datasets together is explicitly refused
+  (`sample_ambient_batch` bypasses `__getitem__` and doesn't emit `action_mask` -- combining
+  them would silently leak padded dims into the loss). Not needed for this work.
+
+**Verified correctness on a small smoke dataset** (Grasp-Allegro + Grasp-Sharpa, 8k steps
+each) before running for real: per-source real dims are genuinely mean~0/std~1 and the pad
+tail is exactly 0 in both obs and action; `action_mask` sums to the right per-embodiment
+real `action_dim` per episode; 2 epochs of real training ran end-to-end with the masked loss
+decreasing; reloaded the saved checkpoint and confirmed `normalizer_type="gaussian"` with true
+identity stats, and that the eval wrapper's normalize -> pad -> predict -> un-normalize ->
+slice pipeline returns an action of exactly the source embodiment's real `action_dim`.
+
+**Real datasets built** from the existing 1M-transition collections (`COLLECTIONS.md`):
+`/datastor2/mrudolph/mjlab_hand_demos/padded/Grasp-AllHands.zarr` (5,001,608 steps, obs=189,
+act=28) and `.../InHand-Rotation-AllHands.zarr` (4,897,978 steps, obs=89, act=22).
+
+**Training launched**: `slurm_jobs/train_cross_embodiment.sbatch`, job `85823`, array `0-1`,
+pinned to `slurm-node-011` (per the driver lessons above -- this is real multi-hour training,
+not a one-off collection). 40 epochs each (matches this project's ~780k-gradient-step
+convention at this data scale), periodic per-embodiment eval every 10 epochs via 5
+`{"task", "embodiment"}` eval_specs, wandb project `mjlab`. Outputs:
+`outputs/diffusion/{Grasp,InHand-Rotation}-AllHands_padded/`.
+
+## 2026-09-10 (later) — 50k-scale pooled datasets + training
+
+User: pick N trajectories per embodiment for a ~50k-sample pool, then train those too.
+Deliberately did **not** subsample the already-pooled 5M padded dataset directly -- its
+episodes are 5 concatenated ~1M-step blocks in source order, so `subsample_dataset.py`'s
+front-to-back greedy selector would only ever have picked from the first source (Allegro),
+and it also drops the `extra.padded`/`sources` metadata `source_real_dims()`/`action_mask`
+depend on. Instead: subsampled each of the 10 individual 1M per-embodiment datasets to ~10k
+steps first (`subsample_dataset.py`, unchanged), then re-ran `build_padded_dataset.py` over
+those 5-per-family 10k subsets -- landed at 50,060 (Grasp) and 50,326 (Rotation) steps, all 5
+hands genuinely represented, fresh per-source normalizer fit on the smaller data (not reused
+from the 1M fit, per the "static per that dataset" spec). Verified `action_mask` sums match
+each source's real action_dim on both. See `COLLECTIONS.md` for the dataset table.
+
+Training launched: `slurm_jobs/train_cross_embodiment_50k.sbatch`, job `86050`, array `0-1`,
+also pinned to node-011. 4000 epochs (this project's existing `EPOCHS_50K` convention, same
+~780k total gradient steps as every other scale), eval every 1000 epochs, same 5-embodiment
+eval_specs and wandb project as the 5M runs (tagged `50k` to distinguish). Outputs:
+`outputs/diffusion/{Grasp,InHand-Rotation}-AllHands_50k_padded/`.
+
+---
+
 ## 2026-09-09 (later still) — Pinned remaining grasp RL training to node-011 only
 
 Surveyed more nodes for the stale-driver issue (see entries above). Confirmed bad, in addition
