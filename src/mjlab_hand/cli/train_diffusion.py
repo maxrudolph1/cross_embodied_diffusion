@@ -75,6 +75,14 @@ def main() -> None:
         "whole val set every time.",
     )
     parser.add_argument(
+        "--source-sample-mode",
+        choices=["uniform", "balanced"],
+        default="uniform",
+        help="Per-source sampling ratio for a padded/mixed dataset. 'uniform' "
+        "(default): proportional to row count. 'balanced': equal expected "
+        "representation per source per epoch regardless of size.",
+    )
+    parser.add_argument(
         "--wandb-project",
         type=str,
         default=None,
@@ -116,6 +124,7 @@ def main() -> None:
             val_seed=args.val_seed,
             val_every_epochs=args.val_every_epochs,
             val_max_batches=None if args.val_max_batches < 0 else args.val_max_batches,
+            source_sample_mode=args.source_sample_mode,
             wandb_project=args.wandb_project,
             wandb_run_name=args.wandb_run_name,
             wandb_tags=args.wandb_tags,

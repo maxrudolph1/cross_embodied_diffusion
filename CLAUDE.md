@@ -36,6 +36,16 @@ export WARP_CACHE_PATH="$JOBDIR/warp_cache/task_${SLURM_ARRAY_TASK_ID}"
 mkdir -p "$WARP_CACHE_PATH"
 
 export MUJOCO_GL=egl   # headless rendering
+
+# wandb's service subprocess makes a tempfile.TemporaryDirectory() under
+# $TMPDIR (default /tmp) on every wandb.init(). Node-local /tmp is small and
+# shared across whatever else lands on that node; with >~10 concurrent
+# wandb-logging array tasks on one node it fills up and every wandb.init()
+# after that dies with ENOSPC (seen 2026-09-12: 36/40 tasks failed in under
+# a minute on slurm-node-005 this way). Any job with wandb logging AND real
+# array concurrency needs this too, not just WARP_CACHE_PATH.
+export TMPDIR="$JOBDIR/tmp/task_${SLURM_ARRAY_TASK_ID}"
+mkdir -p "$TMPDIR"
 ```
 
 `srun` fails with "More processors requested than permitted" when invoked

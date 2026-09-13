@@ -4,6 +4,96 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-09-13 — Job `89262`: 36/40 tasks failed on node-local /tmp exhaustion; fixed + resubmitted
+
+Checked in on the scarce-co-training/specialist sweep (job `89262`, see the previous entry) a
+day after submission: only 4 of 40 tasks (`0`, `2`, `3`, `4`) were actually healthy and training;
+the other 36 all failed within seconds to a minute of starting, all on `slurm-node-005`.
+
+Root cause, from the `.err` logs: `OSError: [Errno 28] No space left on device` inside wandb's
+service subprocess (`tempfile.TemporaryDirectory()` in `wandb/sdk/lib/service/service_process.py`),
+which resolves to node-local `/tmp` by default. `train_scarce_specialist.sbatch` already gave
+each array task its own `WARP_CACHE_PATH` (the established fix for concurrent-array-task races,
+see `CLAUDE.md`), but never touched `TMPDIR` -- with several of the up-to-20 concurrent tasks
+landing on the same node (`slurm-node-005`), node-local `/tmp` filled up and every `wandb.init()`
+after that point died. The 4 survivors had already gotten past that step before the node's `/tmp`
+ran out. This is a new, more general finding than the existing Warp-cache one: **any array job
+with wandb logging AND real concurrency needs a per-task `TMPDIR` on shared storage, not just a
+per-task Warp cache** -- added to `CLAUDE.md`'s required-env-vars block so it's not missed again.
+
+**Fix:** added `export TMPDIR="$PWD/tmp/scarce_specialist_task_${SLURM_ARRAY_TASK_ID}"` (shared
+storage, same pattern as `WARP_CACHE_PATH`) to `train_scarce_specialist.sbatch`. Resubmitted only
+the 36 failed indices against the *same* manifest (`sbatch --array=1,5-39%16 ...`) -- job `90599`.
+Confirmed via `scontrol show job` that Slurm's `SLURM_ARRAY_TASK_ID` for an explicit index list
+still resolves to the real index values (not renumbered), so each resubmitted task looks up the
+correct manifest entry and writes to the same output dir the original plan intended. Throttled to
+`%16` rather than `%20`, since 4 tasks from job `89262` are still running toward the user's
+"20 concurrent" cap -- `16 + 4 = 20` keeps the combined ceiling correct across both job IDs.
+Wasted compute from the failures was minimal (all died in <1 minute); the 4 survivors are left
+running untouched (task `0`, e.g., is a healthy Grasp-Allegro 50k specialist run, epoch 93/4000,
+loss and val_action_loss both looking reasonable).
+
+---
+
+## 2026-09-12 — Scarce co-training + full specialist sweep, 80 runs / 40 Slurm tasks
+
+User: train specialist policies (per task/embodiment, at 50k and 1M) and a new generalist
+"scarce co-training" scheme -- one embodiment's data capped at 50k, the other four at full 1M,
+pooled into one policy -- and test whether that scarce source should be sampled uniformly
+(proportional to its row count, i.e. drowned out) or upweighted to equal representation.
+Scoped via clarifying questions first (see conversation): confirmed "scarce co-training" is a
+genuinely new mixed-scale-per-source scheme, not a rerun of the existing uniform-scale pooled
+training from 2026-09-10/11; confirmed building the missing 50k single-embodiment datasets
+rather than leaving 3 of 5 hands 1M-only; confirmed all new runs use the validation split added
+earlier today. User then set final scope: 2 seeds (not 3), 2 runs packed per Slurm task, capped
+at 20 concurrent.
+
+**New code**, additive to the val-split work above:
+- `DiffusionDataset.source_id_per_window` + `.source_sample_weights(mode)`: per-window source id
+  (reusing `_episode_source_ids`, the same source-lookup helper the val split uses -- falls back
+  to a single group for a plain non-mixed dataset) and a weight array for a
+  `WeightedRandomSampler`. `"uniform"` (default, `None`) is the existing plain-shuffle behaviour,
+  unchanged. `"balanced"` gives every source equal *expected* representation per epoch
+  regardless of row count -- the actual mechanism that makes "scarce" sampling ratio testable;
+  without it a 50k source in a ~4M pool gets ~1.2% of batches by construction.
+- `TrainConfig.source_sample_mode` (`"uniform"`|`"balanced"`) + `--source-sample-mode` CLI flag,
+  wired into the non-ambient DataLoader branch (mutually exclusive with ambient sampling, same as
+  the existing `shuffle=True` path it replaces).
+
+**Verified via smoke tests** before touching real data: a synthetic 20/400-episode 2-source
+store confirms `"uniform"` reproduces each source's raw row-count share (~4.76% observed
+~4.96%) while `"balanced"` gives ~50/50 regardless of the 20x size imbalance; a full 2-epoch CPU
+`train_diffusion` run combining `source_sample_mode="balanced"` with `val_fraction=0.2`
+completes cleanly (the two new features don't interact badly). Then **on real data**
+(`Grasp-Scarce-Allegro.zarr`, ~4.05M steps): built train (3,645,950 windows) and val (404,146
+windows) splits confirming ~10% held out per source including the scarce one (5,000 of ~50k
+Allegro windows, not zero and not all of it); a `WeightedRandomSampler` batch's `action_mask`
+column sums confirm every source contributes ~1/5 of the batch under `"balanced"` regardless of
+its 1M vs 50k size; `compute_loss` and the new `action_reconstruction_loss` both run cleanly on
+a real masked batch.
+
+**Datasets built** -- see `COLLECTIONS.md` for the full table: 10 fresh 50k single-embodiment
+sets (superseding stale/missing ones from the 2026-08-25 vintage) and 10 scarce-co-training
+pools (`padded/<Family>-Scarce-<Hand>.zarr`, one per choice of scarce embodiment x task family).
+
+**Job launched**: `scripts/build_scarce_specialist_manifest.py` generates
+`slurm_jobs/scarce_specialist_manifest.json` -- 40 array-task entries, each a list of 2
+`train-diffusion` arg-dicts (the config's 2 seeds). `scripts/run_manifest_task.py` (has
+`--dry-run`, used to verify a few representative tasks' generated commands before submitting)
+runs one task's 2 runs sequentially. `slurm_jobs/train_scarce_specialist.sbatch`, job `89262`,
+`--array=0-39%20` (confirmed via `scontrol show job`: `ArrayTaskId=0-39%20
+ArrayTaskThrottle=20`), no node pin (pure training + small periodic eval, per the node-011
+scoping memory). Epoch counts follow this project's ~780k-gradient-step convention: 200 for 1M
+specialists, 4000 for 50k specialists, 50 for the ~4M scarce pools. `val-fraction=0.1` on every
+run, with `val-seed` fixed at 0 across both seeds of a config (so seed 0 and seed 1 of the same
+dataset validate on the *identical* held-out trajectories -- their val losses are directly
+comparable; only the training seed differs between the two runs packed in one task).
+
+Breakdown: 20 tasks / 40 runs specialist (10 combos x {50k, 1M} x 2 seeds), 20 tasks / 40 runs
+scarce co-training (2 families x 5 scarce-hand choices x {uniform, balanced} x 2 seeds).
+
+---
+
 ## 2026-09-11 — Real validation loss: held-out trajectories, denoised-action MSE
 
 User pointed out the existing `"train_loss"` in `eval_metrics.jsonl` isn't a validation loss at

@@ -70,6 +70,14 @@ class TrainConfig:
     # check so validation stays a small fraction of an epoch's compute
     # instead of doubling it. None = use the whole val set every time.
     val_max_batches: int | None = 20
+    # Per-source sampling ratio for a padded/mixed dataset. "uniform"
+    # (default): plain shuffling, each window equally likely (source share
+    # of a batch proportional to its row count -- unchanged behaviour).
+    # "balanced": WeightedRandomSampler so every source gets equal expected
+    # representation per epoch regardless of size (see
+    # DiffusionDataset.source_sample_weights) -- for "scarce co-training",
+    # where one source has far fewer rows than the rest.
+    source_sample_mode: str = "uniform"
     # WandB logging. Disabled (None) by default; set wandb_project to enable.
     wandb_project: str | None = None
     wandb_run_name: str | None = None
@@ -161,15 +169,32 @@ def train_diffusion(cfg: TrainConfig) -> Path:
     if is_ambient:
         ambient_rng = np.random.default_rng(cfg.seed)
     else:
-        loader = DataLoader(
-            dataset,
-            batch_size=cfg.batch_size,
-            shuffle=True,
-            num_workers=cfg.num_workers,
-            pin_memory=device.type == "cuda",
-            drop_last=True,
-            generator=torch.Generator().manual_seed(cfg.seed),
-        )
+        weights = dataset.source_sample_weights(cfg.source_sample_mode)
+        if weights is None:
+            loader = DataLoader(
+                dataset,
+                batch_size=cfg.batch_size,
+                shuffle=True,
+                num_workers=cfg.num_workers,
+                pin_memory=device.type == "cuda",
+                drop_last=True,
+                generator=torch.Generator().manual_seed(cfg.seed),
+            )
+        else:
+            sampler = torch.utils.data.WeightedRandomSampler(
+                torch.from_numpy(weights),
+                num_samples=len(dataset),
+                replacement=True,
+                generator=torch.Generator().manual_seed(cfg.seed),
+            )
+            loader = DataLoader(
+                dataset,
+                batch_size=cfg.batch_size,
+                sampler=sampler,
+                num_workers=cfg.num_workers,
+                pin_memory=device.type == "cuda",
+                drop_last=True,
+            )
 
     if is_padded:
         # Data is already per-source normalized (mean 0, var 1, fit

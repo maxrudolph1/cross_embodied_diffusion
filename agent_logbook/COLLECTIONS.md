@@ -493,6 +493,53 @@ All landed within 0.7% of the 50k target. Verified `source_real_dims()` and the 
 `action_mask` reconstruct correctly on both (mask sums match each source's true action_dim:
 22/22/26/28/26 for grasp, 16/16/20/22/20 for rotation).
 
+## Fresh 50k single-embodiment datasets + scarce co-training pools (2026-09-12)
+
+User asked for specialist training at both 50k and 1M scale for all 10 task/embodiment combos,
+plus a new "scarce co-training" generalist scheme. Two dataset-building steps, both quick
+(subsampling/pooling only, no simulation):
+
+**10 fresh 50k single-embodiment sets**, `subsample_dataset.py --target-steps 50000` from the
+current `/datastor2/mrudolph/mjlab_hand_demos/<Task>_expert_1M.zarr` sources ->
+`/datastor2/mrudolph/mjlab_hand_demos/subsets_50k/<Task>_expert_50k.zarr`. **Needed even for
+InHand-Rotation-Allegro/LEAP, which already had a `data/demos/..._expert_50k.zarr` from
+2026-08-25** -- rebuilt anyway so every combo's 50k set is nested from the *current* 1M
+collections (same checkpoints used everywhere else right now), not an older, separately-drawn
+rollout. All 10 landed within 0.5% of target:
+
+| Task | Steps | Episodes |
+|---|---|---|
+| Grasp-Allegro | 50,217 | 101 |
+| Grasp-LEAP | 50,067 | 101 |
+| Grasp-Shadow | 50,100 | 101 |
+| Grasp-Sharpa | 49,846 | 100 |
+| Grasp-Wuji | 49,830 | 100 |
+| InHand-Rotation-Allegro | 50,174 | 117 |
+| InHand-Rotation-LEAP | 50,203 | 104 |
+| InHand-Rotation-Shadow | 49,990 | 123 |
+| InHand-Rotation-Sharpa | 50,130 | 111 |
+| InHand-Rotation-Wuji | 50,006 | 112 |
+
+**Important:** the "Grasp-Allegro/LEAP 50k and 100k" datasets documented earlier in this file
+(the "Data-scaling ablation subsets" and "Allegro / LEAP focused scales" sections, 2026-08-25)
+**no longer exist on disk** -- `data/demos/` now only has the two InHand-Rotation 50k sets left
+from that vintage, plus the very first smoke/full Allegro grasp sets. Those sections are stale
+documentation, not live datasets; don't point new work at paths from them without checking.
+
+**10 "scarce co-training" pools**, `padded/<Family>-Scarce-<Hand>.zarr` -- one embodiment's data
+capped at 50k (the fresh subsample above), the other four at their full ~1M, pooled via the
+existing `build_padded_dataset.py` (unchanged -- it already accepted arbitrary source paths, no
+code changes needed). One pool per (family, choice of scarce embodiment) = 2 x 5 = 10 pools,
+~3.9-4.05M steps each depending which hand (rotation hands have slightly different per-episode
+step counts than grasp). Verified on `Grasp-Scarce-Allegro.zarr` and
+`InHand-Rotation-Scarce-Wuji.zarr`: `source_real_dims()` correctly locates the scarce hand's
+~50k block wherever it falls in concatenation order, and a `DiffusionDataset` train/val split
+(see JOURNAL.md) puts ~10% of *that* hand's ~100 episodes into val (not zero, not all of them).
+
+Manifest of every specialist + scarce-co-training run built from these (80 runs, 2 seeds each,
+packed 2/Slurm-task): `scripts/build_scarce_specialist_manifest.py` ->
+`slurm_jobs/scarce_specialist_manifest.json`. See RUNS.md for the launched job.
+
 ## Still not collected
 
 - Multi-embodiment combined dataset for cross-hand diffusion — blocked on deciding how to

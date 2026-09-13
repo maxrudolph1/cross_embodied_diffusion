@@ -56,6 +56,30 @@ Status snapshot: **2026-08-24**. Artifact roots are gitignored; paths are relati
 | dp-leap-rot-400k | InHand-Rotation-LEAP | `outputs/diffusion/InHand-Rotation-LEAP_400k` | `data/demos/InHand-Rotation-LEAP_expert_400k.zarr` | 500 epochs, bs 256, `EVAL_FINAL_ONLY=1` (eval only at epoch 500); Slurm job `80853`, `slurm-node-011` | `policy_epoch_0500.pt` / `policy_best.pt` (loss 0.006254) | **done** | 7h22m (09:00-16:22). Final eval (32 rollouts): **2.31** avg successes before drop, 100% drop rate, 24.9s survival. Logs: `slurm_jobs/train_diffusion/logs/task_80853_0.{out,err}` |
 | dp-allegro-rot-400k | InHand-Rotation-Allegro | `outputs/diffusion/InHand-Rotation-Allegro_400k` | `data/demos/InHand-Rotation-Allegro_expert_400k.zarr` | 500 epochs, bs 256, `EVAL_FINAL_ONLY=1`; Slurm job `80854` | `policy_epoch_0500.pt` / `policy_best.pt` (loss 0.003741) | **done** | 7h51m (10:54-18:45), ran concurrently with `dp-leap-rot-400k` on a separate GPU allocation. Final eval: **1.62** avg successes before drop, 100% drop rate, 17.1s survival. Logs: `slurm_jobs/train_diffusion/logs/task_80854_0.{out,err}` |
 
+### Specialist + scarce co-training sweep, `train_scarce_specialist.sbatch` (2026-09-12/13)
+
+- Manifest: `slurm_jobs/scarce_specialist_manifest.json` (built by
+  `scripts/build_scarce_specialist_manifest.py`, 40 array-task entries / 80 total runs); each
+  task's 2 runs (its config's 2 seeds) executed sequentially by `scripts/run_manifest_task.py`
+- Tasks 0-19: specialist (10 task/embodiment combos x {50k, 1M} x 2 seeds)
+- Tasks 20-39: scarce co-training (2 families x 5 scarce-hand choices x {uniform, balanced}
+  sampling ratio x 2 seeds), pools from `COLLECTIONS.md`'s "scarce co-training pools" section
+- All runs use `--val-fraction 0.1` (see JOURNAL.md's val-split entry); outputs under
+  `outputs/diffusion/specialist/` and `outputs/diffusion/scarce/`; wandb project `mjlab`
+- **Job `89262`** (`--array=0-39%20`, submitted 2026-09-12): 36/40 tasks **failed within
+  seconds/minutes** on node-local `/tmp` exhaustion (wandb's service subprocess; `TMPDIR` wasn't
+  pinned per-task the way `WARP_CACHE_PATH` was). Only tasks `0`, `2`, `3`, `4` started cleanly
+  and are genuinely training (e.g. task `0` = Grasp-Allegro specialist 50k seed0, healthy at
+  epoch 93/4000 as of 2026-09-13). See JOURNAL.md (2026-09-13 entry) for the root cause and the
+  `TMPDIR` fix (now also in `CLAUDE.md`'s required-env-vars block).
+- **Job `90599`** (`--array=1,5-39%16`, submitted 2026-09-13): resubmit of exactly the 36 failed
+  indices against the same manifest, with the `TMPDIR` fix applied. Throttled to `%16` (not
+  `%20`) so combined with `89262`'s 4 still-running tasks the total stays at the user's
+  requested 20-concurrent cap. Pending on cluster priority as of 2026-09-13.
+- Once both jobs finish, expect all 80 runs to have completed across `89262` (4) + `90599` (up
+  to 36, less any further failures) -- verify `outputs/diffusion/{specialist,scarce}/*/policy_latest.pt`
+  count reaches 80 before treating the sweep as done.
+
 ### Scripts
 
 - `scripts/watch_eval_diffusion.py` — eval every N epochs while training

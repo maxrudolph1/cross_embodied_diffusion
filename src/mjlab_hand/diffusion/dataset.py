@@ -324,6 +324,15 @@ class DiffusionDataset(Dataset):
             for t in range(length):
                 self.indices.append((epi_i, t))
 
+        # Per-window source id, for `source_sample_weights` (train.py's
+        # --source-sample-mode). `_episode_source_ids` falls back to a single
+        # group (all zeros) for a plain non-mixed dataset, so this is always
+        # populated -- "balanced" mode just degenerates to a no-op there.
+        episode_source_ids = _episode_source_ids(self.episodes, store)
+        self.source_id_per_window = np.array(
+            [episode_source_ids[epi_i] for epi_i, _t_local in self.indices], dtype=np.int64
+        )
+
         self.obs = np.asarray(store.data["obs"][:], dtype=np.float32)
         self.action = np.asarray(store.data["action"][:], dtype=np.float32)
 
@@ -357,6 +366,28 @@ class DiffusionDataset(Dataset):
 
     def __len__(self) -> int:
         return len(self.indices)
+
+    def source_sample_weights(self, mode: str) -> np.ndarray | None:
+        """Per-window sampling weight for a `torch.utils.data.WeightedRandomSampler`.
+
+        'uniform': None (plain DataLoader shuffling) -- every window equally
+        likely, i.e. each source's share of a batch is proportional to how
+        many rows it has. For a "scarce co-training" pool (one source at 50k,
+        the rest at 1M), that source would get roughly 1/80 the training
+        signal of a full-size one.
+
+        'balanced': each source gets equal *total* sampling weight regardless
+        of row count -- a 50k scarce source is then represented in training
+        as often, in expectation, as each 1M source, instead of being
+        drowned out by raw data volume.
+        """
+        if mode == "uniform":
+            return None
+        if mode != "balanced":
+            raise ValueError(f"unknown source_sample_mode {mode!r}")
+        ids = self.source_id_per_window
+        counts = np.bincount(ids)
+        return (1.0 / counts[ids]).astype(np.float64)
 
     def _window(self, epi_i: int, t_local: int) -> tuple[np.ndarray, np.ndarray]:
         start, end, _ = self.episodes[epi_i]
