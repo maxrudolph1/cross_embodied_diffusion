@@ -1,7 +1,7 @@
 # Analyses
 
 One-off studies that are not runs and not code changes. Newest first.
-Runs live in [`RUNS.md`](RUNS.md), datasets in [`COLLECTIONS.md`](COLLECTIONS.md),
+Runs live in [`agent_logbook/RUNS.md`](agent_logbook/RUNS.md), datasets in [`agent_logbook/COLLECTIONS.md`](agent_logbook/COLLECTIONS.md),
 source edits in [`CHANGES.md`](CHANGES.md).
 
 ---
@@ -115,7 +115,7 @@ sequential transfer.
 ## 2026-08-27 (evening) — Ambient diffusion: the hypothesis is falsified, and why
 
 Design, job accounting and the pre-registered predictions are in the morning entry below
-and in [`RUNS.md`](RUNS.md). This is the result.
+and in [`agent_logbook/RUNS.md`](agent_logbook/RUNS.md). This is the result.
 
 ### Prediction vs outcome
 

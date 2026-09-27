@@ -1,6 +1,8 @@
 # Training runs
 
-Status snapshot: **2026-08-24**. Artifact roots are gitignored; paths are relative to repo root.
+Statuses are as of each row's or section's own date — there is no single snapshot date. For the
+latest state of anything still `running`, check the newest `JOURNAL.md` entries and `sacct`.
+Artifact roots are gitignored; paths are relative to repo root.
 
 ## RL (rsl_rl / mjlab `train`)
 

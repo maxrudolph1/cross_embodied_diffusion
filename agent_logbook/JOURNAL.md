@@ -4,7 +4,7 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
-## 2026-09-27 — Git slowness fixed; demos + RL experts mirrored to Hugging Face
+## 2026-09-27 — Git slowness fixed; demos + RL experts mirrored to Hugging Face; docs restructure
 
 - `git status`/`add` hung for minutes: untracked `tmp/` (per-task Slurm `TMPDIR`, 26k+ files
   on NFS) was not ignored. Added `tmp/` to `.gitignore` (commit `ed33c20`).
@@ -18,18 +18,15 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
   to use the repo too: all data paths are now repo-relative with per-machine symlinks
   (`data/mjlab_hand_demos`, `data/hf_staging`). Rewrote the `/datastor2/...` paths in 8 sbatch
   files, the scarce manifest builder and both untracked manifests (job `97798` was running;
-  the new path resolves to the same files). Documented in README "Data layout" and CLAUDE.md.
-
----
-
-## 2026-09-26 — Audit: rotation specialist backfill `94864` produced nothing
-
-Tasks 0-7 hung ~10-14h each on `OSError: AF_UNIX path too long` (per-task `TMPDIR` under the
-repo path is too long for torch DataLoader's multiprocessing socket), cancelled 2026-09-23.
-No rotation specialists exist at any scale; details in `RUNS.md`. Current baseline inventory
-(grasp specialists 1M x5 hands x2 seeds all ~1.0 success; 50k 4/5 hands, Allegro missing;
-pooled AllHands padded ~0 everywhere; rotation only `*_400k` Allegro/LEAP) summarized for the
-user.
+  the new path resolves to the same files). Documented in README "Data layout" and AGENTS.md.
+- Deleted the 25 GB of staging tars after the verified upload; `data/hf_staging` symlink kept
+  (now holds only `README.md`/`push.log`), `stage` recreates the tars when needed.
+- Docs restructure (CHANGES.md item 49): new tool-neutral `AGENTS.md` is the single source;
+  `CLAUDE.md` is just `@AGENTS.md`, the Cursor rule points to it. Fixed `CHANGES.md`/
+  `ANALYSIS.md` links (they assumed the logbook files sat beside them), brought the protocol to
+  cover `CHANGES.md`/`ANALYSIS.md`, backfilled `CHANGES.md` items 41-48 for 09-03 → 09-27 from
+  commit diffs, replaced the stale "snapshot 2026-08-24" headers in `RUNS.md`/`COLLECTIONS.md`,
+  and put the two 2026-09-26 entries below back in newest-first order.
 
 ---
 
@@ -52,6 +49,17 @@ bug for tasks >= 10 if reused. See `RUNS.md`.
 4. Remaining gaps: Grasp-Allegro 50k (both seeds), grasp seed1 runs cut short
    (Shadow 1M, Sharpa 50k, Wuji 50k), and the whole scarce co-training sweep (fix its TMPDIR
    first).
+
+---
+
+## 2026-09-26 — Audit: rotation specialist backfill `94864` produced nothing
+
+Tasks 0-7 hung ~10-14h each on `OSError: AF_UNIX path too long` (per-task `TMPDIR` under the
+repo path is too long for torch DataLoader's multiprocessing socket), cancelled 2026-09-23.
+No rotation specialists exist at any scale; details in `RUNS.md`. Current baseline inventory
+(grasp specialists 1M x5 hands x2 seeds all ~1.0 success; 50k 4/5 hands, Allegro missing;
+pooled AllHands padded ~0 everywhere; rotation only `*_400k` Allegro/LEAP) summarized for the
+user.
 
 ---
 

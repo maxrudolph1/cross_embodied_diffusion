@@ -1,6 +1,10 @@
 # Data collections
 
-Status snapshot: **2026-08-24**. Datasets under `data/` are gitignored.
+Sections are dated individually and are not in strict date order; there is no single snapshot
+date. Some older sections describe datasets that no longer exist on disk (see the 2026-09-12
+section's note) — check a path exists before pointing new work at it. The main
+datasets live in `data/mjlab_hand_demos/` (a per-machine symlink; see the "Hugging Face mirror"
+section). Datasets under `data/` are gitignored.
 
 All 10 task+embodiment datasets have been collected — see the section below. The two rows
 here are from the 2026-08-22/23 session; those paths no longer resolve and are kept only for

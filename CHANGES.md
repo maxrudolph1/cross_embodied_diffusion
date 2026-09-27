@@ -2,7 +2,105 @@
 
 Exact source edits made by agent sessions, so another agent can reproduce or revert them.
 Newest first. Repo-relative paths. Artifacts and run registries live in
-[`RUNS.md`](RUNS.md) / [`COLLECTIONS.md`](COLLECTIONS.md); narrative in [`JOURNAL.md`](JOURNAL.md).
+[`agent_logbook/RUNS.md`](agent_logbook/RUNS.md) /
+[`agent_logbook/COLLECTIONS.md`](agent_logbook/COLLECTIONS.md); narrative in
+[`agent_logbook/JOURNAL.md`](agent_logbook/JOURNAL.md). Numbered items are cited from code
+comments ("See CHANGES.md item N") -- never renumber; append the next number.
+
+---
+
+## 2026-09-27 — Backfill for 2026-09-03 → 09-27, data paths, docs restructure
+
+Items 41-47 were made between 2026-09-03 and 2026-09-26 and were recorded only in
+`JOURNAL.md` at the time; this section was reconstructed on 2026-09-27 from the commit diffs
+(hashes given) and cross-checked against the journal entries named in each item.
+
+### 41. `src/mjlab_hand/diffusion/train.py`, `cli/train_diffusion.py` — optional WandB logging (`7afd5a7`, 09-03)
+
+`TrainConfig.wandb_project/wandb_run_name/wandb_tags` (CLI `--wandb-project`,
+`--wandb-run-name`, `--wandb-tags`). Off by default (`wandb_project=None`). Logs per-epoch
+`train/loss`, per-eval `eval/<task>/<metric>`, and a `best_loss` summary. Any array job that
+enables it needs a per-task `TMPDIR` (see CLAUDE.md / AGENTS.md env block).
+
+### 42. Padded cross-embodiment scheme — NEW (`e8e044d`, 09-10/11; JOURNAL 2026-09-10)
+
+N embodiments of different obs/action width pooled into one dataset:
+- `scripts/build_padded_dataset.py` — NEW. Per source: fit a static `GaussianNormalizer` on that
+  source alone, normalize, zero-pad obs/action to the max width (real dims front-packed),
+  concatenate whole episodes. Writes `extra.padded=True` and `extra.sources[i]`
+  (`n_steps`, real `obs_dim`/`action_dim`, mean/std).
+- `diffusion/normalizer.py` — `GaussianNormalizer` (`fit`, `identity`, state dict).
+- `diffusion/dataset.py` — `TrajectoryStore.source_real_dims()`; `DiffusionDataset` precomputes a
+  per-episode `action_mask` (1 on the source's real action dims) and yields it from `__getitem__`.
+- `diffusion/policy.py` — `DiffusionPolicyConfig.normalizer_type` (`"linear"` default,
+  `"gaussian"` = identity normalizers); `compute_loss(..., action_mask=)` averages squared error
+  over real dims only.
+- `diffusion/train.py` — padded datasets use identity normalizers (data is already normalized
+  upstream; refitting on the pool would mix scales), write `source_stats.json` into the output
+  dir, and **refuse `ambient_tmin` + padded** (`sample_ambient_batch` emits no `action_mask`).
+- `diffusion/evaluate.py` — `EmbodimentStats.load(source_stats.json, embodiment)`; `embodiment=`
+  argument on eval/render normalizes live obs with that embodiment's stats, pads, and
+  un-normalizes/slices the predicted action. Mutually exclusive with `onehot`.
+
+### 43. Held-out validation loss (`a41a689`, 09-11; JOURNAL 2026-09-11)
+
+- `diffusion/dataset.py` — `_train_val_split`: deterministic, **by whole trajectory**, stratified
+  per source; `DiffusionDataset(split=, val_fraction=, val_seed=)`. `val_fraction=0` is a no-op.
+- `diffusion/policy.py` — `action_reconstruction_loss`: full DDIM `predict_action` vs expert
+  action in real units (respects `action_mask`), not the one-step noise loss.
+- `train.py` / CLI — `--val-fraction` (default 0), `--val-seed`, `--val-every-epochs`,
+  `--val-max-batches` (default 20; -1 = all). Normalizers are fit on the train split only.
+
+### 44. Balanced per-source sampling + manifest runner (`ecd421f`, 09-12/13; JOURNAL 2026-09-12)
+
+- `diffusion/dataset.py` — `source_id_per_window`, `source_sample_weights(mode)`.
+- `train.py` / CLI — `--source-sample-mode {uniform,balanced}`; `balanced` uses a seeded
+  `WeightedRandomSampler` giving each source equal total weight (for the scarce co-training
+  pools). `uniform` is the old shuffling path, unchanged.
+- `scripts/build_scarce_specialist_manifest.py` — NEW; writes the 80-run specialist/scarce
+  manifest (2 runs packed per Slurm task).
+- `scripts/run_manifest_task.py` — NEW; runs manifest[task_id]'s `train-diffusion` commands
+  sequentially (`--dry-run` prints them).
+
+### 45. Three-way checkpoint selection (`1fb9bf6`, 09-20/22; JOURNAL 2026-09-20/22)
+
+`train.py` no longer writes `policy_best.pt` (it was selected by *training* loss and often never
+saved). Instead: `policy_latest.pt` (unchanged); `policy_best_val.pt` + `best_val.json` (lowest
+`val/action_loss`, only when `--val-fraction > 0`); `policy_best_eval.pt` + `best_eval.json`
+(highest mean env-eval headline over `eval_specs`, copied from the weights just scored). Runs
+trained before this change still have `policy_best.pt` on disk. Same commit:
+`build_scarce_specialist_manifest.py` eval cadence `epochs // 4` -> `epochs // 10`, and
+`--family`/`--kind`/`--out` arguments.
+
+### 46. `scripts/prototype_vmap_seeds.py`, `scripts/prototype_torch_compile.py` — NEW (`1fb9bf6`; JOURNAL 2026-09-13)
+
+Standalone throughput experiments; they monkeypatch in-process and change no library code.
+Result: vmap-over-seeds and AMP give nothing at `batch_size=256` on an A40; `torch.compile` of
+`noise_pred_net` gives 1.34x on `compute_loss` and 2.02x on `predict_action`. **Not wired into
+`train.py`** — the JOURNAL entry has the proposed integration point and the constant-batch-shape
+caveat.
+
+### 47. `.gitignore` — ignore `tmp/` (`ed33c20`, 09-27)
+
+Per-task Slurm `TMPDIR` scratch (`tmp/<job>_task_N`, 26k+ files on NFS) was untracked but not
+ignored, so `git status`/`git add` walked it for minutes.
+
+### 48. Repo-relative data paths + `scripts/hf_sync.py` — NEW (`75257e9`, 09-27; COLLECTIONS "Hugging Face mirror")
+
+Every `/datastor2/mrudolph/mjlab_hand_demos` in `slurm_jobs/*.sbatch` and
+`scripts/build_scarce_specialist_manifest.py` (and the untracked manifests) became
+`data/mjlab_hand_demos`, a per-machine symlink. `scripts/hf_sync.py stage|push|pull` mirrors the
+demo store (one tar per zarr) plus the source RL experts (from each 1M zarr's `checkpoint`
+attribute) to the private HF dataset repo `maxrudolph/mjlab-hand-demos`. README "Data layout"
+documents new-machine setup.
+
+### 49. Agent docs restructure — `AGENTS.md` NEW; `CLAUDE.md`, `.cursor/rules/agent-logbook.mdc`, `agent_logbook/README.md` (09-27)
+
+Documentation only. `AGENTS.md` is now the single tool-neutral source (repo summary, env vars,
+data paths, logbook protocol covering all five log files, invariants, standing findings).
+`CLAUDE.md` imports it (`@AGENTS.md`) and the Cursor rule points to it, so the two can no longer
+drift. Fixed `CHANGES.md`/`ANALYSIS.md` links that assumed the logbook files sat beside them.
+Supersedes item 40's description of `CLAUDE.md`'s contents.
 
 ---
 
@@ -65,7 +163,7 @@ These entries were written on 2026-08-31 for work committed on 08-27 and 08-31 t
 **shipped without any logbook update**. Both commits touched `scripts/` and produced
 results under `outputs/`; neither appears in any logbook file before now. The numbers below
 were re-derived from the run directories on 08-31, not copied from the commit messages —
-see the verification note in [`JOURNAL.md`](JOURNAL.md) 2026-08-31.
+see the verification note in [`agent_logbook/JOURNAL.md`](agent_logbook/JOURNAL.md) 2026-08-31.
 
 ### 36. `scripts/plot_ambient_sweep.py` — FIX: two eval-row schemas blanked every seed-1 endpoint
 

@@ -1,16 +1,18 @@
 ---
-description: Read and update the agent logbook for training runs and data collection
+description: Project instructions and agent logbook protocol (see AGENTS.md)
 alwaysApply: true
 ---
 
-# Agent logbook
+# Project instructions
 
-Before starting non-trivial work, read `agent_logbook/` (`JOURNAL.md`, `RUNS.md`, `COLLECTIONS.md`) so you reuse prior runs, datasets, and lessons.
+Read `AGENTS.md` at the repo root before starting work and follow it. It is
+the single source for this repo's agent instructions (shared with Claude
+Code via `CLAUDE.md`), including the logbook protocol:
 
-After meaningful work, update the logbook in the same turn:
+- Before non-trivial work: read `agent_logbook/JOURNAL.md`, `RUNS.md`,
+  `COLLECTIONS.md`.
+- After meaningful work, same turn: `RUNS.md` (runs), `COLLECTIONS.md`
+  (datasets), `CHANGES.md` (numbered code changes), `ANALYSIS.md`
+  (analysis conclusions), and a dated `JOURNAL.md` entry.
 
-- Training / eval / Slurm jobs → append or update a row in `RUNS.md`
-- Demo / dataset collection → append or update a row in `COLLECTIONS.md`
-- Session narrative / decisions / failures → prepend or append a dated entry in `JOURNAL.md`
-
-Record: date, task, command or config highlights, artifact paths, metrics, and status (`running` / `done` / `failed` / `aborted`). Do not invent results. Do not commit gitignored artifacts (`logs/`, `data/`, `outputs/`).
+Do not duplicate `AGENTS.md` content here; edit `AGENTS.md` instead.
