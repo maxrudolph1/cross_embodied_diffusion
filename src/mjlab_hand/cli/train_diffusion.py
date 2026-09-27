@@ -26,7 +26,7 @@ def main() -> None:
         "--latest-every-epochs",
         type=int,
         default=1,
-        help="Cadence for writing policy_latest.pt / policy_best.pt (always saved on the final "
+        help="Cadence for writing policy_latest.pt / policy_best_val.pt (always saved on the final "
         "epoch and before any eval/render).",
     )
     parser.add_argument(

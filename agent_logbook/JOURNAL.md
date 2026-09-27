@@ -4,6 +4,199 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-09-26 — Audit: rotation specialist backfill `94864` produced nothing
+
+Tasks 0-7 hung ~10-14h each on `OSError: AF_UNIX path too long` (per-task `TMPDIR` under the
+repo path is too long for torch DataLoader's multiprocessing socket), cancelled 2026-09-23.
+No rotation specialists exist at any scale; details in `RUNS.md`. Current baseline inventory
+(grasp specialists 1M x5 hands x2 seeds all ~1.0 success; 50k 4/5 hands, Allegro missing;
+pooled AllHands padded ~0 everywhere; rotation only `*_400k` Allegro/LEAP) summarized for the
+user.
+
+---
+
+## 2026-09-26 (later) — Relaunched rotation specialists as job `97798` (8 parallel)
+
+Shortened `TMPDIR` in `train_rotation_specialist.sbatch` to `$PWD/tmp/rs_N` and set
+`--array=0-9%8`. The scarce/grasp sweep's `scarce_specialist_task_N` path was exactly 107 chars
+(the limit) for single-digit tasks and 108 for two-digit ones -- that sbatch will hit the same
+bug for tasks >= 10 if reused. See `RUNS.md`.
+
+**Pick up here when `97798` finishes** (expected ~20h for 1M tasks, ~26h for 50k tasks, from
+2026-09-26):
+1. `sacct -j 97798 -X` -- any TIMEOUT (36h limit; 50k tasks run 2x4000 epochs sequentially)?
+   If a seed1 run was cut off, resubmit just that run.
+2. Each `outputs/diffusion/specialist/InHand-Rotation-*_seed{0,1}/` should have
+   `policy_latest.pt`, `policy_best_val.pt`, `policy_best_eval.pt` + `best_*.json` -- first real
+   exercise of that code, verify it.
+3. Tabulate `eval_metrics.jsonl` (avg_successes_before_drop) vs the old `*_400k` baselines
+   (LEAP 2.31, Allegro 1.62), then fill in the rotation rows of the baseline inventory.
+4. Remaining gaps: Grasp-Allegro 50k (both seeds), grasp seed1 runs cut short
+   (Shadow 1M, Sharpa 50k, Wuji 50k), and the whole scarce co-training sweep (fix its TMPDIR
+   first).
+
+---
+
+## 2026-09-20/22 — Audited `89262`/`90599` sweep outcome; three-way checkpoint selection; launched InHand-Rotation specialist backfill
+
+Checked actual job/checkpoint state (`squeue`, `sacct`, `find outputs/diffusion`) against
+`RUNS.md`'s stale "pending on cluster priority" note for the scarce/specialist sweep -- the
+sweep was cancelled 2026-09-14, not pending. Full outcome, and what checkpoints currently exist
+across every `outputs/diffusion/*` dir, recorded in `RUNS.md` (2026-09-22 edits). Headline: the
+InHand-Rotation specialist configs (1M + 50k per embodiment) never ran at all -- 0/20 runs.
+
+**Checkpoint selection was undefined before this.** `train.py` only ever wrote `policy_best.pt`
+selected by lowest *training* loss (one-step noise-prediction loss on a random timestep, not a
+real action-quality signal, and rarely saved due to the `latest_every_epochs` gating -- several
+existing runs, e.g. `Grasp-Shadow_50k_seed0`, have no `policy_best.pt` at all) plus periodic
+`policy_epoch_NNNN.pt` snapshots nothing ever selected among. User asked for three explicit,
+named selections instead:
+
+- `policy_latest.pt` -- last epoch (unchanged).
+- `policy_best_val.pt` (+ `best_val.json`) -- lowest `val/action_loss`, which is
+  `DiffusionPolicy.action_reconstruction_loss`: full DDIM `predict_action` rollout compared to
+  the expert action in real units, *not* `compute_loss`'s one-step noise-prediction loss. Only
+  populated when `--val-fraction > 0` (the specialist manifest sets 0.1, so rotation runs get
+  it).
+- `policy_best_eval.pt` (+ `best_eval.json`) -- highest mean env-eval headline
+  (`success_rate` / `avg_successes_before_drop`) across `eval_specs`, copied from the weights
+  just scored at that eval point.
+
+Removed the old train-loss `policy_best.pt` (grepped for readers -- none in `src`/`scripts`;
+only pre-existing `.err` log files reference the old save line, harmless). Change is in
+`src/mjlab_hand/diffusion/train.py`; syntax-checked only (`ast.parse`), not yet exercised by a
+real training run before the launch below -- first real test is job `94864`.
+
+Also changed eval cadence in `build_scarce_specialist_manifest.py` from `epochs // 4` to
+`epochs // 10` at user's request (more, cheaper eval checkpoints to select `policy_best_eval.pt`
+among -- at `// 4` there were only 4 candidates per run, too few to trust over noise).
+
+**Launched the InHand-Rotation specialist backfill** identified above: extended
+`build_scarce_specialist_manifest.py` with `--family`/`--kind`/`--out` so it can emit a subset
+manifest (previously always wrote the full 80-run sweep). Built
+`slurm_jobs/rotation_specialist_manifest.json` (10 tasks / 20 runs, `--family InHand-Rotation
+--kind specialist`), new `slurm_jobs/train_rotation_specialist.sbatch` copied from
+`train_scarce_specialist.sbatch` with the same `LD_LIBRARY_PATH`/per-task
+`WARP_CACHE_PATH`/per-task `TMPDIR` fixes, no node pin (matches `train_cross_embodiment.sbatch`
+precedent -- pure GPU training, only a small periodic eval rollout touches `mujoco_warp`).
+Submitted as **job `94864`**, `--array=0-9%10` (only 10 tasks exist, so `%10` is a no-op cap,
+kept explicit per user's "only launch 10 in parallel"). 4 tasks started immediately on
+`slurm-node-001`/`002`; rest pending on resources as of submission. Not yet watched to
+completion -- next session should check `sacct -j 94864` and
+`outputs/diffusion/specialist/InHand-Rotation-*` for the three new checkpoint files before
+treating this as done, and should confirm `policy_best_val.pt`/`policy_best_eval.pt` are
+actually being written (first real exercise of the new selection code).
+
+---
+
+## 2026-09-13 — Prototyped `torch.vmap`-over-seeds training; negative result at production batch size
+
+User asked how to get more performance per GPU (fit more per GPU, is the pipeline compilable,
+should we switch to JAX). All jobs here run on A40s (`sinfo`: every partition is
+`gpu:nvidia-A40:8`), and `ConditionalUnet1D` (`down_dims=(256,512,1024)`, a few M params) looked
+small enough that `batch_size=256` might leave the GPU launch/memory-bound rather than
+compute-bound -- in which case training N seeds as one `torch.func.vmap`-batched step (stack
+per-seed params via `stack_module_state`, `functional_call` + `vmap`, no JAX needed) should give
+"extra seeds for free" versus the sweep's current sequential-per-array-task seed loop
+(`run_manifest_task.py`). Prototyped in `scripts/prototype_vmap_seeds.py`.
+
+**Mechanism validated.** Two in-process monkeypatches were needed, neither touching the real
+`model.py`/`policy.py` (both files are actively imported by the running sweep, `89262`/`90599`):
+`ConditionalUnet1D.forward`'s `moveaxis` has no vmap batching rule in torch 2.10 (swapped for
+`transpose`, identical result); `DiffusionPolicy` has no `forward` (only `compute_loss`), and
+`functional_call` always invokes `forward`, so `DiffusionPolicy.forward = DiffusionPolicy.compute_loss`
+for the duration of the script. Correctness was checked on CPU (fp32, `atol=1e-5`) comparing
+vmapped output per seed-slice against that seed's own un-vmapped forward on identical input --
+passed (max diff 4e-6). The same comparison on GPU showed ~1e-3 max diff; that's vmap's batched
+conv/GroupNorm kernels taking a different (still correct) cuDNN path than the per-sample kernels,
+confirmed to be numerical-path noise rather than a logic bug by isolating the check to CPU.
+
+**Throughput result: no benefit at `batch_size=256` (the project default), real benefit at small
+batch.** Measured ms/step, vmapped vs. `n_seeds` sequential single-seed steps, same A40:
+
+| batch_size | n_seeds=2 | 4 | 8 | 16 |
+|---|---|---|---|---|
+| 16  | 1.16x | 1.54x | 1.76x | 1.84x |
+| 256 | 0.87x | 0.95x | 0.97x | 1.00x |
+
+i.e. at `batch_size=16` (launch-overhead-bound regime) vmap-over-seeds is a real, growing win, up
+to 1.84x at 16 seeds -- this is the mechanism actually working. At `batch_size=256`, the batch size
+every current config in this repo actually trains with, there is roughly zero speedup (sometimes
+slightly negative): a single seed's step at batch 256 is already compute-bound on an A40, so
+running N of them as one bigger vmapped batch doesn't buy anything, and vmap's grouped-conv
+batching rule uses ~30-45% more peak GPU memory than sequential for the same n_seeds (e.g. 11.9GB
+vs 8.3GB at n_seeds=8) since `stack_module_state` keeps every seed's params+activations live at
+once. **Conclusion: `vmap`-over-seeds is not a good fit for the current sweep as configured** --
+don't wire it into `train_scarce_specialist.sbatch` or similar. It would matter if a future job
+genuinely wanted many small-batch runs concurrently on one GPU.
+
+**Follow-up same day: bf16 autocast also doesn't help, and the real headline finding is that a
+single network at `batch_size=256` already saturates one A40.** Extended the same script:
+
+- `[n_seeds=1,8]` at `batch_size=256`, `torch.autocast(dtype=torch.bfloat16)` vs fp32: **slightly
+  slower**, not faster (29.72ms -> 32.27ms solo; 238.8ms -> 259.2ms at 8 sequential seeds). This
+  model's compute is small conv1d/GroupNorm/Mish blocks, not large GEMMs -- there's no big matmul
+  for A40 tensor cores to accelerate, GroupNorm runs in fp32 under autocast regardless, and the
+  cast machinery is pure overhead here. AMP is not a free win for this architecture.
+- Re-read the batch_size=256 table from the first experiment with this framing: sequential-vs-vmapped
+  time scales almost exactly linearly with `n_seeds` (0.97x-1.00x "speedup", i.e. none) *for both
+  methods*. That's not "vmap doesn't help" so much as **one network at batch=256 already keeps this
+  A40 ~fully compute-utilized** -- there is no idle capacity left for a second network to use
+  regardless of how it's scheduled (vmap, threads, or separate processes), so nothing can increase
+  networks-per-GPU at the production batch size without slowing every network down proportionally.
+- Quantified how bad the small-batch tradeoff actually is: vmap+bf16 at `batch_size=32`, `n_seeds=16`
+  hits 2079 samples/s *combined* across all 16 seeds (~130 samples/s per seed); a single standalone
+  network at `batch_size=256` alone does ~8615 samples/s. So packing seeds via small-batch vmap
+  recovers *some* of the overhead small batches pay, but per-network training is still ~66x slower
+  in samples/sec than just running that one network at the batch size already used in production --
+  confirms it's not a viable way to finish the sweep faster, only a way to make an otherwise-forced
+  small-batch regime less wasteful. `n_seeds=32` at `batch_size=32` OOM'd (~1.49GiB/seed x 32 > 46GiB),
+  so ~16-24 seeds is this A40's ceiling for that regime anyway.
+
+**Revised bottom line:** at this project's actual batch size, this A40 has no spare compute to give
+away -- vmap, AMP, and (by construction) plain multi-process sharing are all dead ends for "more
+networks per GPU" here. The only levers left that could still make single-network training faster
+(which is the only way to get more networks *done* per GPU-hour) are `torch.compile` (kernel fusion
+that reduces Python/launch overhead without changing numerics or batch size -- untested) and reducing
+the model's own per-step cost (fewer channels, fewer diffusion train/inference steps) or using more
+GPUs (raise the Slurm array throttle). None of this motivates a JAX rewrite; `mujoco_warp` is
+Warp/CUDA, not JAX, so there's no ecosystem synergy pulling that direction either.
+
+**Follow-up same day: `torch.compile` is a genuine win, unlike vmap/AMP.** Prototyped in
+`scripts/prototype_torch_compile.py`. `DiffusionPolicy` has no `forward` (only `compute_loss` /
+`predict_action`), and `torch.compile(module)` only intercepts `forward`/`__call__`, so compiling
+the *bound methods* directly (`torch.compile(policy.compute_loss)`) is what actually traces them --
+compiling the module itself would silently compile nothing.
+
+Correctness: bit-exact comparison of the full `compute_loss`/`predict_action` against eager isn't
+meaningful -- both draw internal `torch.randn`, and Inductor's Philox-based random codegen doesn't
+consume the RNG stream identically to eager even with the same seed (documented `torch.compile`
+behavior). A first attempt at seeding both sides and comparing losses showed ~5e-3 diff even on CPU,
+which looked like a bug; isolating the check to the deterministic core (`noise_pred_net.forward`
+called directly, no internal randomness) on CPU showed 3.8e-6 diff -- confirms the compiled graph is
+correct, and the earlier "diff" was RNG-consumption mismatch, not a logic bug.
+
+Throughput at the project's actual `batch_size=256` on the same A40:
+- `compute_loss` (training step): eager 24.24ms -> compiled 18.10ms, **1.34x**.
+- `predict_action` (DDIM sampling loop, batch=16 -- used by both periodic `--eval-spec` rollouts and
+  the new `action_reconstruction_loss` validation metric): eager 87.70ms -> compiled 43.52ms,
+  **2.02x**. Bigger win here because it's 16 sequential UNet calls; fusing each call's small ops
+  (GroupNorm -> Mish -> scale/bias -> residual add) compounds over the loop. One-time compile cost
+  ~32s wall -- negligible against multi-hour jobs.
+
+**This is the one lever from this investigation that's actually worth wiring into production.**
+Proposed integration point: `policy.noise_pred_net = torch.compile(policy.noise_pred_net)` right
+after construction in `train.py` -- `noise_pred_net` *is* a real `nn.Module` with `forward`, so
+compiling it directly (rather than the wrapper methods) means `compute_loss` and `predict_action`
+both pick up the speedup for free through their existing `self.noise_pred_net(...)` calls, no
+change to either method's code. Not yet wired in -- `train.py` is actively imported by the running
+sweep (`89262`/`90599`); should be done as a separate, deliberate change once those jobs are clear,
+not hot-patched under them. Caveat to check before wiring in: recompilation triggers on any
+batch-size change (e.g. a shorter last batch if a loader isn't `drop_last`), so worth confirming the
+train/val loaders always feed a constant shape before enabling this broadly.
+
+---
+
 ## 2026-09-13 — Job `89262`: 36/40 tasks failed on node-local /tmp exhaustion; fixed + resubmitted
 
 Checked in on the scarce-co-training/specialist sweep (job `89262`, see the previous entry) a

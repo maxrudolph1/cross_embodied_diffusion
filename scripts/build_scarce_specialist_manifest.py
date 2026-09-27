@@ -52,7 +52,7 @@ COMMON = {
 
 def cadence(epochs: int) -> dict:
     save_every = max(1, epochs // 10)
-    eval_every = max(1, epochs // 4)
+    eval_every = max(1, epochs // 10)
     return {
         "num-epochs": epochs,
         "save-every-epochs": save_every,
@@ -61,9 +61,9 @@ def cadence(epochs: int) -> dict:
     }
 
 
-def specialist_runs() -> list[dict]:
+def specialist_runs(families: list[str] = FAMILIES) -> list[dict]:
     runs = []
-    for family in FAMILIES:
+    for family in families:
         for hand in HANDS:
             task = f"{family}-{hand}"
             for scale, epochs, dataset in [
@@ -90,9 +90,9 @@ def specialist_runs() -> list[dict]:
     return runs
 
 
-def scarce_runs() -> list[dict]:
+def scarce_runs(families: list[str] = FAMILIES) -> list[dict]:
     runs = []
-    for family in FAMILIES:
+    for family in families:
         eval_spec = json.dumps(
             [{"task": f"{family}-{h}", "embodiment": f"{family}-{h}"} for h in HANDS]
         )
@@ -135,12 +135,21 @@ def pack(runs: list[dict]) -> list[list[dict]]:
 
 
 def main() -> None:
-    specialist_jobs = pack(specialist_runs())
-    scarce_jobs = pack(scarce_runs())
+    import argparse
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--family", choices=FAMILIES, default=None, help="restrict to one task family")
+    ap.add_argument("--kind", choices=["specialist", "scarce"], default=None)
+    ap.add_argument("--out", default="slurm_jobs/scarce_specialist_manifest.json")
+    a = ap.parse_args()
+    families = [a.family] if a.family else FAMILIES
+
+    specialist_jobs = pack(specialist_runs(families)) if a.kind != "scarce" else []
+    scarce_jobs = pack(scarce_runs(families)) if a.kind != "specialist" else []
     all_jobs = specialist_jobs + scarce_jobs
     print(f"[INFO] {len(specialist_jobs)} specialist job-tasks, {len(scarce_jobs)} scarce job-tasks, "
           f"{len(all_jobs)} total tasks, {sum(len(j) for j in all_jobs)} total runs")
-    out_path = Path("slurm_jobs/scarce_specialist_manifest.json")
+    out_path = Path(a.out)
     out_path.write_text(json.dumps(all_jobs, indent=2))
     print(f"[INFO] wrote {out_path}")
 

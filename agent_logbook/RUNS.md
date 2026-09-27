@@ -75,10 +75,50 @@ Status snapshot: **2026-08-24**. Artifact roots are gitignored; paths are relati
 - **Job `90599`** (`--array=1,5-39%16`, submitted 2026-09-13): resubmit of exactly the 36 failed
   indices against the same manifest, with the `TMPDIR` fix applied. Throttled to `%16` (not
   `%20`) so combined with `89262`'s 4 still-running tasks the total stays at the user's
-  requested 20-concurrent cap. Pending on cluster priority as of 2026-09-13.
-- Once both jobs finish, expect all 80 runs to have completed across `89262` (4) + `90599` (up
-  to 36, less any further failures) -- verify `outputs/diffusion/{specialist,scarce}/*/policy_latest.pt`
-  count reaches 80 before treating the sweep as done.
+  requested 20-concurrent cap.
+- **Outcome (corrected 2026-09-22, was stale "pending" above): the sweep did not finish.**
+  `90599` was cancelled 2026-09-14T10:31, most indices (5-6, 8, 10-22 confirmed, 23-39 bulk)
+  never started. Final tally: specialist grasp fully covered (18/20 runs with a checkpoint, 2
+  cut off early -- `Grasp-Sharpa_50k_seed1` stopped at epoch 1200/4000, `Grasp-Wuji_50k_seed1`
+  at epoch 400/4000); specialist InHand-Rotation (10 configs, 20 runs) **zero** runs started;
+  scarce co-training: only `source_stats.json`/`train_config.json` written for 4 configs, no
+  runs trained at all. Do not treat this sweep as a source of rotation specialists.
+
+### InHand-Rotation specialist backfill, `train_rotation_specialist.sbatch` (2026-09-22)
+
+- User asked for 1M + 50k specialist policies per embodiment for in-hand reorientation -- the
+  gap identified above. Manifest builder (`build_scarce_specialist_manifest.py`) extended with
+  `--family`/`--kind`/`--out` so it can emit a subset instead of only the full 80-run sweep.
+- Manifest: `slurm_jobs/rotation_specialist_manifest.json`, built via
+  `python3 scripts/build_scarce_specialist_manifest.py --family InHand-Rotation --kind specialist`
+  -- 10 array tasks (5 hands x {50k, 1M}), 20 runs (2 seeds each).
+- Also changed eval cadence project-wide in the builder: `eval_every = epochs // 10` (was
+  `// 4`), at the user's request, so these runs eval 10x across training instead of 4x.
+- **Job `94864`**, `--array=0-9%10` (10 tasks total, so `%10` is a no-op cap, kept explicit per
+  user's "only launch 10 in parallel"). Submitted 2026-09-22, 4 tasks running immediately
+  (`slurm-node-001`/`002`), rest pending on resources. `outputs/diffusion/specialist/InHand-Rotation-*`.
+- Per-run checkpoints changed (see JOURNAL.md 2026-09-22 entry): `policy_latest.pt` (last),
+  `policy_best_val.pt` (lowest `val/action_loss`, i.e. DDIM-sampled action MSE, not one-step
+  noise-prediction loss), `policy_best_eval.pt` (highest mean env-eval headline across
+  `eval_specs`). Old train-loss-based `policy_best.pt` removed -- nothing read it.
+- **Outcome (audited 2026-09-26): failed, zero checkpoints.** Tasks 0-7 started, all hung
+  from the first epoch until cancelled 2026-09-23T00:00:20 (8-9 never started). Every `.err`
+  ends in DataLoader-worker `OSError: AF_UNIX path too long`: the per-task
+  `TMPDIR="$PWD/tmp/rotation_specialist_task_N"` is long enough that multiprocessing's
+  `pymp-*/listener-*` socket path exceeds the 108-char AF_UNIX limit. Output dirs contain only
+  `train_config.json`. The new `policy_best_val.pt`/`policy_best_eval.pt` code is therefore
+  still unexercised. Fix before relaunch: shorter TMPDIR (e.g. `/tmp/$USER/$SLURM_JOB_ID`
+  under a quota'd node path, or `$JOBDIR` with a short root).
+- **Relaunch: job `97798`** (2026-09-26), same manifest, `--array=0-9%8` (user: 8 in parallel).
+  Fix: `TMPDIR="$PWD/tmp/rs_${SLURM_ARRAY_TASK_ID}"` (87-char socket path vs 109). Reproduced
+  the old failure directly (`resource_sharer._start()` under the old `/scratch/...` path ->
+  `AF_UNIX path too long`; new path OK). Note `$PWD` on the login node resolves to the shorter
+  `/u/...` alias, so a login-node test without the explicit `/scratch` path passes falsely.
+  Tasks 0-7 running on nodes 002/003/004/006, all past epoch 1 within 4 min; 8-9 pending on the
+  cap. Rates: 50k ~12s/epoch (~13h/seed, ~26h/task for 2 seeds, near the 36h limit if eval or
+  contention slows it), 1M ~3min/epoch (~10h/seed). `.err` files fill with harmless
+  `OSError: [Errno 16] Device or resource busy: .../pymp-*` from NFS `.nfs*` files blocking
+  multiprocessing's temp-dir cleanup at worker exit -- not fatal.
 
 ### Scripts
 

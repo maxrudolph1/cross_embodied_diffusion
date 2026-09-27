@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -31,7 +32,7 @@ class TrainConfig:
     num_train_timesteps: int = 100
     num_inference_steps: int = 16
     save_every_epochs: int = 10
-    # How often to write policy_latest.pt / policy_best.pt. A 265MB
+    # How often to write policy_latest.pt / policy_best_val.pt. A 265MB
     # torch.save to NFS costs ~0.75s, comparable to a whole epoch at small
     # data scales -- see CHANGES.md item 13. Always saved on the final epoch
     # and immediately before any eval/render regardless of this cadence.
@@ -272,6 +273,8 @@ def train_diffusion(cfg: TrainConfig) -> Path:
 
     global_step = 0
     best_loss = float("inf")
+    best_val_loss = float("inf")
+    best_eval_score = float("-inf")
     latest_path = cfg.output_dir / "policy_latest.pt"
     eval_jsonl = cfg.output_dir / "eval_metrics.jsonl"
 
@@ -323,6 +326,12 @@ def train_diffusion(cfg: TrainConfig) -> Path:
             policy.train()
             mean_val_loss = float(np.mean(val_losses)) if val_losses else float("nan")
             print(f"[epoch {epoch:04d}/{cfg.num_epochs}] val_action_loss={mean_val_loss:.6f}")
+            if mean_val_loss < best_val_loss:
+                best_val_loss = mean_val_loss
+                policy.save(cfg.output_dir / "policy_best_val.pt")
+                (cfg.output_dir / "best_val.json").write_text(
+                    json.dumps({"epoch": epoch, "val_action_loss": mean_val_loss})
+                )
             if wandb_run is not None:
                 wandb_run.log({"val/action_loss": mean_val_loss}, step=epoch)
             with (cfg.output_dir / "val_metrics.jsonl").open("a") as f:
@@ -332,10 +341,7 @@ def train_diffusion(cfg: TrainConfig) -> Path:
         due = epoch % cfg.latest_every_epochs == 0 or is_last
         if due:
             policy.save(latest_path)
-        if mean_loss < best_loss:
-            best_loss = mean_loss
-            if due:
-                policy.save(cfg.output_dir / "policy_best.pt")
+        best_loss = min(best_loss, mean_loss)
         if epoch % cfg.save_every_epochs == 0:
             policy.save(cfg.output_dir / f"policy_epoch_{epoch:04d}.pt")
 
@@ -347,6 +353,7 @@ def train_diffusion(cfg: TrainConfig) -> Path:
             policy.save(latest_path)
             policy.eval()
             print(f"[INFO] Running env eval at epoch {epoch}...")
+            headlines = []
             for spec in specs:
                 metrics = evaluate_diffusion_policy(
                     task=spec["task"],
@@ -373,11 +380,19 @@ def train_diffusion(cfg: TrainConfig) -> Path:
                     "success_rate", metrics.get("avg_successes_before_drop", float("nan"))
                 )
                 print(f"[INFO] eval epoch={epoch} task={spec['task']} headline={headline:.3f}")
+                headlines.append(headline)
                 if wandb_run is not None:
                     safe_task = spec["task"].replace("/", "_")
                     wandb_run.log(
                         {f"eval/{safe_task}/{k}": v for k, v in metrics.items()}, step=epoch
                     )
+            finite = [h for h in headlines if np.isfinite(h)]
+            if finite and float(np.mean(finite)) > best_eval_score:
+                best_eval_score = float(np.mean(finite))
+                shutil.copy2(latest_path, cfg.output_dir / "policy_best_eval.pt")
+                (cfg.output_dir / "best_eval.json").write_text(
+                    json.dumps({"epoch": epoch, "mean_headline": best_eval_score})
+                )
             policy.train()
 
         if (
