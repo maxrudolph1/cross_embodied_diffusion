@@ -79,6 +79,7 @@ data/
 *.pt
 *.zarr/
 warp_cache/
+tmp/
 
 slurm_jobs/*
 !slurm_jobs/*.sbatch
