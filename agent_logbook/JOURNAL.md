@@ -4,6 +4,24 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-09-27 — Git slowness fixed; demos + RL experts mirrored to Hugging Face
+
+- `git status`/`add` hung for minutes: untracked `tmp/` (per-task Slurm `TMPDIR`, 26k+ files
+  on NFS) was not ignored. Added `tmp/` to `.gitignore` (commit `ed33c20`).
+- User wanted the main diffusion training datasets and the RL policies that collected them
+  available on other servers (not the BC models). Added `scripts/hf_sync.py`; mirror is the
+  private dataset repo `maxrudolph/mjlab-hand-demos`. Details in `COLLECTIONS.md`.
+- `huggingface_hub` is not a project dependency; installed into `.venv` with
+  `uv pip install --index-url https://pypi.org/simple huggingface_hub` (the pyproject's Aliyun
+  mirror fails TLS). v2.0 has no `upload_large_folder`, so `push` is resumable per-archive.
+- User will clone the repo and pull the data on another server, and wants others to be able
+  to use the repo too: all data paths are now repo-relative with per-machine symlinks
+  (`data/mjlab_hand_demos`, `data/hf_staging`). Rewrote the `/datastor2/...` paths in 8 sbatch
+  files, the scarce manifest builder and both untracked manifests (job `97798` was running;
+  the new path resolves to the same files). Documented in README "Data layout" and CLAUDE.md.
+
+---
+
 ## 2026-09-26 — Audit: rotation specialist backfill `94864` produced nothing
 
 Tasks 0-7 hung ~10-14h each on `OSError: AF_UNIX path too long` (per-task `TMPDIR` under the

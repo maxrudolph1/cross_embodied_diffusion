@@ -11,7 +11,7 @@
 #
 # Follow-up: Grasp-LEAP finished training (model_9999.pt, job 85382 task 1).
 # Same methodology as collect_1M.sbatch: 256 envs, 2010 episodes
-# (ceil(1e6/~498)), output to /datastor2/mrudolph/mjlab_hand_demos/.
+# (ceil(1e6/~498)), output to data/mjlab_hand_demos/.
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:?SLURM_SUBMIT_DIR not set -- run this via sbatch}"
 source .venv/bin/activate
@@ -22,7 +22,7 @@ export PYOPENGL_PLATFORM=egl
 export WARP_CACHE_PATH="$PWD/warp_cache/collect_1M_leap"
 mkdir -p "$WARP_CACHE_PATH"
 
-OUT_DIR="/datastor2/mrudolph/mjlab_hand_demos"
+OUT_DIR="data/mjlab_hand_demos"
 mkdir -p "$OUT_DIR"
 
 CHECKPOINT="logs/rsl_rl/leap_grasp/2026-09-09_21-37-04_slurm2/model_9999.pt"

@@ -23,7 +23,7 @@ export PYOPENGL_PLATFORM=egl
 export WARP_CACHE_PATH="$PWD/warp_cache/collect_1M_sharpa_grasp"
 mkdir -p "$WARP_CACHE_PATH"
 
-OUT_DIR="/datastor2/mrudolph/mjlab_hand_demos"
+OUT_DIR="data/mjlab_hand_demos"
 mkdir -p "$OUT_DIR"
 
 CHECKPOINT="logs/rsl_rl/sharpa_grasp/2026-09-09_10-45-03_slurm2/model_12499.pt"

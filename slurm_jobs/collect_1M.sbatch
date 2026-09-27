@@ -25,7 +25,7 @@
 # the historical per-hand rates used below). Actual n_steps will vary a bit;
 # that's expected and matches prior collections in this project.
 #
-# Output goes to /datastor2/mrudolph/mjlab_hand_demos/ per user request
+# Output goes to data/mjlab_hand_demos/ per user request
 # (NOT the gitignored data/demos/ used by earlier collections in this repo).
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:?SLURM_SUBMIT_DIR not set -- run this via sbatch}"
@@ -37,7 +37,7 @@ export PYOPENGL_PLATFORM=egl
 export WARP_CACHE_PATH="$PWD/warp_cache/collect_1M_task_${SLURM_ARRAY_TASK_ID}"
 mkdir -p "$WARP_CACHE_PATH"
 
-OUT_DIR="/datastor2/mrudolph/mjlab_hand_demos"
+OUT_DIR="data/mjlab_hand_demos"
 mkdir -p "$OUT_DIR"
 
 TASKS=(

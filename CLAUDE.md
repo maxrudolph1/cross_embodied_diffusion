@@ -59,6 +59,19 @@ rule in `.cursor/rules/agent-logbook.mdc`. Do not commit gitignored
 artifacts (`logs/`, `data/`, most of `outputs/` — see `.gitignore` and
 CHANGES.md item 23 for exactly what is tracked).
 
+## Data paths are repo-relative; bulk storage is symlinked in
+
+The repo is used on more than one server and by more than one person. Code,
+sbatch files and manifests must refer to data only by repo-relative paths
+(`data/mjlab_hand_demos/...`, `logs/rsl_rl/...`, `outputs/...`) and run from
+the repo root -- never a machine-specific absolute path like `/datastor2/...`.
+Each machine symlinks those repo paths to wherever its storage is (here:
+`data/mjlab_hand_demos -> /datastor2/mrudolph/mjlab_hand_demos`,
+`data/hf_staging -> /datastor2/mrudolph/hf_staging/mjlab-hand-demos`). The
+demos + source RL experts are mirrored to the private HF dataset repo
+`maxrudolph/mjlab-hand-demos` via `scripts/hf_sync.py`; see README "Data
+layout".
+
 ## Invariants worth knowing before touching this code
 
 - **The diffusion sampler is DDIM (eta=0), not single-step ancestral

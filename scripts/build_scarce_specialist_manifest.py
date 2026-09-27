@@ -34,7 +34,7 @@ from pathlib import Path
 HANDS = ["Allegro", "LEAP", "Shadow", "Sharpa", "Wuji"]
 FAMILIES = ["Grasp", "InHand-Rotation"]
 SEEDS = [0, 1]
-DATASTOR = "/datastor2/mrudolph/mjlab_hand_demos"
+DATASTOR = "data/mjlab_hand_demos"
 COMMON = {
     "obs-horizon": 2,
     "action-horizon": 8,

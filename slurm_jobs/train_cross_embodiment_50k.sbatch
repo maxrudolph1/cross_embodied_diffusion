@@ -34,7 +34,7 @@ export PYOPENGL_PLATFORM=egl
 export WARP_CACHE_PATH="$PWD/warp_cache/train_cross_embodiment_50k_task_${SLURM_ARRAY_TASK_ID}"
 mkdir -p "$WARP_CACHE_PATH"
 
-DATA_DIR="/datastor2/mrudolph/mjlab_hand_demos/padded"
+DATA_DIR="data/mjlab_hand_demos/padded"
 
 if [[ "$SLURM_ARRAY_TASK_ID" == "0" ]]; then
   FAMILY="Grasp"

@@ -84,6 +84,46 @@ Prints success rate (grasp) or average successes before drop (rotation), and wri
 uv run eval-policy --task InHand-Rotation-Allegro --wandb-run-path entity/project/run_id
 ```
 
+## Data layout (diffusion / BC work)
+
+All code and Slurm jobs refer to data by **repo-relative paths** and must be
+run from the repo root. The bulk data lives wherever each machine has space;
+the repo paths are symlinks to it, created once per machine (`data/`, `logs/`
+and `outputs/` are gitignored, so the links are local, never committed):
+
+| Repo path | Contents |
+|---|---|
+| `data/mjlab_hand_demos/` | Main diffusion training demos: `*_expert_1M.zarr`, `subsets_10k/`, `subsets_50k/`, `padded/` (~25 GB) |
+| `logs/rsl_rl/` | RL experts; each dataset's zarr `checkpoint` attribute is a path under here |
+| `outputs/` | Diffusion checkpoints, eval metrics, plots |
+| `data/hf_staging/` | Only needed to *push* to the Hugging Face mirror |
+
+The demos and the 10 RL experts that collected them are mirrored in the
+private Hugging Face dataset repo `maxrudolph/mjlab-hand-demos` (ask for
+access). Setting up a new machine:
+
+```bash
+git clone <this repo> && cd mjlab_hand
+uv sync   # add --default-index https://pypi.org/simple if the Aliyun mirror fails TLS
+uv pip install --index-url https://pypi.org/simple huggingface_hub
+hf auth login
+
+# Point the repo at local bulk storage (skip to keep data inside the repo dir).
+mkdir -p /big/disk/mjlab_hand_demos data
+ln -s /big/disk/mjlab_hand_demos data/mjlab_hand_demos
+
+# Everything, or a subset via --include globs over repo paths:
+uv run python scripts/hf_sync.py pull
+uv run python scripts/hf_sync.py pull --include 'demos/subsets_50k/*' 'logs/*'
+```
+
+`pull` untars each dataset into `data/mjlab_hand_demos/` and restores the RL
+experts under `logs/rsl_rl/`; it skips anything already present. After
+collecting or building new datasets, `hf_sync.py stage` then `push` updates the
+mirror. `stage` only tars zarrs without an archive yet (`--force` to re-tar a
+changed one); `push` is resumable and uploads any file whose Hub copy is missing
+or a different size.
+
 
 ## Acknowledgements
 

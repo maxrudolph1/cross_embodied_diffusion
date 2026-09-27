@@ -540,6 +540,29 @@ Manifest of every specialist + scarce-co-training run built from these (80 runs,
 packed 2/Slurm-task): `scripts/build_scarce_specialist_manifest.py` ->
 `slurm_jobs/scarce_specialist_manifest.json`. See RUNS.md for the launched job.
 
+## Hugging Face mirror — `maxrudolph/mjlab-hand-demos` (private dataset repo, 2026-09-27)
+
+For using the data on other servers. Contains everything under
+`/datastor2/mrudolph/mjlab_hand_demos` (the 10 `*_expert_1M.zarr` sets, `subsets_10k/`,
+`subsets_50k/`, `padded/` -- 44 zarrs, ~25 GB) plus the 10 RL experts that collected the 1M
+sets (`model_*.pt` + `params/` + `git/` at their original `logs/rsl_rl/...` paths). The expert
+list comes from each 1M zarr's own `checkpoint` attribute, not from this file. Not mirrored:
+BC/diffusion checkpoints, intermediate RL checkpoints, the older sets in repo `data/`.
+
+Each zarr is stored as one uncompressed `demos/<relpath>.tar` (60k small chunk files -> 44
+archives). Tool: `scripts/hf_sync.py stage|push|pull`; staging tars live in
+`data/hf_staging` (-> `/datastor2/mrudolph/hf_staging/mjlab-hand-demos`, safe to delete once
+pushed). On a new server: symlink `data/mjlab_hand_demos` to local bulk storage, then
+`python scripts/hf_sync.py pull [--include 'demos/*_1M.zarr.tar' ...]` restores zarrs there
+and experts under `logs/rsl_rl/`.
+
+**Path change, same day:** everything that pointed at `/datastor2/mrudolph/mjlab_hand_demos`
+(collect/cross-embodiment sbatch files, `build_scarce_specialist_manifest.py`, the untracked
+scarce/rotation manifests) now uses the repo-relative `data/mjlab_hand_demos`, a symlink to the
+same directory on this machine. Older sections of this file still quote the `/datastor2/...`
+paths; they are the same datasets. Paths recorded *inside* padded zarrs (`checkpoint`,
+`extra.sources[].path`) stay absolute -- provenance only, nothing reads them.
+
 ## Still not collected
 
 - Multi-embodiment combined dataset for cross-hand diffusion — blocked on deciding how to
