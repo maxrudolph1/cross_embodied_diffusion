@@ -550,7 +550,9 @@ list comes from each 1M zarr's own `checkpoint` attribute, not from this file. N
 BC/diffusion checkpoints, intermediate RL checkpoints, the older sets in repo `data/`.
 
 Each zarr is stored as one uncompressed `demos/<relpath>.tar` (60k small chunk files -> 44
-archives). Tool: `scripts/hf_sync.py stage|push|pull`; staging tars live in
+archives). **Pushed and verified 2026-09-27:** 86 files / 26.6 GB, all 44 tar sizes match
+local, repo private; a test `pull` of one dataset + one expert came back byte-identical.
+Tool: `scripts/hf_sync.py stage|push|pull`; staging tars live in
 `data/hf_staging` (-> `/datastor2/mrudolph/hf_staging/mjlab-hand-demos`, safe to delete once
 pushed). On a new server: symlink `data/mjlab_hand_demos` to local bulk storage, then
 `python scripts/hf_sync.py pull [--include 'demos/*_1M.zarr.tar' ...]` restores zarrs there
