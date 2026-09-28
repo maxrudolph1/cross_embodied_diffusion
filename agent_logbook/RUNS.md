@@ -121,6 +121,13 @@ Artifact roots are gitignored; paths are relative to repo root.
   contention slows it), 1M ~3min/epoch (~10h/seed). `.err` files fill with harmless
   `OSError: [Errno 16] Device or resource busy: .../pymp-*` from NFS `.nfs*` files blocking
   multiprocessing's temp-dir cleanup at worker exit -- not fatal.
+- **Status 2026-09-27 19:48:** no TIMEOUTs. Tasks 0-7 `COMPLETED` (13.3-24.3h wall each, limit
+  36h); all 16 runs (Allegro/LEAP/Shadow/Sharpa x 50k/1M x seed0/1) reached their final epoch
+  (4000 for 50k, 200 for 1M) and wrote `policy_latest.pt`, `policy_best_val.pt`,
+  `policy_best_eval.pt` + `best_eval.json` -- first real exercise of the three-way selection
+  code, and it worked. Tasks 8-9 (Wuji) `RUNNING`, seed0 done in both; seed1 at epoch 610/4000
+  (50k, ~10s/epoch, ~9h left, ~20h total) and 109/200 (1M, ~127s/epoch, ~3h left, ~14h total) --
+  both on track to finish well inside the limit. Eval results not yet tabulated.
 
 ### Scripts
 
