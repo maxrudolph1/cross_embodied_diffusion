@@ -88,6 +88,12 @@ def main() -> None:
         default=None,
         help="If set, log this run to WandB under this project name.",
     )
+    parser.add_argument(
+        "--compile-mode",
+        choices=["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"],
+        default=None,
+        help="torch.compile the denoising UNet with this mode (default: eager).",
+    )
     parser.add_argument("--wandb-run-name", type=str, default=None)
     parser.add_argument("--wandb-tags", type=str, nargs="+", default=None)
     args = parser.parse_args()
@@ -125,6 +131,7 @@ def main() -> None:
             val_every_epochs=args.val_every_epochs,
             val_max_batches=None if args.val_max_batches < 0 else args.val_max_batches,
             source_sample_mode=args.source_sample_mode,
+            compile_mode=args.compile_mode,
             wandb_project=args.wandb_project,
             wandb_run_name=args.wandb_run_name,
             wandb_tags=args.wandb_tags,

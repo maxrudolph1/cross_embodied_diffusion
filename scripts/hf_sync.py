@@ -217,7 +217,10 @@ def cmd_pull(args):
             return args.demo_root / p[len("demos/") :].removesuffix(".tar")
         return args.rl_root / p
 
-    todo = [p for p in wanted if p != "README.md" and not target(p).exists()]
+    # Only demos/ and logs/ are ours; README.md and the Hub's own LFS .gitattributes
+    # must not land in the repo root.
+    ours = [p for p in wanted if p.startswith(("demos/", "logs/"))]
+    todo = [p for p in ours if not target(p).exists()]
     print(f"[pull] {len(wanted)} matched, {len(todo)} not present locally")
     if not todo:
         return

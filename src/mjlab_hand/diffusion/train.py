@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -79,10 +80,37 @@ class TrainConfig:
     # DiffusionDataset.source_sample_weights) -- for "scarce co-training",
     # where one source has far fewer rows than the rest.
     source_sample_mode: str = "uniform"
+    # torch.compile mode for the denoising UNet (None = eager, unchanged).
+    # Compiled in place via nn.Module.compile(), so state_dict keys -- and
+    # therefore saved checkpoints -- are identical to eager, and the
+    # torch.randn/randint draws in compute_loss/predict_action stay eager.
+    # Only the training process compiles; eval rollouts load a fresh eager
+    # policy from disk. See CHANGES.md item 53.
+    compile_mode: str | None = None
     # WandB logging. Disabled (None) by default; set wandb_project to enable.
     wandb_project: str | None = None
     wandb_run_name: str | None = None
     wandb_tags: list[str] | None = None
+
+
+@contextmanager
+def _restore_backend_flags():
+    """Undo the global backend changes an env eval/render makes in-process.
+
+    Env setup calls mjlab's configure_torch_backends(), which sets TF32 via
+    the new `fp32_precision` API (and cudnn.benchmark). Once that is set, any
+    read of the legacy `allow_tf32` flag raises "mix of the legacy and new
+    APIs" -- and Inductor reads it when it recompiles (pad_mm), so a compiled
+    run died on the first training step after its first eval. Restoring the
+    flags keeps a compiled run's training precision constant. See CHANGES.md
+    item 53.
+    """
+    m, c = torch.backends.cuda.matmul, torch.backends.cudnn
+    saved = (m.fp32_precision, c.fp32_precision, c.benchmark, c.deterministic)
+    try:
+        yield
+    finally:
+        m.fp32_precision, c.fp32_precision, c.benchmark, c.deterministic = saved
 
 
 def _eval_specs(cfg: TrainConfig) -> list[dict]:
@@ -229,6 +257,11 @@ def train_diffusion(cfg: TrainConfig) -> Path:
     )
     policy = DiffusionPolicy(policy_cfg).to(device)
     policy.set_normalizers(obs_norm, act_norm)
+    if cfg.compile_mode is not None:
+        policy.noise_pred_net.compile(mode=cfg.compile_mode)
+    # Eager runs keep the historical behaviour (TF32 switches on at the first
+    # in-training eval and stays on); only compiled runs restore the flags.
+    restore_flags = _restore_backend_flags if cfg.compile_mode is not None else nullcontext
 
     opt = torch.optim.AdamW(policy.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
 
@@ -355,17 +388,18 @@ def train_diffusion(cfg: TrainConfig) -> Path:
             print(f"[INFO] Running env eval at epoch {epoch}...")
             headlines = []
             for spec in specs:
-                metrics = evaluate_diffusion_policy(
-                    task=spec["task"],
-                    policy_path=latest_path,
-                    num_envs=cfg.eval_num_envs,
-                    num_steps=cfg.eval_num_steps,
-                    device=str(device),
-                    seed=cfg.seed,
-                    onehot=spec.get("onehot"),
-                    embodiment=spec.get("embodiment"),
-                    reuse_env=True,
-                )
+                with restore_flags():
+                    metrics = evaluate_diffusion_policy(
+                        task=spec["task"],
+                        policy_path=latest_path,
+                        num_envs=cfg.eval_num_envs,
+                        num_steps=cfg.eval_num_steps,
+                        device=str(device),
+                        seed=cfg.seed,
+                        onehot=spec.get("onehot"),
+                        embodiment=spec.get("embodiment"),
+                        reuse_env=True,
+                    )
                 row = {
                     "epoch": epoch,
                     "train_loss": mean_loss,
@@ -404,18 +438,19 @@ def train_diffusion(cfg: TrainConfig) -> Path:
                 from mjlab_hand.diffusion.evaluate import render_diffusion_rollout
 
                 policy.save(latest_path)
-                render_diffusion_rollout(
-                    task=render_task,
-                    policy_path=latest_path,
-                    output_dir=cfg.output_dir / "videos",
-                    num_steps=cfg.render_num_steps,
-                    num_envs=cfg.render_num_envs,
-                    device=str(device),
-                    seed=cfg.seed,
-                    tag=f"epoch{epoch:04d}",
-                    onehot=specs[0].get("onehot") if specs else None,
-                    embodiment=specs[0].get("embodiment") if specs else None,
-                )
+                with restore_flags():
+                    render_diffusion_rollout(
+                        task=render_task,
+                        policy_path=latest_path,
+                        output_dir=cfg.output_dir / "videos",
+                        num_steps=cfg.render_num_steps,
+                        num_envs=cfg.render_num_envs,
+                        device=str(device),
+                        seed=cfg.seed,
+                        tag=f"epoch{epoch:04d}",
+                        onehot=specs[0].get("onehot") if specs else None,
+                        embodiment=specs[0].get("embodiment") if specs else None,
+                    )
             except Exception as exc:  # noqa: BLE001 - rendering must never kill training
                 print(f"[WARN] render failed at epoch {epoch}: {exc}")
 

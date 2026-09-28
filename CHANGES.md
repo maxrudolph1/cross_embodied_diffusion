@@ -9,6 +9,77 @@ comments ("See CHANGES.md item N") -- never renumber; append the next number.
 
 ---
 
+## 2026-09-27 (later) — TACC Vista (GH200, aarch64) support; torch.compile
+
+### 50. `pyproject.toml`, `uv.lock` — CUDA torch on linux-aarch64
+
+PyPI's linux-aarch64 `torch` wheels are CPU-only (`Torch not compiled with CUDA enabled` on
+Vista's GH200). Added an explicit `pytorch-cu128` index (`download.pytorch.org/whl/cu128`) and a
+`tool.uv.sources` entry routing `torch` to it only under
+`sys_platform == 'linux' and platform_machine == 'aarch64'`. `torch==2.10.0` is now a direct
+dependency because `tool.uv.sources` only applies to direct deps; it pins the version already
+locked, and without the pin uv picked 2.11.0 on aarch64. Relocked with
+`uv lock --default-index https://pypi.org/simple` (a plain `uv lock` rewrites every URL to the
+Aliyun mirror); the x86_64 resolution is unchanged (PyPI `torch 2.10.0`).
+
+### 51. `scripts/run_manifest_task.py` `--parallel` + multiple task ids; `slurm_jobs/vista_train_manifest.sbatch` — NEW
+
+Vista bills whole nodes (1 GH200 each), so one run per node wastes most of it. Measured on
+Grasp-Allegro 50k: 1 run 7.0 s/epoch, 2 concurrent 9.2 s/epoch each, 4 concurrent 15.7 s/epoch
+each (1.8x node throughput); full sweep 1-12 runs in `vista_train_manifest.sbatch`'s header (plateau ~1.9x from 6 runs). `run_manifest_task.py` now takes several task ids and, with
+`--parallel`, starts every run at once, each with its own `WARP_CACHE_PATH/run<i>` subdir.
+Without `--parallel` it behaves as before, so the existing sbatch files are unaffected. The
+new sbatch packs `PACK` (default 2) manifest tasks per node, uses node-local
+`/tmp/$USER/$SLURM_JOB_ID` for `TMPDIR` and the Warp cache (nodes are exclusive, so neither the
+shared-`/tmp` ENOSPC nor the AF_UNIX path-length problem applies), and needs no
+`LD_LIBRARY_PATH` workaround. Verified by running its body on a Vista compute node: 4
+concurrent runs (2 tasks x 2 seeds) with env eval each epoch, all four wrote every checkpoint.
+
+### 53. `torch.compile` for training — `--compile-mode` (`train.py`, `cli/train_diffusion.py`, `run_manifest_task.py`, `vista_train_manifest.sbatch`)
+
+Opt-in `TrainConfig.compile_mode` / `--compile-mode`: `policy.noise_pred_net.compile(mode=...)`
+in place (state_dict keys unchanged, so checkpoints load in eager eval exactly as before; the
+`randn`/`randint` draws in `compute_loss`/`predict_action` stay eager). Default is eager.
+`run_manifest_task.py --compile-mode` adds it to every run; the Vista sbatch passes
+`COMPILE_MODE` (default `reduce-overhead`, `none` = eager) and sets `CC=gcc`.
+
+Measured on Vista GH200, Grasp-Allegro 50k, full manifest config, s/epoch per run:
+
+| mode | 1 run | 8 runs/node | node plateau |
+|---|---|---|---|
+| eager FP32 | 7.1 | 29.9 | 0.267 run-epochs/s |
+| eager TF32 (what production eager does after its first eval) | 7.0 | 28.4 | 0.282 |
+| `default` | 5.5 | – | – |
+| `max-autotune-no-cudagraphs` | 5.3 | – | – |
+| **`reduce-overhead`** (CUDA graphs) | **3.1** | **21.8** | **0.368** |
+
+The single-run eager GPU was mostly idle on kernel-launch overhead; CUDA graphs remove it.
+Correctness: per-epoch train loss matches eager to ~1e-4 over 8 epochs (same seed); a
+150-epoch Grasp-Allegro 50k run scored 56.6% vs eager's 53.1% on the same 256 episodes
+(within noise), val action loss 0.089 vs 0.087.
+
+Two fixes it needed:
+- TACC's modules set `CC=nvc`; Triton builds its launcher stub with `$CC` and fails
+  (`InductorError: CalledProcessError`). `CC=gcc` fixes it.
+- In-training env eval/render calls mjlab's `configure_torch_backends()`, which sets TF32
+  through the new `fp32_precision` API. After that, reading the legacy `allow_tf32` flag
+  raises "mix of the legacy and new APIs", and Inductor's `pad_mm` reads it on recompile:
+  every compiled run with `--eval-*` died on its first step after the first eval.
+  `_restore_backend_flags()` saves and restores the matmul/cudnn precision and cudnn
+  benchmark/deterministic flags around each eval and render, for compiled runs only. Side
+  finding: **eager runs switch from FP32 to TF32 at their first in-training eval** (and
+  cudnn.benchmark turns on), which is pre-existing behaviour left unchanged. Compiled runs
+  stay FP32 throughout.
+
+### 52. `scripts/hf_sync.py` — FIX: `pull` wrote the Hub's `.gitattributes` into the repo root
+
+`pull` mapped every non-`demos/` file to `--rl-root` (the repo root), so the dataset repo's own
+LFS `.gitattributes` (`*.bin`, `*.pt`, ... `filter=lfs`) landed in the repo as an untracked
+file; committing it would have turned on LFS for checkpoints. Now only `demos/` and `logs/`
+paths are pulled.
+
+---
+
 ## 2026-09-27 — Backfill for 2026-09-03 → 09-27, data paths, docs restructure
 
 Items 41-47 were made between 2026-09-03 and 2026-09-26 and were recorded only in

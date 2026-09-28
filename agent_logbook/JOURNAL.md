@@ -4,6 +4,45 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-09-27 (later) — Set up TACC Vista (GH200, aarch64) as a second training server
+
+- Bulk storage on `$WORK` (`/work/09312/rudolph/vista/cross_embodied_diffusion/`), symlinked
+  in as `data/mjlab_hand_demos`, `logs`, `outputs`, `.venv`. `logs` symlink added to
+  `.git/info/exclude` (`.gitignore`'s `logs/` doesn't match a symlink). `$WORK` quota was at
+  926 GB / 1 TB before the pull, so it is shared with other projects and tight.
+- `hf_sync.py pull` (everything): 85 files, ~4 min download plus untar, 25 GB. All 10 x 1M, subsets
+  10k/50k, `padded/` (AllHands + Scarce pools) and all 10 RL experts are present.
+- `uv sync --frozen` installed CPU-only torch on aarch64 → fixed with the cu128 index
+  (CHANGES.md item 50). Verified torch 2.10.0+cu128 + warp on the GH200.
+- Smoke-trained Grasp-Allegro 50k for 4 epochs with val + env eval: works end to end. Throughput
+  probe → packing runs per node (CHANGES.md item 51); new `vista_train_manifest.sbatch` verified
+  by running its body inside the idev node (4 parallel runs, env eval each epoch).
+- Estimates at PACK=2 (4 runs/node): 50k x 4000 epochs ≈ 18h; 1M x 200 epochs ≈ 5h solo,
+  ~10h packed. Budget: project ASC26008 has ~4,350 SU (1 SU per GH node-hour); the other
+  project is overdrawn.
+- Verified evaluation: RL expert (`scripts/eval_expert.py`, Grasp-Allegro `model_9999.pt`) 100%
+  (32 eps). 150-epoch Grasp-Allegro 50k diffusion policy (`outputs/diffusion/_vista_verify/`):
+  in-training eval 78% (32 eps); standalone `eval-diffusion` 84% (32 eps, same settings),
+  59% (64 eps, 2000 steps), 60% (256 eps). Eval is not bit-deterministic and 32-ep numbers are
+  noisy. Rendering works headless (EGL), both `render_diffusion_rollout` and
+  `scripts/render_checkpoint_video.py` (RL checkpoints only -- it dies with
+  `KeyError: 'actor_state_dict'` on a diffusion policy).
+- Runs-per-node sweep (table in `vista_train_manifest.sbatch` header): GPU-bound, node
+  throughput plateaus ~1.9x from 6 runs. Recommended PACK=2 (4 runs) or PACK=4 (8 runs, max
+  that fits 48h for 50k and RAM for the largest pool). `torch.compile` (1.34x train step, 2x
+  val in the 09-13 prototype) is still not wired into `train.py` -- the next lever.
+- User asked to try torch.compile: wired in as `--compile-mode` (CHANGES.md item 53).
+  `reduce-overhead` (CUDA graphs) = 3.1 s/epoch vs eager 7.0 (2.3x single run); node plateau
+  0.368 vs eager TF32's 0.282 run-epochs/s (1.3x). Quality unchanged (256-ep eval 56.6% vs
+  53.1%). Needed `CC=gcc`, and a restore of the TF32/cudnn flags around in-training eval: env
+  setup flips them via the new API and Inductor then crashes on recompile. Found in passing
+  that eager runs switch FP32 -> TF32 at their first eval (unchanged). Vista sbatch now compiles by
+  default; verified its full path (4 parallel runs, eval every epoch, render).
+- Not submitted: this session ran inside idev, where `sbatch` is disabled. Handed submission
+  commands to the user.
+
+---
+
 ## 2026-09-27 — Git slowness fixed; demos + RL experts mirrored to Hugging Face; docs restructure
 
 - `git status`/`add` hung for minutes: untracked `tmp/` (per-task Slurm `TMPDIR`, 26k+ files

@@ -103,6 +103,26 @@ mkdir -p "$TMPDIR"
 `srun` fails with "More processors requested than permitted" when invoked
 from inside an existing interactive allocation — use `sbatch`.
 
+### TACC Vista (GH200, aarch64)
+
+The block above is for the original shared-node cluster. On Vista:
+
+- Use `slurm_jobs/vista_train_manifest.sbatch` (partition `gh`, 48h max,
+  20 running / 40 submitted jobs per user, whole-node allocation — no
+  `--gres`/`--mem`). It packs several runs per node; see CHANGES.md item 51.
+  Pass the project with `sbatch -A <project>`.
+- `sbatch` is disabled on compute nodes (including idev sessions), and ssh to
+  the login nodes needs interactive 2FA, so an agent running inside idev can
+  smoke-test on the GPU but cannot submit — hand the `sbatch` line to the user.
+- `export CC=gcc` for anything using `torch.compile` (TACC sets `CC=nvc`,
+  which Triton can't use). The Vista sbatch compiles by default
+  (`COMPILE_MODE=reduce-overhead`, 2.3x per run; CHANGES.md item 53).
+- No `LD_LIBRARY_PATH` workaround needed; torch comes from the cu128 index on
+  aarch64 (CHANGES.md item 50).
+- `$HOME` is 23 GB; `$WORK` (1 TB, shared with other projects) holds the
+  bulk data, venv and outputs via symlinks (`data/mjlab_hand_demos`, `logs`,
+  `outputs`, `.venv`). `$SCRATCH` is purged — don't keep results there.
+
 ## Invariants worth knowing before touching this code
 
 - **The diffusion sampler is DDIM (eta=0), not single-step ancestral
