@@ -9,6 +9,23 @@ comments ("See CHANGES.md item N") -- never renumber; append the next number.
 
 ---
 
+## 2026-09-28 — Vista multi-node jobs
+
+### 54. `slurm_jobs/vista_train_manifest.sbatch` — multi-node mode
+
+The `qgh` QOS allows 96 running nodes per user but only 20 running jobs, so 1-node jobs can
+never use more than 20 nodes (ANALYSIS.md "Vista job shape"). Now, submitted with `-N K`, the
+batch step re-runs the script under
+`srun --nodes=K --ntasks-per-node=1 --kill-on-bad-exit=0 bash slurm_jobs/vista_train_manifest.sbatch --node`
+(the repo path, not `$0`: sbatch runs a spool copy that exists only on the first node). Each
+node computes `NODE_SLOT = SLURM_ARRAY_TASK_ID * SLURM_NNODES + SLURM_NODEID` and runs
+manifest tasks `[NODE_SLOT*PACK, (NODE_SLOT+1)*PACK)`, so K nodes of array element `a` are
+equivalent to 1-node array elements `a*K .. a*K+K-1`. With `-N 1` (the default) the slot is
+the array index, exactly as before. `#SBATCH --ntasks=1` became `--ntasks-per-node=1`.
+`JOBTMP` gets a `_$SLURM_NODEID` suffix. The header documents the limits and the submit form.
+Verified by running the batch path on 4 nodes in an idev allocation: each node took the right
+4 tasks (8 runs) and all 32 runs completed; numbers in ANALYSIS.md.
+
 ## 2026-09-27 (later) — TACC Vista (GH200, aarch64) support; torch.compile
 
 ### 50. `pyproject.toml`, `uv.lock` — CUDA torch on linux-aarch64

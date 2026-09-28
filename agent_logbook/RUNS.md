@@ -129,6 +129,13 @@ Artifact roots are gitignored; paths are relative to repo root.
   (50k, ~10s/epoch, ~9h left, ~20h total) and 109/200 (1M, ~127s/epoch, ~3h left, ~14h total) --
   both on track to finish well inside the limit. Eval results not yet tabulated.
 
+### Vista (TACC GH200) — 2026-09-28
+
+| id | what | where | status | notes |
+|---|---|---|---|---|
+| `1030560` | scarce co-training manifest (`slurm_jobs/scarce_manifest.json`), 5 x 1-node, PACK=4 (8 runs/node, 40 runs, 50 epochs, compiled) | `outputs/diffusion/scarce/*` | running (started 2026-09-28 03:17) | Not launched by the 09-28 session; logged here because of the storage issue. On user instruction, deleted `policy_epoch_0005/0010/0015.pt` from all 40 runs (120 files, 33 GB) to keep `$WORK` under quota. `policy_epoch_0020/0025`, `policy_latest`, `policy_best_*` kept. At ~11 GB per 5-epoch snapshot round and 34 GB free afterwards, it will hit the quota again around epoch 35-40 unless more is freed. No save errors in its logs as of 13:00 |
+| `1031790` (idev, gh-dev, 4 nodes) | job-shape benchmark: round 1 = 4 nodes x {4,8,12,16} runs; round 2 = one 4-node run of `vista_train_manifest.sbatch` (8 runs/node) | `$SCRATCH/bench_multinode/` | done | Grasp-Allegro 50k, 16 epochs, production flags. Results in ANALYSIS.md "Vista job shape". A first round-1 attempt wrote to `outputs/` on `$WORK`, pushed it over quota (`torch.save`: "unexpected pos"), and was killed and deleted |
+
 ### Scripts
 
 - `scripts/watch_eval_diffusion.py` — eval every N epochs while training

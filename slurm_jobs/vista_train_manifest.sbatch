@@ -4,7 +4,7 @@
 #SBATCH --error=slurm_jobs/vista_train_manifest/logs/task_%A_%a.err
 #SBATCH --partition=gh
 #SBATCH --nodes=1
-#SBATCH --ntasks=1
+#SBATCH --ntasks-per-node=1
 #SBATCH --time=48:00:00
 #
 # TACC Vista (GH200, aarch64) launcher for a train-diffusion manifest built by
@@ -36,9 +36,34 @@
 #     slurm_jobs/vista_train_manifest.sbatch
 #
 # qgh limits: 48h wall, 20 running / 40 submitted jobs per user (each array
-# element counts as one job).
+# element counts as one job), but 96 nodes running per user and 64 per job.
+# So 1-node jobs cap you at 20 nodes; multi-node jobs reach 96.
+#
+# MULTI-NODE (CHANGES.md item 54): submit with -N K and every node runs its
+# own PACK manifest tasks, like K separate 1-node jobs that count as ONE job.
+# Node i of array element a takes the node slot a*K + i, i.e. manifest tasks
+# [(a*K+i)*PACK, (a*K+i+1)*PACK). Size the array to
+# ceil(n_manifest_tasks / (PACK*K)). Example: 80 tasks, PACK=4, K=10 -> 2 jobs:
+#
+#   sbatch -A <project> -N 10 --array=0-1 \
+#     --export=ALL,MANIFEST=slurm_jobs/scarce_manifest.json,PACK=4 \
+#     slurm_jobs/vista_train_manifest.sbatch
+#
+# The job holds (and bills) all K nodes until its slowest node finishes, so
+# put equal-length runs in the same job. A node whose runs fail does not stop
+# the others (--kill-on-bad-exit=0). Measured trade-offs: ANALYSIS.md
+# "Vista job shape".
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:?SLURM_SUBMIT_DIR not set -- run this via sbatch}"
+
+# Batch step of a multi-node job: fan out one copy of this script per node.
+# Re-run from the repo path, not $0 (sbatch runs a spool copy that exists
+# only on the first node).
+if [[ "${1:-}" != "--node" && "${SLURM_NNODES:-1}" -gt 1 ]]; then
+  echo "[INFO] multi-node job: ${SLURM_NNODES} nodes ${SLURM_JOB_NODELIST}"
+  exec srun --nodes="$SLURM_NNODES" --ntasks-per-node=1 --kill-on-bad-exit=0 \
+    bash slurm_jobs/vista_train_manifest.sbatch --node
+fi
 source .venv/bin/activate
 
 : "${MANIFEST:?set MANIFEST=path/to/manifest.json via --export}"
@@ -56,18 +81,19 @@ export PYOPENGL_PLATFORM=egl
 # from concurrent wandb services, unlike the shared-node cluster) and the path
 # stays far below the 107-char AF_UNIX limit for DataLoader sockets.
 # run_manifest_task.py --parallel gives each run its own Warp cache subdir.
-JOBTMP="/tmp/${USER}/${SLURM_JOB_ID}"
+JOBTMP="/tmp/${USER}/${SLURM_JOB_ID}_${SLURM_NODEID:-0}"
 export TMPDIR="$JOBTMP/tmp"
 export WARP_CACHE_PATH="$JOBTMP/warp"
 mkdir -p "$TMPDIR" "$WARP_CACHE_PATH"
 trap 'rm -rf "$JOBTMP"' EXIT
 
 N_TASKS=$(python3 -c "import json,sys; print(len(json.load(open(sys.argv[1]))))" "$MANIFEST")
-FIRST=$(( SLURM_ARRAY_TASK_ID * PACK ))
+NODE_SLOT=$(( ${SLURM_ARRAY_TASK_ID:-0} * ${SLURM_NNODES:-1} + ${SLURM_NODEID:-0} ))
+FIRST=$(( NODE_SLOT * PACK ))
 TASK_IDS=()
 for (( t = FIRST; t < FIRST + PACK && t < N_TASKS; t++ )); do TASK_IDS+=("$t"); done
 if (( ${#TASK_IDS[@]} == 0 )); then
-  echo "[WARN] array index $SLURM_ARRAY_TASK_ID has no manifest tasks (N_TASKS=$N_TASKS, PACK=$PACK)"
+  echo "[WARN] node slot $NODE_SLOT has no manifest tasks (N_TASKS=$N_TASKS, PACK=$PACK)"
   exit 0
 fi
 echo "[INFO] $(hostname) manifest=$MANIFEST tasks=${TASK_IDS[*]} compile=$COMPILE_MODE"

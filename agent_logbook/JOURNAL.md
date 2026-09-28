@@ -4,6 +4,42 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-09-28 — Vista job shape: multi-node jobs, benchmark, `$WORK` quota scare
+
+- User asked for the configuration that runs the most diffusion-BC training runs at once on
+  Vista, given the 40-submitted-job cap: packed 1-node jobs or multi-node jobs. Worked in a
+  4-node `gh-dev` idev allocation (`1031790`).
+- Key limit (`sacctmgr show qos qgh`): 20 running / 40 submitted jobs, but **96 running nodes
+  per user, 64 per job**. 1-node jobs top out at 20 nodes; multi-node jobs reach 96 (4.8x).
+- Made `vista_train_manifest.sbatch` multi-node aware (CHANGES.md item 54): `-N K` fans out
+  one packed runner per node via `srun`. With `-N 1` it behaves as before.
+- Benchmark (ANALYSIS.md "Vista job shape"): per-node throughput flat at ~0.37 run-ep/s
+  (training) from 4 to 16 runs/node, with 4 nodes loaded at once. One 4-node sbatch job ran
+  32/32 runs, each node within 4% of a single node. Queue snapshot: jobs up to 16 nodes start
+  about as fast as 1-node ones; 32+ node jobs can wait a day.
+- Recommendation: 8-16-node jobs with 8 runs/node (~24 h per 4000-epoch-equivalent run), or
+  PACK=2 on more nodes for turnaround. SU per run is unchanged, ~3 SU each. ASC26008 has
+  4,123 SU, which 96 nodes spend in ~43 h.
+- **Incident:** round 1's first attempt wrote checkpoints to `outputs/` on `$WORK` and pushed
+  the 1 TB user quota over (runs died in `torch.save`, "unexpected pos"). I killed it, deleted
+  its output and reran everything on `$SCRATCH`. Four killed processes stayed stuck in Lustre
+  `cl_sync_io_wait` for the rest of the allocation (harmless). Then found that user job
+  `1030560` (scarce sweep, 40 runs) would hit the quota at its next snapshot. On the user's
+  instruction, deleted its `policy_epoch_0005/0010/0015.pt` (33 GB), leaving 34 GB free.
+- Not verified: the sbatch through real `sbatch -N K` from a login node (sbatch is disabled
+  in idev). I exercised the same path by calling the script inside the allocation.
+
+**Pick up here:**
+1. `1030560` needs ~66 GB more to reach epoch 50 and has ~34 GB: it will hit the quota around
+   epoch 35-40 (~6-8 h after 13:00 on 09-28). Free more space on `$WORK` or delete the
+   epoch-20/25 snapshots before then.
+2. Before any big multi-node sweep, decide where checkpoints go (`$SCRATCH` + copy the
+   selected ones back, or fewer saved checkpoints). ~0.8 GB/run minimum.
+3. `train.py` prints without flush, so log timestamps under a pipe are approximate. Consider
+   `flush=True` or `PYTHONUNBUFFERED=1` in the sbatch.
+
+---
+
 ## 2026-09-27 (later) — Set up TACC Vista (GH200, aarch64) as a second training server
 
 - Bulk storage on `$WORK` (`/work/09312/rudolph/vista/cross_embodied_diffusion/`), symlinked

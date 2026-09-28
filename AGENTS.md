@@ -111,6 +111,15 @@ The block above is for the original shared-node cluster. On Vista:
   20 running / 40 submitted jobs per user, whole-node allocation — no
   `--gres`/`--mem`). It packs several runs per node; see CHANGES.md item 51.
   Pass the project with `sbatch -A <project>`.
+- The cap that matters is jobs, not nodes: 96 running nodes/user (64/job).
+  Submit multi-node jobs (`-N 8`..`16`, CHANGES.md item 54) to go past 20
+  nodes. Per-node throughput is flat from 4 to 16 packed runs (GPU-bound), so
+  runs/node only sets wall time. See ANALYSIS.md "Vista job shape".
+- `$WORK` is a 1 TB quota shared with every TACC system, and it was ~97% full
+  on 2026-09-28. A checkpoint is 265 MB and each run keeps >=3, so check
+  `lfs quota -u $USER /work` before launching and keep benchmark/scratch
+  output on `$SCRATCH`. Going over quota makes `torch.save` fail
+  mid-training ("unexpected pos").
 - `sbatch` is disabled on compute nodes (including idev sessions), and ssh to
   the login nodes needs interactive 2FA, so an agent running inside idev can
   smoke-test on the GPU but cannot submit — hand the `sbatch` line to the user.

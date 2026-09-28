@@ -6,6 +6,109 @@ source edits in [`CHANGES.md`](CHANGES.md).
 
 ---
 
+## 2026-09-28 — Vista job shape: how to run the most diffusion-BC runs at once
+
+Question (user): on Vista (1 GH200 per node, `gh` partition, 40-submitted-job cap), what
+gets the most training runs through: 1-node jobs each packing N runs, or multi-node jobs?
+Measured inside a 4-node `gh-dev` idev allocation (job `1031790`). Benchmark scripts and raw
+logs: `$SCRATCH/bench_multinode/` (`node_bench.sh`, `analyze.py`, `bench_manifest.json`;
+purgeable). Config = the production manifest settings on Grasp-Allegro 50k: compiled
+(`reduce-overhead`), batch 256, 8 workers, val every epoch, env eval every 5 epochs.
+
+### The limits that decide it (`sacctmgr show qos qgh`)
+
+| limit | value |
+|---|---|
+| running jobs / user | 20 |
+| submitted jobs / user | 40 |
+| **running nodes / user** | **96** |
+| nodes / job | 64 |
+| wall | 48 h |
+
+A 1-node job can only ever put 20 nodes to work. The node cap is 96, so **multi-node jobs give
+4.8x the concurrent capacity**. Each array element counts as a job, so arrays don't get around
+the job cap.
+
+### Per node: efficiency is flat from 4 to 16 runs
+
+Round 1 ran 4 nodes at once, packed with 4 / 8 / 12 / 16 runs, 16 epochs each. All 40 runs
+finished with 0 failures, and GPU utilization was 99% on every node.
+
+| runs/node | s/epoch/run (training) | node thru, training only | node wall, 16 ep incl. 3 evals | node thru incl. evals |
+|---|---|---|---|---|
+| 4 | 10.5 | 0.38 run-ep/s | 561 s | 0.114 |
+| 8 | 22.0 | 0.36 | 1065 s | 0.120 |
+| 12 | 32.0 | 0.38 | 1500 s | 0.128 |
+| 16 | 43.0 | 0.37 | 2060 s | 0.124 |
+
+(The training-only column comes from log timestamps. `train.py` prints without flush, so they
+are approximate; the wall column is exact.) This matches the 2026-09-27 single-node sweep
+(0.368 at 8 runs, `vista_train_manifest.sbatch` header): **four nodes loading from and
+writing to the shared filesystems at once did not slow any node down.** The node is
+GPU-bound from ~4 runs, so the number of runs per node only sets wall time, not cost. Pick it
+so the job fits in 48 h: a 4000-epoch 50k run (or a 200-epoch 1M run, the same number of
+steps) costs about 3.0 node-hours of training, so N runs/node take about 3N h. N=8 takes
+~24 h. N=13 is the most that fits in 48 h with margin. RAM caps the largest pool
+(padded AllHands, 12.5 GB/run) at ~15.
+
+Env eval is expensive when many runs evaluate at the same moment. At every-5-epochs it was
+~65% of the benchmark's wall time (an epoch with an eval took 227 s vs 22 s at 8 runs/node).
+Production manifests eval every `epochs//10`, so there it is <3% of wall time.
+
+### Across nodes: multi-node jobs work and scale linearly
+
+Round 2 ran the modified `vista_train_manifest.sbatch` (CHANGES.md item 54) as one 4-node job:
+the batch step `srun`s one copy per node, and each node picks its own PACK tasks. 16 tasks x 2
+seeds = 32 runs, 8/node. **32/32 finished, 0 tracebacks.** Each node's wall (job start →
+its last `policy_latest.pt`) was 992 / 1011 / 1006 / 1034 s, i.e. 0.124-0.129 run-ep/s incl.
+evals, vs 1065 s / 0.120 for the 8-run node in round 1. The job took 1037 s, so the slowest
+node held the other three idle for at most 42 s (4%), with identical runs. Linear scaling:
+4 nodes = 4x one node. Also checked with a dummy manifest: array element 1 of a 4-node, PACK=3
+job took tasks 12-14 / 15-17 / 18-19 / (empty slot, exits with WARN), and runs failing on
+one node did not stop the others.
+
+### Queue wait by job size (gh partition snapshot, 2026-09-28 ~13:00, 567/576 nodes busy)
+
+`sacct -a` is restricted, so this uses `squeue` (other users' running and pending jobs), not
+history.
+
+| job size | running jobs: submit→start wait | pending estimates |
+|---|---|---|
+| 1 node | median 0.6 h (n=79), max 8.9 h | |
+| 2-4 nodes | median 1.6 h (n=19) | 4-node 2 h jobs: ~1.5-2 h |
+| 5-16 nodes | median 0.7 h (n=45), max 66 h | 16-node 48 h jobs (10 queued by one user): est. start 1-9 h |
+| 17-64 nodes | median 2.1 h (n=3) | one 32-node job has waited 26 h so far, est. 20 h more |
+
+Our own 1-node 48 h jobs have waited 2-31 h (`sacct`, 09-18 → 09-28). Up to ~16 nodes, a job
+does not wait noticeably longer than a 1-node job. 32+ nodes can sit for a day.
+
+### What does not change: cost per run, and the two resources that actually run out
+
+- **SU per run is the same either way** (same node-hours; per-node throughput is identical).
+  Multi-node only buys speed. A multi-node job does bill every node until its slowest node
+  finishes, so put equal-length runs in the same job.
+- **Budget.** ASC26008 had 4,123 SU on 2026-09-28 (`/usr/local/etc/projectbalance.map`, id
+  828619). At ~3 SU per 4000-epoch-equivalent run that is ~1,370 runs in total. 96 nodes burn
+  it in ~43 h, 20 nodes in ~8.5 days.
+- **`$WORK` quota (1 TB, shared with every TACC system).** A checkpoint is 265 MB of weights,
+  so every run leaves >=0.8 GB (`policy_latest` + `policy_best_val` + `policy_best_eval`),
+  plus 265 MB per `policy_epoch_*` snapshot. 96 nodes x 8 runs is ~600 GB before snapshots.
+  On 2026-09-28 there were 34 GB free, after deleting the scarce sweep's epoch-5/10/15
+  snapshots. **Storage runs out long before the scheduler becomes the limit.** Write outputs
+  to `$SCRATCH` and keep only selected checkpoints on `$WORK`, or save fewer checkpoints.
+
+### Recommendation
+
+1. **Use multi-node jobs of 8-16 nodes**, e.g. `sbatch -N 16 --array=0-5` for up to 96 nodes.
+   Don't go to 32+ nodes per job (queue wait). 1-node jobs are only worth it for one-off runs.
+2. **Pack 8 runs/node** (4 manifest tasks x 2 seeds, `PACK=4`): ~24 h for 4000-epoch-equivalent
+   runs, at full efficiency. For faster results, use PACK=2 (4 runs, ~12 h) on twice the
+   nodes: same SU, half the wall time, and shorter jobs backfill more easily.
+3. Group runs of the same length into one job; split 1M and 50k sweeps into separate jobs.
+4. Fix storage before scaling up (see above).
+
+---
+
 ## 2026-08-31 — Learned state equivalence: measured, and closed
 
 Logged retroactively on 2026-08-31. The probe shipped in commit `b3b458e` (08-27 late) and
