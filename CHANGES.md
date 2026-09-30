@@ -9,6 +9,18 @@ comments ("See CHANGES.md item N") -- never renumber; append the next number.
 
 ---
 
+## 2026-09-30 — per-dimension obs/action reference
+
+### 59. `scripts/dump_spaces.py` (NEW)
+
+Builds each of the 10 task envs once and writes `outputs/analysis/spaces_reference.{json,md}`:
+every policy-obs dimension labeled (term, joint name, xyz / quaternion wxyz component,
+keypoint body) and every action dimension's target joint/tendon plus the action term's class
+and settings (scale/offset, velocity limits, EMA). Dims match the demo zarrs for all 10 tasks.
+Corrected the Allegro/LEAP "dimension j is the same quantity" note in ANALYSIS.md.
+
+---
+
 ## 2026-09-29 (night) — why padded/pooled runs score 0: normalization, not pooling
 
 ### 58. `policy.py`, `pooling.py`, `train.py`, `cli/train_diffusion.py`

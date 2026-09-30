@@ -639,7 +639,15 @@ Outputs: `outputs/analysis/spaces_summary.md`, `matched_pairs_summary.md`,
 | 81 | 20 | InHand-Rotation-Wuji |
 
 Only **Allegro and LEAP** match — and they match exactly, same dims *and* same term
-layout, so dimension *j* is the same physical quantity in both. Every other hand is
+layout, so dimension *j* is the same physical quantity in both.
+
+> [!WARNING]
+> **Corrected 2026-09-30** (`scripts/dump_spaces.py` -> `outputs/analysis/spaces_reference.md`):
+> same dims and term layout, but **not** the same quantity per dimension. Joint order differs:
+> Allegro is ring, middle, index, thumb (`rfj0-3, mfj0-3, ffj0-3, thj0-3`, j0 = abduction); LEAP
+> is index, middle, ring, thumb (`if_mcp, if_rot, if_pip, if_dip, ...`, abduction second). The
+> same applies to `joint_pos`/`joint_vel`/`actions` obs terms and the action vector. Rotation
+> action scale/offset (joint-range map) also differ per hand. Every other hand is
 unique. Shadow is the outlier: its `keypoint_pos_rel` is 66-d (22 keypoints) against
 12-15 for the others, which is most of why its observation is 189-d.
 
