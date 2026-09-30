@@ -15,11 +15,14 @@ from torch.utils.data import DataLoader
 from mjlab_hand.diffusion.dataset import DiffusionDataset, TrajectoryStore
 from mjlab_hand.diffusion.normalizer import GaussianNormalizer, LinearNormalizer
 from mjlab_hand.diffusion.policy import DiffusionPolicy, DiffusionPolicyConfig
+from mjlab_hand.diffusion.pooling import pooled_store
 
 
 @dataclass
 class TrainConfig:
-    dataset: Path
+    # One zarr, or several single-embodiment zarrs to pool on the fly into a
+    # padded cross-embodiment dataset (see `pool_sources`).
+    dataset: Path | list[Path]
     output_dir: Path
     obs_horizon: int = 2
     action_horizon: int = 8
@@ -66,6 +69,11 @@ class TrainConfig:
     # trains on 100% of its data exactly as before.
     val_fraction: float = 0.0
     val_seed: int = 0
+    # Restrict the val loss (and so policy_best_val.pt) to one source of a
+    # pooled dataset, by embodiment name -- e.g. the target hand of a
+    # scarce/ambient run, whose val loss is otherwise ~1% of the pooled one.
+    # The held-out trajectories are the same as without it. CHANGES.md item 57.
+    val_embodiment: str | None = None
     val_every_epochs: int = 1
     # DDIM sampling (num_inference_steps forward passes/batch) is much
     # pricier than one training step; cap how many val batches run each
@@ -91,6 +99,61 @@ class TrainConfig:
     wandb_project: str | None = None
     wandb_run_name: str | None = None
     wandb_tags: list[str] | None = None
+    # Pool `dataset` in memory with the padded scheme (mjlab_hand.diffusion.
+    # pooling; CHANGES.md item 56). None = only when several datasets are
+    # given; True with a single dataset trains it through the padded path
+    # (per-source Gaussian stats, identity policy normalizers), e.g. to
+    # compare against a plain LinearNormalizer specialist on the same data.
+    pool_sources: bool | None = None
+    # task_family recorded in source_stats.json; None = inferred from names.
+    task_family: str | None = None
+    # Per-source normalization for a pooled run: "gaussian" (mean 0 / var 1,
+    # the original scheme) or "minmax" ([-1, 1], = the plain path's
+    # LinearNormalizer). CHANGES.md item 58.
+    source_norm: str = "gaussian"
+
+
+def _dataset_paths(cfg: TrainConfig) -> list[Path]:
+    ds = cfg.dataset
+    return [Path(p) for p in ds] if isinstance(ds, (list, tuple)) else [Path(ds)]
+
+
+def _open_store(cfg: TrainConfig) -> TrajectoryStore:
+    paths = _dataset_paths(cfg)
+    pool = cfg.pool_sources if cfg.pool_sources is not None else len(paths) > 1
+    if not pool:
+        if len(paths) > 1:
+            raise ValueError("several datasets need pool_sources (the padded scheme)")
+        return TrajectoryStore(paths[0], mode="r")
+    return pooled_store(
+        paths,
+        task_family=cfg.task_family,
+        success_only=cfg.success_only,
+        source_norm=cfg.source_norm,
+    )
+
+
+def _action_range(dataset: DiffusionDataset) -> tuple[np.ndarray, np.ndarray]:
+    """Per-dim min/max of the training split's (normalized) actions."""
+    low = np.full(dataset.action.shape[1], np.inf, dtype=np.float32)
+    high = np.full(dataset.action.shape[1], -np.inf, dtype=np.float32)
+    for start, end, _ in dataset.episodes:
+        chunk = dataset.action[start:end]
+        low = np.minimum(low, chunk.min(axis=0))
+        high = np.maximum(high, chunk.max(axis=0))
+    return low, high
+
+
+def _source_index(extra: dict, embodiment: str) -> int:
+    names = [s.get("embodiment", s.get("task")) for s in extra.get("sources", [])]
+    if embodiment not in names:
+        raise ValueError(f"val_embodiment {embodiment!r} not among dataset sources {names}")
+    return names.index(embodiment)
+
+
+def _dataset_repr(cfg: TrainConfig) -> str | list[str]:
+    paths = _dataset_paths(cfg)
+    return [str(p) for p in paths] if isinstance(cfg.dataset, (list, tuple)) else str(paths[0])
 
 
 @contextmanager
@@ -126,7 +189,7 @@ def train_diffusion(cfg: TrainConfig) -> Path:
     np.random.seed(cfg.seed)
     device = torch.device(cfg.device if torch.cuda.is_available() else "cpu")
 
-    store = TrajectoryStore(cfg.dataset, mode="r")
+    store = _open_store(cfg)
     summary = store.summary()
     print(f"[INFO] Dataset: {summary}")
     extra = json.loads(store.root.attrs.get("extra", "{}"))
@@ -149,6 +212,7 @@ def train_diffusion(cfg: TrainConfig) -> Path:
     # `_train_val_split`. Normalizer fitting below uses `dataset` (the train
     # split only), so val trajectories never leak into normalization stats.
     val_loader: DataLoader | None = None
+    val_source = _source_index(extra, cfg.val_embodiment) if cfg.val_embodiment else None
     if cfg.val_fraction > 0:
         val_dataset = DiffusionDataset(
             store,
@@ -158,7 +222,10 @@ def train_diffusion(cfg: TrainConfig) -> Path:
             split="val",
             val_fraction=cfg.val_fraction,
             val_seed=cfg.val_seed,
+            only_source=val_source,
         )
+        if cfg.val_embodiment:
+            print(f"[INFO] Val loss restricted to {cfg.val_embodiment} (source {val_source})")
         print(
             f"[INFO] Val split: {len(val_dataset.episodes)} held-out trajectories, "
             f"{len(val_dataset)} windows (train: {len(dataset.episodes)} trajectories, "
@@ -181,17 +248,11 @@ def train_diffusion(cfg: TrainConfig) -> Path:
     # dataset. This can't be expressed as a DataLoader shuffle over fixed
     # rows, so it bypasses the DataLoader entirely; ambient_rng is exhausted
     # once per batch rather than once per dataset pass.
+    # Ambient + padded is supported since CHANGES.md item 57:
+    # sample_ambient_batch emits the per-episode action_mask.
     is_ambient = cfg.ambient_tmin is not None
-    if is_ambient and is_padded:
-        # sample_ambient_batch bypasses the DataLoader/__getitem__ path
-        # entirely (see its docstring), so it doesn't emit action_mask --
-        # combining it with the padded scheme would silently let padded
-        # action dims leak into the loss. Not needed for the current
-        # cross-embodiment work; refuse rather than train something wrong.
-        raise NotImplementedError(
-            "ambient_tmin + a padded (cross-embodiment) dataset is not supported: "
-            "sample_ambient_batch does not produce action_mask"
-        )
+    if is_ambient and cfg.source_sample_mode != "uniform":
+        raise ValueError("source_sample_mode is not used by ambient sampling; leave it 'uniform'")
     loader: DataLoader | None = None
     ambient_rng: np.random.Generator | None = None
     num_batches_per_epoch = len(dataset) // cfg.batch_size
@@ -257,6 +318,12 @@ def train_diffusion(cfg: TrainConfig) -> Path:
     )
     policy = DiffusionPolicy(policy_cfg).to(device)
     policy.set_normalizers(obs_norm, act_norm)
+    if is_padded:
+        # The sampler clamps its x0 estimate to this range; the +-1 default
+        # only matches LinearNormalizer data (CHANGES.md item 58).
+        low, high = _action_range(dataset)
+        policy.set_action_clip(torch.from_numpy(low), torch.from_numpy(high))
+        print(f"[INFO] action clip range: [{low.min():.2f}, {high.max():.2f}]")
     if cfg.compile_mode is not None:
         policy.noise_pred_net.compile(mode=cfg.compile_mode)
     # Eager runs keep the historical behaviour (TF32 switches on at the first
@@ -268,7 +335,7 @@ def train_diffusion(cfg: TrainConfig) -> Path:
     cfg.output_dir.mkdir(parents=True, exist_ok=True)
     (cfg.output_dir / "train_config.json").write_text(
         json.dumps(
-            {**asdict(cfg), "dataset": str(cfg.dataset), "output_dir": str(cfg.output_dir)},
+            {**asdict(cfg), "dataset": _dataset_repr(cfg), "output_dir": str(cfg.output_dir)},
             indent=2,
             default=str,
         )
@@ -301,7 +368,7 @@ def train_diffusion(cfg: TrainConfig) -> Path:
             project=cfg.wandb_project,
             name=cfg.wandb_run_name,
             tags=cfg.wandb_tags,
-            config={**asdict(cfg), "dataset": str(cfg.dataset), "output_dir": str(cfg.output_dir)},
+            config={**asdict(cfg), "dataset": _dataset_repr(cfg), "output_dir": str(cfg.output_dir)},
         )
 
     global_step = 0
@@ -363,7 +430,13 @@ def train_diffusion(cfg: TrainConfig) -> Path:
                 best_val_loss = mean_val_loss
                 policy.save(cfg.output_dir / "policy_best_val.pt")
                 (cfg.output_dir / "best_val.json").write_text(
-                    json.dumps({"epoch": epoch, "val_action_loss": mean_val_loss})
+                    json.dumps(
+                        {
+                            "epoch": epoch,
+                            "val_action_loss": mean_val_loss,
+                            "val_embodiment": cfg.val_embodiment,
+                        }
+                    )
                 )
             if wandb_run is not None:
                 wandb_run.log({"val/action_loss": mean_val_loss}, step=epoch)
@@ -463,6 +536,12 @@ def train_diffusion(cfg: TrainConfig) -> Path:
         wandb_run.summary["best_loss"] = best_loss
         wandb_run.finish()
 
+    # Completion marker: scripts/promote_outputs.sh copies only run dirs
+    # that have it, so a run still training on $SCRATCH isn't promoted
+    # half-written. See CHANGES.md item 55.
+    (cfg.output_dir / "train_done.json").write_text(
+        json.dumps({"num_epochs": cfg.num_epochs, "best_loss": best_loss}, indent=2)
+    )
     print(f"[INFO] Training done. Best loss={best_loss:.6f}")
     print(f"[INFO] Saved {latest_path}")
     return latest_path

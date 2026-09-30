@@ -136,6 +136,16 @@ Artifact roots are gitignored; paths are relative to repo root.
 | `1030560` | scarce co-training manifest (`slurm_jobs/scarce_manifest.json`), 5 x 1-node, PACK=4 (8 runs/node, 40 runs, 50 epochs, compiled) | `outputs/diffusion/scarce/*` | running (started 2026-09-28 03:17) | Not launched by the 09-28 session; logged here because of the storage issue. On user instruction, deleted `policy_epoch_0005/0010/0015.pt` from all 40 runs (120 files, 33 GB) to keep `$WORK` under quota. `policy_epoch_0020/0025`, `policy_latest`, `policy_best_*` kept. At ~11 GB per 5-epoch snapshot round and 34 GB free afterwards, it will hit the quota again around epoch 35-40 unless more is freed. No save errors in its logs as of 13:00 |
 | `1031790` (idev, gh-dev, 4 nodes) | job-shape benchmark: round 1 = 4 nodes x {4,8,12,16} runs; round 2 = one 4-node run of `vista_train_manifest.sbatch` (8 runs/node) | `$SCRATCH/bench_multinode/` | done | Grasp-Allegro 50k, 16 epochs, production flags. Results in ANALYSIS.md "Vista job shape". A first round-1 attempt wrote to `outputs/` on `$WORK`, pushed it over quota (`torch.save`: "unexpected pos"), and was killed and deleted |
 
+### Vista — ambient rotation sweep (2026-09-29)
+
+| id | what | where | status | notes |
+|---|---|---|---|---|
+| diag-rot `1035261` | 8-run diagnostic, `slurm_jobs/diag_rot_manifest.json`, `-N 2`, PACK=4, 24h, submitted by user 2026-09-29 | `$SCRATCH/cross_embodied_diffusion/outputs/diffusion/diag_rot/` | pending (Priority; gh partition full) | see JOURNAL 2026-09-29 "Ambient rotation sweep" |
+| diag-rot-idev | diagnostic tasks 0-3 (the 4 specialists) run on idev `1031788`'s GPU while `1035261` waits; `slurm_jobs/diag_rot_idev_manifest.json` (same configs, `diag_rot_idev/` outdirs, `-idev` wandb names); log `slurm_jobs/vista_train_manifest/logs/idev_1031788_diag.log` | `.../outputs/diffusion/diag_rot_idev/` | running (started 2026-09-29; idev ends ~2026-09-30 13:27) | duplicates `1035261` node 0 unless that job is replaced by a 1-node tasks-4-7 job |
+| diag-amb-mm `1036217` | ambient s=0/10/25/100 minmax, Allegro, `slurm_jobs/diag_rot_ambient_minmax_manifest.json`, `--array=0-3`, PACK=1, 8 h -> lowered to 5 h (scontrol, est. 3.5-4 h/run alone) | `.../diag_rot/*_minmax_seed0` | pending (submitted by user 2026-09-30) | verifies ambient + minmax before the sweep |
+| diag-rot-idev2 | on idev `1031788`: `spec1M_padded_minmax`, `pool_cotrain_minmax` (`slurm_jobs/diag_rot_idev2_manifest.json`); the two gaussian padded runs of diag-rot-idev were killed at 1M ep ~60 / 50k ep ~950 (all evals 0.00) | `.../diag_rot_idev/` | running (started 2026-09-29 23:47) | tests CHANGES.md item 58 |
+| ambient-rot | 320 runs, `slurm_jobs/ambient_rot_manifest.json`, 40 x `-N 2`, PACK=4 | `.../outputs/diffusion/ambient_rot/` | waiting on diag-rot | |
+
 ### Scripts
 
 - `scripts/watch_eval_diffusion.py` — eval every N epochs while training

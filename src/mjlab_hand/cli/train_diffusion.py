@@ -10,7 +10,34 @@ from pathlib import Path
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dataset", type=Path, required=True)
+    parser.add_argument(
+        "--dataset",
+        type=Path,
+        nargs="+",
+        required=True,
+        help="One dataset zarr, or several single-embodiment zarrs, which are pooled in memory "
+        "into a padded cross-embodiment dataset (same result as build_padded_dataset.py).",
+    )
+    parser.add_argument(
+        "--pool-sources",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Force (or forbid) the in-memory padded pooling. Default: pool iff >1 dataset. "
+        "--pool-sources with one dataset trains it through the padded path.",
+    )
+    parser.add_argument(
+        "--source-norm",
+        choices=["gaussian", "minmax"],
+        default="gaussian",
+        help="Per-source normalization for pooled runs: mean/std, or min/max to [-1, 1] "
+        "(what the plain path's LinearNormalizer does).",
+    )
+    parser.add_argument(
+        "--task-family",
+        type=str,
+        default=None,
+        help="task_family recorded in source_stats.json for a pooled run (default: inferred).",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--obs-horizon", type=int, default=2)
     parser.add_argument("--action-horizon", type=int, default=8)
@@ -65,6 +92,13 @@ def main() -> None:
         "individual states). 0 (default) disables validation.",
     )
     parser.add_argument("--val-seed", type=int, default=0)
+    parser.add_argument(
+        "--val-embodiment",
+        type=str,
+        default=None,
+        help="Compute the val loss (and pick policy_best_val.pt) on this source of a pooled "
+        "dataset only, e.g. the target hand of a scarce/ambient run.",
+    )
     parser.add_argument("--val-every-epochs", type=int, default=1)
     parser.add_argument(
         "--val-max-batches",
@@ -104,7 +138,7 @@ def main() -> None:
 
     train_diffusion(
         TrainConfig(
-            dataset=args.dataset,
+            dataset=args.dataset[0] if len(args.dataset) == 1 else args.dataset,
             output_dir=args.output_dir,
             obs_horizon=args.obs_horizon,
             action_horizon=args.action_horizon,
@@ -128,6 +162,7 @@ def main() -> None:
             ambient_tmin=args.ambient_tmin,
             val_fraction=args.val_fraction,
             val_seed=args.val_seed,
+            val_embodiment=args.val_embodiment,
             val_every_epochs=args.val_every_epochs,
             val_max_batches=None if args.val_max_batches < 0 else args.val_max_batches,
             source_sample_mode=args.source_sample_mode,
@@ -135,6 +170,9 @@ def main() -> None:
             wandb_project=args.wandb_project,
             wandb_run_name=args.wandb_run_name,
             wandb_tags=args.wandb_tags,
+            pool_sources=args.pool_sources,
+            task_family=args.task_family,
+            source_norm=args.source_norm,
         )
     )
 

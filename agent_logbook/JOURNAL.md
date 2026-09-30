@@ -4,6 +4,117 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-09-30 (09:30) — minmax fix verified; sweep manifest switched to minmax
+
+- idev results (in-training evals, 32 envs, successes before drop): 1M plain 1.03 -> ~2.0-2.25;
+  **1M padded minmax 1.38 -> ~1.6-2.1 (matches plain)**; 1M padded gaussian 0.00 (killed);
+  50k plain 0.59-1.41; 5-hand pool minmax co-trained (Allegro 50k target) 0.00 -> 0.44, final
+  0.31, still rising at epoch 50 -- below the 50k specialist, consistent with earlier
+  "pooling doesn't help" findings (target is ~1.2% of samples). All finished (train_done.json).
+- `build_ambient_rotation_manifest.py` pooled runs now pass `"source-norm": "minmax"`;
+  `ambient_rot_manifest.json` regenerated (320 runs, all minmax).
+- User submitted `1036217` (`diag_rot_ambient_minmax_manifest.json`, 4 x 1-node, PACK=1,
+  ambient s=0/10/25/100 minmax) -- pending on priority.
+- Post-hoc evals (`eval_checkpoints.py`, 100 envs, env seed 1000; successes before drop, drop
+  rate in parentheses), `<run>/posthoc_eval.json`:
+
+  | run | best_eval | best_val | latest |
+  |---|---|---|---|
+  | 1M plain | 1.74 (0.90), ep 60 | 2.10 (0.84), ep 173 | 1.91 (0.85) |
+  | 1M padded minmax | 1.85 (0.89), ep 180 | 1.83 (0.88), ep 196 | 2.11 (0.76) |
+  | 50k plain | 0.87 (0.98), ep 2000 | 0.66 (0.97), ep 559 | 0.92 (0.96) |
+  | pool co-train minmax (Allegro 50k + 4x1M) | 0.15 (0.99), ep 35 | 0.10 (1.00), ep 43 | 0.40 (0.99) |
+
+  Padded minmax = plain within noise at 100 episodes (fix confirmed). Selection by in-training
+  eval is optimistic, as expected: the pool's best_eval scored 0.44 in training, 0.15 fresh.
+  No checkpoint rule dominates in 4 runs; keep reporting all three.
+
+## 2026-09-30 (00:00) — Diagnostic: the padded path is what zeroed pooled runs
+
+- idev 1031788 ran diagnostic tasks 0-3 (RUNS.md diag-rot-idev). By epoch 60 (1M) / 800 (50k):
+  plain specialists learn (1M 1.03 -> 2.25 successes before drop, drop rate 1.00 -> 0.78; 50k
+  0.78-0.81); the identical data through `--pool-sources` scores 0.00 at every eval. So the
+  09-28 scarce sweep's zeros come from the padded path itself, not from mixing hands.
+- Isolated (CHANGES.md item 58): eval-side normalize/pad/unnormalize is exact; the model is
+  worse. Two causes: the sampler's hard [-1, 1] clamp (fixed; not enough alone, 0.03 in 64 envs)
+  and the GaussianNormalizer data scale vs a noise schedule/clamp tuned for [-1, 1] min/max data
+  (first-step MSE 5x plain even unclamped-ish). Added `--source-norm minmax`, which makes a
+  single-source pool numerically identical to the plain path.
+- Killed the two gaussian padded runs (conclusive) and started, on the same GPU:
+  `spec1M_padded_minmax` (should match plain 1M) and `pool_cotrain_minmax` (Allegro 50k + 4x1M,
+  target eval/val) -- `slurm_jobs/diag_rot_idev2_manifest.json`, log
+  `slurm_jobs/vista_train_manifest/logs/idev_1031788_diag2.log`. ~9.5 h; idev ends 2026-09-30 13:27.
+- **Do not launch** `diag_rot_manifest.json` / `ambient_rot_manifest.json` as built: they use the
+  gaussian default. If minmax checks out, rebuild them with `"source-norm": "minmax"`. Queued job
+  `1035261` runs the old diag manifest -- recommended to the user to cancel it.
+
+## 2026-09-29 (later) — Ambient rotation sweep: design, checkpoint selection, diagnostic first
+
+- User asked for ambient diffusion on mixed-embodiment InHand-Rotation data: per target hand,
+  sigma in {0,1,2,3,4,5,6,8,10,12,14,16,18,20,25,100}, 4 seeds = 320 runs, as 40 jobs x 2 nodes x
+  4 runs/node. Confirmed with the user: sigma follows the code convention (other hands admitted
+  at t >= sigma; 0 = full co-training, 100 = target-only); target 50k + other four 1M; run the
+  diagnostic before the sweep.
+- Checkpoint selection (user's choice): report **three** checkpoints per run, each re-scored
+  with a fresh-seed eval after training: `policy_best_eval.pt` (best in-training closed-loop
+  eval, now target hand only, 32 envs, 10 evals), `policy_best_val.pt` (best target-hand val
+  loss, `--val-embodiment`), `policy_latest.pt`. The old selection averaged eval over all 5
+  hands and val loss over the pooled set (~99% non-target), which selects for the wrong thing
+  here. The post-hoc eval script is not written yet.
+- Implemented CHANGES.md item 57 (ambient + padded, target-only val, manifests). Manifests:
+  `slurm_jobs/diag_rot_manifest.json` (8), `slurm_jobs/ambient_rot_manifest.json` (320).
+- Why the diagnostic: the 09-28 Vista scarce sweep scored ~0 on every hand, including the
+  data-rich ones. Diagnostic = Allegro, seed 0: 50k and 1M specialists, each plain and through
+  `--pool-sources` (node 0); 5-hand pool co-trained, ambient s=0/10/100 (node 1). Plain vs
+  padded specialist isolates the padded/normalization/eval path; s=0 vs co-trained checks
+  the ambient code path gives the same training as the DataLoader path.
+
+## 2026-09-29 (later) — Multi-hand training without pre-built padded zarrs
+
+- User asked whether multi-dataset policies can be trained by listing the per-hand datasets at
+  training time and padding on the fly instead of building `padded/*.zarr`. Implemented as
+  CHANGES.md item 56: `train-diffusion --dataset A.zarr B.zarr ...` pools in memory with the
+  same code the builder now uses (`mjlab_hand.diffusion.pooling`).
+- Correctness, all on Vista (login node, CPU):
+  - Pre-refactor builder vs new builder vs in-memory pool on the 5 rotation 10k sets:
+    bitwise-identical arrays and metadata.
+  - `scripts/check_pooling.py` on all 14 existing `padded/*.zarr` (built on the old x86
+    cluster): **14/14**. With the recorded stats, padding/concatenation is bitwise identical
+    for every array. Refitting the stats on Vista gives means that differ by float32 rounding
+    (<=2.4e-7; stds exact), so normalized values differ by <=5.7e-6. `DiffusionDataset`
+    episodes, action masks, source ids, 10% val split and balanced weights are identical
+    (e.g. Grasp-AllHands: 9045 train / 1005 val episodes, 4,500,570 / 501,038 windows).
+  - `train-diffusion` with 0 epochs: `--dataset A..E` writes the same `source_stats.json` and
+    val split as the equivalent zarr. A pooled batch through 2 DataLoader workers +
+    `compute_loss(action_mask=...)` + backward: masks 22/26/28, loss and grads finite.
+  - Not done: a real GPU training run on a pooled dataset.
+- `--pool-sources` with one dataset trains a single hand through the padded path. That is the
+  control for the ~0 scarce co-training results (see the 09-28 Vista sweep in RUNS.md): it
+  separates "padded/Gaussian path broken" from "pooling hands hurts".
+
+## 2026-09-29 — Vista storage: demos staged off `$WORK`, outputs on `$SCRATCH`
+
+- User asked that training jobs copy `data/mjlab_hand_demos` to `$SCRATCH` (node `/tmp` for
+  multi-node) and read it there, write outputs/checkpoints to
+  `$SCRATCH/cross_embodied_diffusion/outputs`, and have a script to copy runs worth keeping to
+  `$STOCKYARD/vista/cross_embodied_diffusion/outputs`. Motivation: the `$WORK` quota incident
+  in the entry below.
+- Done in CHANGES.md item 55. Only `vista_train_manifest.sbatch` changed; the other
+  `train_*.sbatch` are for the original shared-node cluster (partition `allnodes`, no
+  `$SCRATCH`) and were left alone.
+- Stages per dataset the node's runs actually use, not all 25 GB of `mjlab_hand_demos`
+  (`padded/` alone is 21 GB). Runs execute from a symlinked run root so manifests and
+  `train_config.json` stay repo-relative.
+- New `train_done.json` completion marker; `scripts/promote_outputs.sh` promotes only runs
+  that have it (older runs need `--force`).
+- Verified on a login node (fake `$SCRATCH` in a temp dir): staging in both modes, dry-run
+  commands, promote script on fake runs + the real `/work` quota check, and a real 1-epoch
+  CPU `train-diffusion` through the run root: the dataset loaded from the staged copy and
+  `train_config.json` landed on scratch with repo-relative paths, but the CPU epoch hit my
+  15-min timeout, so the `train_done.json` write itself was not exercised.
+- Pick up here: first real Vista submission with this sbatch; check the `[INFO] staged ...`
+  lines for staging time, then `scripts/promote_outputs.sh` the finished sweep.
+
 ## 2026-09-28 — Vista job shape: multi-node jobs, benchmark, `$WORK` quota scare
 
 - User asked for the configuration that runs the most diffusion-BC training runs at once on

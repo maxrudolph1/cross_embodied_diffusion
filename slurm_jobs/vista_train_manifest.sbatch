@@ -53,6 +53,12 @@
 # put equal-length runs in the same job. A node whose runs fail does not stop
 # the others (--kill-on-bad-exit=0). Measured trade-offs: ANALYSIS.md
 # "Vista job shape".
+#
+# STORAGE (CHANGES.md item 55): demos are staged to $SCRATCH (1-node) or node
+# /tmp (multi-node) and outputs land in $SCRATCH/cross_embodied_diffusion/
+# outputs; override with DATA_STAGE=scratch|tmp|none and OUT_ROOT=... in
+# --export. Promote finished runs to Stockyard with scripts/promote_outputs.sh.
+# DRY_RUN=1 stages and prints the train-diffusion commands without running.
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:?SLURM_SUBMIT_DIR not set -- run this via sbatch}"
 
@@ -98,4 +104,78 @@ if (( ${#TASK_IDS[@]} == 0 )); then
 fi
 echo "[INFO] $(hostname) manifest=$MANIFEST tasks=${TASK_IDS[*]} compile=$COMPILE_MODE"
 
-python3 scripts/run_manifest_task.py --parallel "${COMPILE_ARGS[@]}" "$MANIFEST" "${TASK_IDS[@]}"
+# --- Stage data, redirect outputs (CHANGES.md item 55) ----------------------
+# $WORK (Stockyard) is a shared, ~full Lustre quota, so runs no longer read
+# demos from or write checkpoints to it. Before training, every dataset this
+# node's runs use is rsync'd from data/mjlab_hand_demos to
+#   DATA_STAGE=scratch: $SCRATCH/cross_embodied_diffusion/mjlab_hand_demos
+#                       (persistent mirror; later jobs only re-stat it)
+#   DATA_STAGE=tmp:     node-local /tmp, deleted when the job ends
+#   DATA_STAGE=none:    no copy, read in place (the old behaviour)
+# The default (auto) is tmp for multi-node jobs and scratch for 1-node jobs.
+# rsync is incremental and writes each file via temp+rename, so it also
+# repairs files the $SCRATCH purge removed, and concurrent jobs staging the
+# same dataset don't corrupt each other. Datasets outside
+# data/mjlab_hand_demos are read in place.
+#
+# Outputs go to OUT_ROOT (default $SCRATCH/cross_embodied_diffusion/outputs).
+# $SCRATCH is purged: copy runs worth keeping to Stockyard with
+# scripts/promote_outputs.sh.
+#
+# Manifests stay repo-relative: the runs execute from a per-node run root
+# whose entries symlink back to the repo, except data/mjlab_hand_demos ->
+# the staged copy and outputs -> OUT_ROOT. So train_config.json still records
+# "data/mjlab_hand_demos/..." and "outputs/...", as before.
+: "${SCRATCH:?SCRATCH not set}"
+REPO="$PWD"
+SCRATCH_ROOT="$SCRATCH/cross_embodied_diffusion"
+OUT_ROOT="${OUT_ROOT:-$SCRATCH_ROOT/outputs}"
+DATA_STAGE="${DATA_STAGE:-auto}"
+[[ "$DATA_STAGE" == auto ]] && DATA_STAGE=$( (( ${SLURM_NNODES:-1} > 1 )) && echo tmp || echo scratch )
+SRC_DATA="$(realpath "$REPO/data/mjlab_hand_demos")"
+case "$DATA_STAGE" in
+  scratch) STAGE_DIR="$SCRATCH_ROOT/mjlab_hand_demos" ;;
+  tmp)     STAGE_DIR="$JOBTMP/mjlab_hand_demos" ;;
+  none)    STAGE_DIR="$SRC_DATA" ;;
+  *) echo "[ERROR] DATA_STAGE must be auto|scratch|tmp|none, got '$DATA_STAGE'" >&2; exit 1 ;;
+esac
+MANIFEST_ABS="$(realpath "$MANIFEST")"
+mapfile -t DATASETS < <(python3 -c '
+import json, sys
+m = json.load(open(sys.argv[1]))
+ds = lambda d: d if isinstance(d, list) else [d]  # list = pooled sources
+print("\n".join(sorted({p.rstrip("/") for t in sys.argv[2:] for r in m[int(t)] for p in ds(r["dataset"])})))
+' "$MANIFEST_ABS" "${TASK_IDS[@]}")
+
+if [[ "$DATA_STAGE" != none ]]; then
+  for ds in "${DATASETS[@]}"; do
+    ds="${ds%/}"
+    if [[ "$ds" != data/mjlab_hand_demos/* ]]; then
+      echo "[WARN] $ds is not under data/mjlab_hand_demos; reading it in place"
+      continue
+    fi
+    rel="${ds#data/mjlab_hand_demos/}"
+    t0=$SECONDS
+    mkdir -p "$STAGE_DIR/$rel"
+    rsync -a "$SRC_DATA/$rel/" "$STAGE_DIR/$rel/"
+    echo "[INFO] staged $ds -> $STAGE_DIR/$rel ($(du -sh "$STAGE_DIR/$rel" | cut -f1), $((SECONDS - t0))s)"
+  done
+fi
+
+RUNROOT="$JOBTMP/root"
+mkdir -p "$RUNROOT/data" "$OUT_ROOT"
+for e in "$REPO"/*; do
+  case "${e##*/}" in data|outputs) ;; *) ln -s "$e" "$RUNROOT/" ;; esac
+done
+for e in "$REPO"/data/*; do
+  if [[ -e "$e" && "${e##*/}" != mjlab_hand_demos ]]; then ln -s "$e" "$RUNROOT/data/"; fi
+done
+ln -s "$STAGE_DIR" "$RUNROOT/data/mjlab_hand_demos"
+ln -s "$OUT_ROOT" "$RUNROOT/outputs"
+echo "[INFO] data=$STAGE_DIR ($DATA_STAGE) outputs=$OUT_ROOT"
+cd "$RUNROOT"
+
+DRY_ARGS=()
+[[ -n "${DRY_RUN:-}" ]] && DRY_ARGS=(--dry-run)
+python3 "$REPO/scripts/run_manifest_task.py" --parallel "${DRY_ARGS[@]}" "${COMPILE_ARGS[@]}" \
+  "$MANIFEST_ABS" "${TASK_IDS[@]}"

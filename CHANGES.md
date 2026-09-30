@@ -9,6 +9,148 @@ comments ("See CHANGES.md item N") -- never renumber; append the next number.
 
 ---
 
+## 2026-09-29 (night) — why padded/pooled runs score 0: normalization, not pooling
+
+### 58. `policy.py`, `pooling.py`, `train.py`, `cli/train_diffusion.py`
+
+Diagnostic (JOURNAL 2026-09-30): same data and seed, plain specialist vs the same data through
+the padded path. Plain 1M: 1.03 -> 1.56 -> 2.25 successes before drop; padded: 0.00 at every eval
+(50k: 0.78-0.81 vs 0.00). The eval-side transform is exact (0.0 obs diff), so the model is the
+problem: on the same held-out windows, first-executed-action MSE in raw units is 0.011 (plain),
+0.50 (padded, as sampled), 0.056 (padded with the clamp loosened to +-5).
+
+- **Sampler clamp** (`predict_action` clamped x0 to [-1, 1] unconditionally). That is exactly the
+  data range under `LinearNormalizer`, but ~16% of GaussianNormalizer actions lie outside it (up to
+  ~13), so every padded run executed actions truncated to mean +- 1 std. Now per-dim buffers
+  `action_clip_low/high` (default +-1, so plain runs and old plain checkpoints are unchanged);
+  `train.py` sets them to the training split's action range for padded runs
+  (`_action_range`). Gaussian checkpoints saved before this load with +-5
+  (`LEGACY_GAUSSIAN_CLIP`, warning printed). **Not sufficient on its own**: with the data-range
+  clamp the padded 1M checkpoint still scored 0.03 (64 envs).
+- **`--source-norm minmax`** (`pooling.fit_source_normalizer`, `TrainConfig.source_norm`, recorded
+  in `extra.source_norm`): per-source min/max -> [-1, 1], stored as mean = midpoint, std =
+  half-range so eval is unchanged. A single-source minmax pool equals the plain path's
+  LinearNormalizer output to 2.4e-7, and its clip range is exactly +-1. Default stays `gaussian`
+  until a minmax run is verified in closed loop (runs on idev 1031788, RUNS.md).
+
+---
+
+## 2026-09-29 (later) — ambient diffusion on padded multi-hand data
+
+### 57. `dataset.py`, `train.py`, `cli/train_diffusion.py`, `cli/eval_diffusion.py`, `scripts/build_ambient_rotation_manifest.py` (NEW)
+
+- **Ambient + padded is now supported** (was `NotImplementedError`, item 42).
+  `DiffusionDataset.sample_ambient_batch` emits the per-episode `action_mask`, and its window
+  gather is vectorized (arrays `_win_epi/_win_t/_win_start/_win_len` built in `__init__`):
+  bitwise-identical batches to the old per-window loop for the same RNG (50 batches checked),
+  ~5x faster on the login node. `ambient_tmin` stays one entry per source in dataset order.
+  `train.py` now rejects `source_sample_mode != uniform` with ambient (it was silently ignored).
+- **`--val-embodiment NAME`** (`TrainConfig.val_embodiment`): val loss, and so
+  `policy_best_val.pt`, on one source of a pooled dataset only. Implemented as
+  `DiffusionDataset(only_source=i)`, applied after the train/val split, so the held-out
+  trajectories are the same as without it. `best_val.json` records `val_embodiment`.
+- **`eval-diffusion --embodiment`** for scoring a pooled (padded) policy from the CLI.
+- **`scripts/build_ambient_rotation_manifest.py`**: `--kind sweep` (320 runs: 5 target hands x
+  sigma {0,1,2,3,4,5,6,8,10,12,14,16,18,20,25,100} x seeds 0-3; target 50k + other hands 1M,
+  target first, `--ambient-tmin 0 s s s s`; eval + val on the target only; no epoch snapshots;
+  50 epochs) and `--kind diagnostic` (8 Allegro runs). One run per manifest task; the 4 seeds
+  of a config are consecutive, so PACK=4 puts one config per node.
+
+Verified on the login node (CPU): gating (0 violations in 51,200 samples; only the target at
+t < sigma), masks equal each source's real action dim, sigma=100 target-only, val filter =
+exactly the target's episodes of the unfiltered val split, an ambient padded batch through
+`compute_loss` + backward is finite, all 328 manifest runs parse through the real CLI with
+existing datasets, sbatch node slots correct for `-N 2`. GPU smoke test (idev GH200, through
+the sbatch with /tmp staging and `torch.compile`, 10k-per-hand pools, 2 epochs): ambient s=10
+padded, pooled co-training and `--pool-sources` single-hand all trained, ran target evals, and
+wrote `policy_{best_eval,best_val,latest}.pt` + `train_done.json`.
+- **`scripts/eval_checkpoints.py`** (NEW): re-scores `policy_best_eval/best_val/latest.pt` of each
+  run on its target with a fresh env seed (`1000 + training seed`, same for all three), 100
+  envs = 100 episodes by default, `--also EMB` for control hands, `--shard i/n`; results in
+  `<run>/posthoc_eval.json`, resumable. Smoke-tested on GPU.
+
+---
+
+## 2026-09-29 (later) — pool cross-embodiment datasets at load time
+
+### 56. `src/mjlab_hand/diffusion/pooling.py` (NEW), `train.py`, `cli/train_diffusion.py`, `scripts/build_padded_dataset.py`, `scripts/check_pooling.py` (NEW), `slurm_jobs/vista_train_manifest.sbatch`
+
+Multi-embodiment (padded) training no longer needs a pre-built `padded/*.zarr`.
+
+- **`pooling.py`**: the padded scheme moved out of `build_padded_dataset.py` unchanged
+  (`load_source`, `gather_padded`, per-source `GaussianNormalizer.fit` on all rows, zero-pad at
+  the tail, concatenate whole episodes, `extra.sources` provenance) into `pool_padded(paths)`.
+  One difference in mechanics, not output: sources are loaded one at a time, so peak RAM is one
+  raw source + the pool. `pooled_store(paths)` wraps the result as `InMemoryTrajectoryStore`, a
+  `TrajectoryStore` subclass over numpy arrays with the same attrs the builder writes. Because
+  `DiffusionDataset`'s `np.asarray(store.data["obs"][:], float32)` is then a view, the train
+  and val datasets share one copy (a zarr store decodes one copy each), so pooling in memory
+  uses less RAM than reading a padded zarr. Embodiment name = source filename before
+  `_expert` (unchanged; eval matches on it); duplicate names are refused. `task_family` is
+  inferred (`Grasp-Allegro` -> `Grasp`) unless given.
+- **`build_padded_dataset.py`**: now a thin writer over `pool_padded`; same CLI.
+- **`train-diffusion --dataset A.zarr B.zarr ...`** (`nargs="+"`): >1 dataset pools in memory
+  (`TrainConfig.dataset: Path | list[Path]`). `--pool-sources` with one dataset trains it
+  through the padded path (per-source Gaussian stats, identity policy normalizers) -- the
+  control for "is the padded path itself the problem". `--no-pool-sources` with several
+  datasets is an error. `--task-family` overrides the inferred name. `train_config.json` /
+  wandb record `dataset` as a list for pooled runs. `source_stats.json` is written exactly as
+  for a padded zarr, so eval is unchanged. Manifests: `"dataset": [path, ...]`
+  (`run_manifest_task.py` already expands lists).
+- **sbatch staging** stages every path of a list-valued `dataset`.
+- **`scripts/check_pooling.py`**: re-pools each `padded/*.zarr` from its recorded sources and
+  compares (see JOURNAL.md for results).
+
+Verified: on Vista, the pre-refactor builder, the new builder and `pooled_store` give
+bitwise-identical arrays and metadata (rotation 10k x 5). Against the 14 zarrs built on the
+old (x86) cluster: with the recorded normalizer stats the padding/concatenation is bitwise
+identical; refitting on Vista differs from the recorded stats by float32 rounding only
+(torch CPU reduction order; means off by <=2.4e-7, stds exact), i.e. ~1e-6 in normalized
+values. `train-diffusion` setup (0 epochs) writes the same `source_stats.json` and val split
+from `--dataset A..E` as from the equivalent zarr, and a pooled batch through 2 DataLoader
+workers + `compute_loss(action_mask=...)` + backward is finite.
+
+---
+
+## 2026-09-29 — Vista storage: stage demos, outputs on `$SCRATCH`, promote script
+
+### 55. `slurm_jobs/vista_train_manifest.sbatch`, `scripts/promote_outputs.sh` (NEW), `src/mjlab_hand/diffusion/train.py`
+
+`$WORK` (Stockyard) is a 1 TB Lustre quota shared across all TACC systems and was nearly full
+(item 54's incident), so Vista training no longer reads demos from it or writes checkpoints to it.
+
+- **Data staging.** After picking its manifest tasks, each node rsyncs every dataset its runs
+  use (`dataset` values under `data/mjlab_hand_demos/`, trailing slash ignored) to
+  `DATA_STAGE=scratch` -> `$SCRATCH/cross_embodied_diffusion/mjlab_hand_demos/<same rel path>`
+  (persistent mirror; later jobs only re-stat it) or `DATA_STAGE=tmp` -> `$JOBTMP/mjlab_hand_demos`
+  (node-local, removed by the existing EXIT trap). `DATA_STAGE=auto` (default) is `tmp` for
+  `SLURM_NNODES>1`, `scratch` otherwise; `none` reads in place. `rsync -a` is incremental and
+  writes each file via temp+rename, so it repairs purged files and concurrent jobs staging the
+  same dataset are safe. Datasets outside `data/mjlab_hand_demos` are read in place with a warning.
+- **Outputs.** `OUT_ROOT` (default `$SCRATCH/cross_embodied_diffusion/outputs`).
+- **Run root.** Manifests stay repo-relative: the runs execute from `$JOBTMP/root`, which
+  symlinks every top-level repo entry back to the repo except `data/mjlab_hand_demos` (-> the
+  staged copy; other `data/*` entries -> repo) and `outputs` (-> `OUT_ROOT`).
+  `run_manifest_task.py` is called by absolute path with the manifest's absolute path.
+  `train_config.json` therefore still records `data/mjlab_hand_demos/...` / `outputs/...`.
+  Note: any manifest arg pointing at an existing `outputs/...` checkpoint now resolves on
+  `$SCRATCH`, not Stockyard.
+- `DRY_RUN=1` stages and passes `--dry-run` to `run_manifest_task.py`.
+- **`train.py`** writes `train_done.json` (`num_epochs`, `best_loss`) as its last action.
+- **`scripts/promote_outputs.sh RUN_OR_DIR...`** rsyncs run dirs (paths relative to, or under,
+  the scratch outputs root; a directory is searched for `train_config.json`) to
+  `$STOCKYARD/vista/cross_embodied_diffusion/outputs/<same rel path>` (the repo `outputs`
+  symlink's target). Skips runs without `train_done.json` unless `--force` (needed for runs
+  trained before this item). `--no-epoch-ckpts` drops `policy_epoch_*.pt`; `-n` dry-runs.
+  Refuses if the bytes to transfer exceed free `/work` quota (`lfs quota`).
+
+Verified on a login node with a fake `$SCRATCH`: scratch and tmp staging (byte-identical copy,
+dedupe, `$JOBTMP` cleanup), dry-run commands, and promote on fake runs (skip/force/exclude,
+quota check against the real `/work`). A real 1-epoch CPU `train-diffusion` through the run root
+is recorded in JOURNAL.md. Not verified: a real `sbatch` on a GPU node.
+
+---
+
 ## 2026-09-28 — Vista multi-node jobs
 
 ### 54. `slurm_jobs/vista_train_manifest.sbatch` — multi-node mode

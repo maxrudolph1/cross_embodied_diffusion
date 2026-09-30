@@ -42,6 +42,10 @@ class DiffusionPolicyConfig:
     normalizer_type: str = "linear"
 
 
+# Clamp for gaussian-normalized checkpoints saved before CHANGES.md item 58.
+LEGACY_GAUSSIAN_CLIP = 5.0
+
+
 class DiffusionPolicy(torch.nn.Module):
     def __init__(self, cfg: DiffusionPolicyConfig):
         super().__init__()
@@ -82,6 +86,15 @@ class DiffusionPolicy(torch.nn.Module):
         ).long()
         self.register_buffer("inference_timesteps", steps)
 
+        # Per-dim bounds the sampler clamps its x0 estimate to, in normalized
+        # action space (CHANGES.md item 58). +-1 is exactly the training data's
+        # range under LinearNormalizer. A GaussianNormalizer (padded scheme)
+        # puts ~16% of values outside +-1 (up to ~13), so train.py sets these
+        # to the training data's per-dim min/max for those runs; clamping
+        # them to +-1 truncated every executed action to mean +- 1 std.
+        self.register_buffer("action_clip_low", -torch.ones(cfg.action_dim))
+        self.register_buffer("action_clip_high", torch.ones(cfg.action_dim))
+
     def set_normalizers(
         self,
         obs_norm: LinearNormalizer | GaussianNormalizer,
@@ -89,6 +102,10 @@ class DiffusionPolicy(torch.nn.Module):
     ) -> None:
         self.obs_normalizer = obs_norm
         self.action_normalizer = act_norm
+
+    def set_action_clip(self, low: torch.Tensor, high: torch.Tensor) -> None:
+        self.action_clip_low.copy_(torch.as_tensor(low, dtype=torch.float32))
+        self.action_clip_high.copy_(torch.as_tensor(high, dtype=torch.float32))
 
     def _extract(self, a: torch.Tensor, t: torch.Tensor, x_shape: torch.Size) -> torch.Tensor:
         out = a.gather(0, t)
@@ -221,7 +238,7 @@ class DiffusionPolicy(torch.nn.Module):
             else:
                 alpha_bar_prev = torch.ones_like(alpha_bar_t)
             x0 = (x - torch.sqrt(1.0 - alpha_bar_t) * eps) / torch.sqrt(alpha_bar_t)
-            x0 = x0.clamp(-1.0, 1.0)
+            x0 = torch.maximum(torch.minimum(x0, self.action_clip_high), self.action_clip_low)
             x = torch.sqrt(alpha_bar_prev) * x0 + torch.sqrt(1.0 - alpha_bar_prev) * eps
 
         return self.action_normalizer.unnormalize(x)
@@ -245,6 +262,17 @@ class DiffusionPolicy(torch.nn.Module):
         cfg = DiffusionPolicyConfig(**payload["cfg"])
         policy = cls(cfg)
         policy.load_state_dict(payload["model"], strict=False)
+        if cfg.normalizer_type == "gaussian" and "action_clip_low" not in payload["model"]:
+            # Saved before CHANGES.md item 58: no stored range. +-LEGACY_CLIP
+            # covers >99.6% of normalized training actions.
+            print(
+                f"[WARN] {path}: gaussian-normalized checkpoint without a stored action "
+                f"clip range; clamping sampled actions to +-{LEGACY_GAUSSIAN_CLIP}"
+            )
+            policy.set_action_clip(
+                -LEGACY_GAUSSIAN_CLIP * torch.ones(cfg.action_dim),
+                LEGACY_GAUSSIAN_CLIP * torch.ones(cfg.action_dim),
+            )
         policy.obs_normalizer.load_state_dict(payload["obs_normalizer"])
         policy.action_normalizer.load_state_dict(payload["action_normalizer"])
         return policy.to(device)

@@ -131,6 +131,11 @@ The block above is for the original shared-node cluster. On Vista:
 - `$HOME` is 23 GB; `$WORK` (1 TB, shared with other projects) holds the
   bulk data, venv and outputs via symlinks (`data/mjlab_hand_demos`, `logs`,
   `outputs`, `.venv`). `$SCRATCH` is purged — don't keep results there.
+- `vista_train_manifest.sbatch` stages the demos it needs to `$SCRATCH` (1-node) or node
+  `/tmp` (multi-node) and writes run outputs to `$SCRATCH/cross_embodied_diffusion/outputs`
+  (CHANGES.md item 55). Copy runs worth keeping to Stockyard (the repo `outputs` target) with
+  `scripts/promote_outputs.sh <run or sweep dir, relative to the scratch outputs root>`
+  before the purge gets them.
 
 ## Invariants worth knowing before touching this code
 
@@ -158,6 +163,10 @@ The block above is for the original shared-node cluster. On Vista:
   on them uses identity normalizers and a per-row `action_mask`; eval needs
   the run's `source_stats.json` and an `embodiment=`. Ambient gating +
   padded is refused on purpose (item 42).
+  A padded zarr is optional: `train-diffusion --dataset A.zarr B.zarr ...`
+  pools the per-hand zarrs in memory with the same code
+  (`mjlab_hand.diffusion.pooling`, item 56). Stats refit on a different CPU
+  can differ from a stored pool's by float32 rounding (~1e-7).
 - **Checkpoint names changed on 2026-09-20 (item 45).** New runs write
   `policy_latest.pt`, `policy_best_val.pt` (only with `--val-fraction > 0`)
   and `policy_best_eval.pt`; older runs have `policy_best.pt`, selected by

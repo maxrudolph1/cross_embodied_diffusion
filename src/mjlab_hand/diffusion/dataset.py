@@ -262,6 +262,7 @@ class DiffusionDataset(Dataset):
         split: str = "train",
         val_fraction: float = 0.0,
         val_seed: int = 0,
+        only_source: int | None = None,
     ):
         self.store = store
         self.obs_horizon = obs_horizon
@@ -293,6 +294,16 @@ class DiffusionDataset(Dataset):
         elif split == "val":
             raise ValueError("split='val' requires val_fraction > 0")
 
+        # Keep only one source's episodes (index into extra.sources), applied
+        # AFTER the split so the held-out set is the same trajectories as in
+        # the unfiltered split -- e.g. a target-embodiment-only val loss for
+        # a pooled/ambient run (train.py --val-embodiment, CHANGES.md item 57).
+        if only_source is not None:
+            ids = _episode_source_ids(self.episodes, store)
+            self.episodes = [e for e, i in zip(self.episodes, ids, strict=True) if i == only_source]
+            if not self.episodes:
+                raise RuntimeError(f"no {split!r} episodes from source {only_source} in {store.path}")
+
         # Padded cross-embodiment dataset: each episode belongs wholly to one
         # source (episodes are never split across the concatenation
         # boundary), so a per-episode action_mask -- 1 for that source's real
@@ -323,6 +334,14 @@ class DiffusionDataset(Dataset):
             length = end - start
             for t in range(length):
                 self.indices.append((epi_i, t))
+        # Array form of `indices` (+ each window's episode start/length), for
+        # the vectorized window gather in `sample_ambient_batch`.
+        lengths = np.asarray([e - s for s, e, _ in self.episodes], dtype=np.int64)
+        self._win_epi = np.repeat(np.arange(len(self.episodes), dtype=np.int64), lengths)
+        self._win_t = np.concatenate([np.arange(n, dtype=np.int64) for n in lengths])
+        starts = np.asarray([s for s, _, _ in self.episodes], dtype=np.int64)
+        self._win_start = starts[self._win_epi]
+        self._win_len = lengths[self._win_epi]
 
         # Per-window source id, for `source_sample_weights` (train.py's
         # --source-sample-mode). `_episode_source_ids` falls back to a single
@@ -465,18 +484,25 @@ class DiffusionDataset(Dataset):
         positions = np.clip(positions, 0, valid_counts - 1)
         window_idx = self._sorted_order[positions]
 
-        obs_batch = np.empty((batch_size, self.obs_horizon, self.obs.shape[1]), dtype=np.float32)
-        action_batch = np.empty(
-            (batch_size, self.action_horizon, self.action.shape[1]), dtype=np.float32
-        )
-        for i, w in enumerate(window_idx):
-            epi_i, t_local = self.indices[w]
-            obs_window, action_window = self._window(epi_i, t_local)
-            obs_batch[i] = obs_window
-            action_batch[i] = action_window
+        # Vectorized `_window` over the batch (same clamping: obs indices
+        # clamp at the episode start, action indices at the episode end).
+        start = self._win_start[window_idx][:, None]
+        last = self._win_len[window_idx][:, None] - 1
+        t = self._win_t[window_idx][:, None]
+        obs_off = np.arange(self.obs_horizon) - (self.obs_horizon - 1)
+        obs_idx = start + np.minimum(np.maximum(t + obs_off, 0), last)
+        act_idx = start + np.minimum(t + np.arange(self.action_horizon), last)
 
-        return {
-            "obs": torch.from_numpy(obs_batch),
-            "action": torch.from_numpy(action_batch),
+        out = {
+            "obs": torch.from_numpy(self.obs[obs_idx]),
+            "action": torch.from_numpy(self.action[act_idx]),
             "timesteps": torch.from_numpy(timesteps.astype(np.int64)),
         }
+        # Padded (cross-embodiment) dataset: without the mask the zero-padded
+        # action dims would enter the loss (the reason ambient + padded was
+        # refused before CHANGES.md item 57).
+        if self.action_mask_per_episode is not None:
+            out["action_mask"] = torch.from_numpy(
+                self.action_mask_per_episode[self._win_epi[window_idx]]
+            )
+        return out

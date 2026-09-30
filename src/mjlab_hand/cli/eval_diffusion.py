@@ -24,6 +24,13 @@ def main() -> None:
         default=None,
         help="Embodiment one-hot to append to obs, for policies trained on mixed-embodiment data.",
     )
+    parser.add_argument(
+        "--embodiment",
+        type=str,
+        default=None,
+        help="For a pooled (padded) policy: the source embodiment to drive, as named in the "
+        "run's source_stats.json.",
+    )
     args = parser.parse_args()
 
     from mjlab_hand.diffusion.evaluate import evaluate_diffusion_policy
@@ -36,6 +43,7 @@ def main() -> None:
         device=args.device,
         seed=args.seed,
         onehot=args.onehot,
+        embodiment=args.embodiment,
     )
     print(json.dumps(metrics, indent=2))
     if args.output is not None:
