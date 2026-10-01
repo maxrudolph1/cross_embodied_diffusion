@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 import torch
 import zarr
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Sampler
 
 
 class TrajectoryStore:
@@ -117,56 +117,30 @@ class TrajectoryStore:
         return out
 
     def source_step_bounds(self) -> list[tuple[int, int, str]]:
-        """Per-source (start, end, task) step ranges for a mixed dataset.
-
-        Recovered from the cumulative `extra.sources[i].n_steps` written by
-        `build_mixed_dataset.py`. Raises if the counts do not sum to
-        `n_steps`, rather than silently mis-attributing samples to the wrong
-        source.
-        """
+        """Per-source (start, end, task) step ranges of a multi-source store,
+        from the cumulative `extra.sources[i].n_steps`; [] for a single-source
+        store. Raises if the counts don't sum to n_steps, rather than
+        silently mis-attributing rows to the wrong source."""
         extra = json.loads(self.root.attrs.get("extra", "{}"))
         sources = extra.get("sources")
         if not sources:
-            raise RuntimeError(f"{self.path} has no 'extra.sources' attrs -- not a mixed dataset")
+            return []
         bounds: list[tuple[int, int, str]] = []
         start = 0
         for src in sources:
             n = int(src["n_steps"])
-            end = start + n
-            bounds.append((start, end, str(src.get("task", ""))))
-            start = end
+            bounds.append((start, start + n, str(src.get("task", ""))))
+            start += n
         if start != self.n_steps:
             raise RuntimeError(
                 f"{self.path}: source step counts sum to {start}, but n_steps={self.n_steps}"
             )
         return bounds
 
-    def source_real_dims(self) -> list[tuple[int, int, int, int]]:
-        """Per-source (start, end, real_obs_dim, real_action_dim) for a
-        *padded* cross-embodiment dataset (see `build_padded_dataset.py`).
-
-        Distinct from `source_step_bounds()`: that one is for the 2-source
-        onehot-conditioned `mixed` scheme (same dims, different embodiment
-        label). This is for the N-source zero-padded scheme, where each
-        source keeps its own pre-padding obs/action width so a loss mask can
-        be reconstructed per row without storing a mask array on disk.
-        """
+    def source_action_dims(self) -> list[int]:
+        """Real (pre-padding) action width per source; [] if not recorded."""
         extra = json.loads(self.root.attrs.get("extra", "{}"))
-        sources = extra.get("sources")
-        if not sources or not extra.get("padded"):
-            raise RuntimeError(f"{self.path} has no padded 'extra.sources' attrs")
-        bounds: list[tuple[int, int, int, int]] = []
-        start = 0
-        for src in sources:
-            n = int(src["n_steps"])
-            end = start + n
-            bounds.append((start, end, int(src["obs_dim"]), int(src["action_dim"])))
-            start = end
-        if start != self.n_steps:
-            raise RuntimeError(
-                f"{self.path}: source step counts sum to {start}, but n_steps={self.n_steps}"
-            )
-        return bounds
+        return [int(s["action_dim"]) for s in extra.get("sources", []) if "action_dim" in s]
 
     def summary(self) -> dict[str, Any]:
         episodes = self.episode_slices()
@@ -183,72 +157,16 @@ class TrajectoryStore:
         }
 
 
-def _episode_source_ids(
-    episodes: list[tuple[int, int, bool]], store: "TrajectoryStore"
-) -> np.ndarray:
-    """Which source (embodiment) each episode belongs to, so a train/val
-    split can be stratified per source rather than landing unevenly (or
-    entirely) on one embodiment. Falls back to a single group for a plain
-    single-embodiment dataset, which has no `extra.sources` at all.
-    """
-    bounds: list[tuple[int, int]] | None = None
-    try:
-        bounds = [(s, e) for s, e, _obs_dim, _act_dim in store.source_real_dims()]
-    except RuntimeError:
-        try:
-            bounds = [(s, e) for s, e, _task in store.source_step_bounds()]
-        except RuntimeError:
-            bounds = None
-    if bounds is None:
-        return np.zeros(len(episodes), dtype=np.int64)
-    ids = np.empty(len(episodes), dtype=np.int64)
-    for i, (start, _end, _succ) in enumerate(episodes):
-        for j, (b_start, b_end) in enumerate(bounds):
-            if b_start <= start < b_end:
-                ids[i] = j
-                break
-        else:
-            raise RuntimeError(f"episode at step {start} not within any source range")
-    return ids
-
-
-def _train_val_split(
-    episodes: list[tuple[int, int, bool]],
-    store: "TrajectoryStore",
-    val_fraction: float,
-    val_seed: int,
-) -> np.ndarray:
-    """Deterministic episode-level train/val split.
-
-    Held out at the *trajectory* level, not per-state/per-window: splitting
-    individual (obs, action) windows would let near-identical neighboring
-    states from the same episode leak across the train/val boundary, making
-    the validation loss an overly optimistic measure of generalization.
-    Stratified per source (see `_episode_source_ids`) so every embodiment in
-    a cross-embodiment dataset contributes its own held-out trajectories.
-
-    Returns a bool array (parallel to `episodes`), True where that episode
-    is in the val split. Deterministic in `val_seed`, so a `DiffusionDataset`
-    built with `split="train"` and one built with `split="val"` (same store,
-    val_fraction, val_seed) partition the episode list into disjoint,
-    complementary sets without sharing any state.
-    """
-    source_ids = _episode_source_ids(episodes, store)
-    is_val = np.zeros(len(episodes), dtype=bool)
-    rng = np.random.default_rng(val_seed)
-    for src in np.unique(source_ids):
-        idx = np.flatnonzero(source_ids == src)
-        perm = rng.permutation(idx)
-        n = len(perm)
-        if n <= 1:
-            continue  # can't hold out a trajectory and still have any left to train on
-        n_val = min(max(1, int(round(n * val_fraction))), n - 1)
-        is_val[perm[:n_val]] = True
-    return is_val
-
-
 class DiffusionDataset(Dataset):
-    """Sample (obs_horizon, action_horizon) windows from trajectories."""
+    """Sample (obs_horizon, action_horizon) windows from trajectories.
+
+    `__getitem__(i)` returns obs/action windows (+ `t_min` for an ambient
+    store: the window's source may only be trained at t >= t_min; the step
+    is then drawn in `compute_loss`, data-first). `__getitem__((i, t))` --
+    what `AmbientNoiseFirstBatchSampler` yields -- returns the window with the
+    step already chosen as `t` (noise-first). With `mask_pad_loss`, both add
+    `action_valid` (True on the row's real action channels). CHANGES.md item 63.
+    """
 
     def __init__(
         self,
@@ -259,154 +177,64 @@ class DiffusionDataset(Dataset):
         success_only: bool = True,
         pad_before: bool = True,
         ambient_tmin: list[int] | None = None,
-        split: str = "train",
-        val_fraction: float = 0.0,
-        val_seed: int = 0,
-        only_source: int | None = None,
+        mask_pad_loss: bool = False,
     ):
         self.store = store
         self.obs_horizon = obs_horizon
         self.action_horizon = action_horizon
         self.pad_before = pad_before
+        self.mask_pad_loss = mask_pad_loss
         self.episodes = store.episode_slices(success_only=success_only)
         if not self.episodes:
             self.episodes = store.episode_slices(success_only=False)
         if not self.episodes:
             raise RuntimeError(f"No episodes found in {store.path}")
 
-        # Held-out validation split, by whole trajectory (see
-        # `_train_val_split`). val_fraction=0 (default) is a pure no-op --
-        # every existing caller that doesn't pass split/val_fraction trains
-        # on 100% of episodes exactly as before.
-        self.split = split
-        self.val_fraction = val_fraction
-        if val_fraction > 0:
-            if split not in ("train", "val"):
-                raise ValueError(f"split must be 'train' or 'val', got {split!r}")
-            is_val = _train_val_split(self.episodes, store, val_fraction, val_seed)
-            keep = is_val if split == "val" else ~is_val
-            self.episodes = [e for e, k in zip(self.episodes, keep, strict=True) if k]
-            if not self.episodes:
-                raise RuntimeError(
-                    f"{split!r} split of {store.path} is empty (val_fraction={val_fraction}) "
-                    "-- too few episodes per source to hold any out"
-                )
-        elif split == "val":
-            raise ValueError("split='val' requires val_fraction > 0")
-
-        # Keep only one source's episodes (index into extra.sources), applied
-        # AFTER the split so the held-out set is the same trajectories as in
-        # the unfiltered split -- e.g. a target-embodiment-only val loss for
-        # a pooled/ambient run (train.py --val-embodiment, CHANGES.md item 57).
-        if only_source is not None:
-            ids = _episode_source_ids(self.episodes, store)
-            self.episodes = [e for e, i in zip(self.episodes, ids, strict=True) if i == only_source]
-            if not self.episodes:
-                raise RuntimeError(f"no {split!r} episodes from source {only_source} in {store.path}")
-
-        # Padded cross-embodiment dataset: each episode belongs wholly to one
-        # source (episodes are never split across the concatenation
-        # boundary), so a per-episode action_mask -- 1 for that source's real
-        # action dims, 0 for the zero-padded rest -- is constant within an
-        # episode and cheap to precompute once here rather than looked up
-        # per __getitem__ call.
-        self.action_mask_per_episode: np.ndarray | None = None
-        try:
-            src_dims = store.source_real_dims()
-        except RuntimeError:
-            src_dims = None
-        if src_dims is not None:
-            action_dim = int(store.root.attrs.get("action_dim", 0))
-            masks = np.zeros((len(self.episodes), action_dim), dtype=np.float32)
-            for epi_i, (start, _end, _succ) in enumerate(self.episodes):
-                real_action_dim = None
-                for b_start, b_end, _real_obs, real_act in src_dims:
-                    if b_start <= start < b_end:
-                        real_action_dim = real_act
-                        break
-                if real_action_dim is None:
-                    raise RuntimeError(f"episode at step {start} not within any source range")
-                masks[epi_i, :real_action_dim] = 1.0
-            self.action_mask_per_episode = masks
-
         self.indices: list[tuple[int, int]] = []
         for epi_i, (start, end, _) in enumerate(self.episodes):
-            length = end - start
-            for t in range(length):
+            for t in range(end - start):
                 self.indices.append((epi_i, t))
-        # Array form of `indices` (+ each window's episode start/length), for
-        # the vectorized window gather in `sample_ambient_batch`.
         lengths = np.asarray([e - s for s, e, _ in self.episodes], dtype=np.int64)
         self._win_epi = np.repeat(np.arange(len(self.episodes), dtype=np.int64), lengths)
-        self._win_t = np.concatenate([np.arange(n, dtype=np.int64) for n in lengths])
-        starts = np.asarray([s for s, _, _ in self.episodes], dtype=np.int64)
-        self._win_start = starts[self._win_epi]
-        self._win_len = lengths[self._win_epi]
-
-        # Per-window source id, for `source_sample_weights` (train.py's
-        # --source-sample-mode). `_episode_source_ids` falls back to a single
-        # group (all zeros) for a plain non-mixed dataset, so this is always
-        # populated -- "balanced" mode just degenerates to a no-op there.
-        episode_source_ids = _episode_source_ids(self.episodes, store)
-        self.source_id_per_window = np.array(
-            [episode_source_ids[epi_i] for epi_i, _t_local in self.indices], dtype=np.int64
-        )
 
         self.obs = np.asarray(store.data["obs"][:], dtype=np.float32)
         self.action = np.asarray(store.data["action"][:], dtype=np.float32)
 
-        self.ambient_tmin: np.ndarray | None = None
-        # Per-window t_min and a sort-by-t_min index, built lazily the first
-        # time sample_ambient_batch is called (not needed for plain __getitem__).
-        self._window_tmin: np.ndarray | None = None
-        self._sorted_tmin: np.ndarray | None = None
-        self._sorted_order: np.ndarray | None = None
-        if ambient_tmin is not None:
-            bounds = store.source_step_bounds()  # raises if not a mixed dataset
-            if len(ambient_tmin) != len(bounds):
-                raise ValueError(
-                    f"ambient_tmin has {len(ambient_tmin)} entries but dataset has "
-                    f"{len(bounds)} sources"
-                )
-            # Per-episode t_min resolved from the episode's step offset, not
-            # its index, so this stays correct after success_only drops
-            # episodes and shifts indices around.
-            per_episode_tmin = []
-            for start, _end, _succ in self.episodes:
-                tmin = None
-                for (b_start, b_end, _task), t in zip(bounds, ambient_tmin, strict=True):
-                    if b_start <= start < b_end:
-                        tmin = t
-                        break
-                if tmin is None:
+        # Source of each episode (episodes never straddle a source boundary).
+        bounds = store.source_step_bounds()
+        self.episode_source = np.zeros(len(self.episodes), dtype=np.int64)
+        for i, (start, _end, _succ) in enumerate(self.episodes):
+            for j, (b0, b1, _task) in enumerate(bounds):
+                if b0 <= start < b1:
+                    self.episode_source[i] = j
+                    break
+            else:
+                if bounds:
                     raise RuntimeError(f"episode at step {start} not within any source range")
-                per_episode_tmin.append(tmin)
-            self.ambient_tmin = np.asarray(per_episode_tmin, dtype=np.int64)
+
+        full_act = self.action.shape[1]
+        src_act = store.source_action_dims()
+        self.episode_act_dim = np.asarray(
+            [src_act[s] if src_act else full_act for s in self.episode_source], dtype=np.int64
+        )
+        self.window_act_dim = self.episode_act_dim[self._win_epi]
+
+        self.ambient_tmin = ambient_tmin
+        if ambient_tmin is not None:
+            if len(ambient_tmin) != max(len(bounds), 1):
+                raise ValueError(
+                    f"ambient_tmin has {len(ambient_tmin)} entries but the store has "
+                    f"{len(bounds)} sources (in its stored order)"
+                )
+            self.episode_tmin = np.asarray(
+                [ambient_tmin[s] for s in self.episode_source], dtype=np.int64
+            )
+        else:
+            self.episode_tmin = np.zeros(len(self.episodes), dtype=np.int64)
+        self.window_tmin = self.episode_tmin[self._win_epi]
 
     def __len__(self) -> int:
         return len(self.indices)
-
-    def source_sample_weights(self, mode: str) -> np.ndarray | None:
-        """Per-window sampling weight for a `torch.utils.data.WeightedRandomSampler`.
-
-        'uniform': None (plain DataLoader shuffling) -- every window equally
-        likely, i.e. each source's share of a batch is proportional to how
-        many rows it has. For a "scarce co-training" pool (one source at 50k,
-        the rest at 1M), that source would get roughly 1/80 the training
-        signal of a full-size one.
-
-        'balanced': each source gets equal *total* sampling weight regardless
-        of row count -- a 50k scarce source is then represented in training
-        as often, in expectation, as each 1M source, instead of being
-        drowned out by raw data volume.
-        """
-        if mode == "uniform":
-            return None
-        if mode != "balanced":
-            raise ValueError(f"unknown source_sample_mode {mode!r}")
-        ids = self.source_id_per_window
-        counts = np.bincount(ids)
-        return (1.0 / counts[ids]).astype(np.float64)
 
     def _window(self, epi_i: int, t_local: int) -> tuple[np.ndarray, np.ndarray]:
         start, end, _ = self.episodes[epi_i]
@@ -424,85 +252,58 @@ class DiffusionDataset(Dataset):
             act_idx.append(start + j)
         return self.obs[obs_idx], self.action[act_idx]
 
-    def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
+    def __getitem__(self, item) -> dict[str, torch.Tensor]:
+        t_fixed = None
+        if isinstance(item, (tuple, list)):
+            idx, t_fixed = int(item[0]), int(item[1])
+        else:
+            idx = int(item)
         epi_i, t_local = self.indices[idx]
         obs_window, action_window = self._window(epi_i, t_local)
         out = {
             "obs": torch.from_numpy(obs_window),
             "action": torch.from_numpy(action_window),
         }
-        if self.action_mask_per_episode is not None:
-            out["action_mask"] = torch.from_numpy(self.action_mask_per_episode[epi_i])
+        if t_fixed is not None:
+            out["t"] = torch.tensor(t_fixed, dtype=torch.long)
+        elif self.ambient_tmin is not None:
+            out["t_min"] = torch.tensor(int(self.window_tmin[idx]), dtype=torch.long)
+        if self.mask_pad_loss:
+            valid = torch.zeros(self.action.shape[1], dtype=torch.bool)
+            valid[: int(self.window_act_dim[idx])] = True
+            out["action_valid"] = valid
         return out
 
-    def _build_ambient_index(self) -> None:
-        """Per-window t_min array (parallel to self.indices) plus a
-        sort-by-t_min index, so sample_ambient_batch can find "all windows
-        valid at timestep t" via a single searchsorted call."""
-        if self.ambient_tmin is None:
-            raise RuntimeError("dataset was not constructed with ambient_tmin")
-        window_tmin = np.asarray(
-            [self.ambient_tmin[epi_i] for epi_i, _t_local in self.indices], dtype=np.int64
-        )
-        order = np.argsort(window_tmin, kind="stable")
-        self._window_tmin = window_tmin
-        self._sorted_order = order
-        self._sorted_tmin = window_tmin[order]
 
-    def sample_ambient_batch(
-        self, batch_size: int, num_train_timesteps: int, rng: np.random.Generator
-    ) -> dict[str, torch.Tensor]:
-        """Sample a batch for ambient-diffusion training: timestep FIRST,
-        then a training tuple uniform among those valid at that timestep.
+class AmbientNoiseFirstBatchSampler(Sampler):
+    """Noise-first ambient batches: for each row draw the diffusion step t
+    uniformly from [0, T) FIRST, then a window uniformly among those whose
+    t_min <= t. Yields lists of (index, t) for DiffusionDataset.__getitem__.
 
-        Sampling a tuple first and then a timestep conditioned on its own
-        t_min (the naive order) makes the probability that *any* step lands
-        below a given t proportional to the fraction of the dataset that is
-        admitted there -- e.g. with a 10k-target/400k-source mix, the target
-        is only ~2.4% of rows, so low-noise training would be suppressed by
-        ~40x versus the intended schedule. Sampling t first and then
-        choosing uniformly among the (possibly tiny, but always non-empty
-        because the target has t_min=0) set of currently-valid tuples keeps
-        every t equally likely, matching the ungated schedule exactly, and
-        gives the valid tuples at that t their full, undiluted share of
-        training regardless of how rare they are dataset-wide.
-        """
-        if self._sorted_tmin is None:
-            self._build_ambient_index()
-        assert self._sorted_tmin is not None and self._sorted_order is not None
+    Drawing the window first and then t >= t_min (data-first) makes the
+    training mass at a low t proportional to the share of windows admitted
+    there, starving the low-noise steps by (N_target + N_other) / N_target
+    (41x on 2-hand, 79-97x on padded stores per MIGRATION section 7).
+    Noise-first keeps every t equally likely. Uses torch's global RNG
+    (seeded by torch.manual_seed), no explicit generator.
+    """
 
-        timesteps = rng.integers(0, num_train_timesteps, size=batch_size)
-        # Number of windows with t_min <= t, for each sampled t (sorted_tmin
-        # is ascending, so this is exactly the count at the front of the array).
-        valid_counts = np.searchsorted(self._sorted_tmin, timesteps, side="right")
-        if np.any(valid_counts == 0):
-            raise RuntimeError(
-                "no training tuple is valid at some sampled timestep -- every source "
-                "must include a t_min=0 (fully-admitted) entry"
-            )
-        positions = (rng.random(batch_size) * valid_counts).astype(np.int64)
-        positions = np.clip(positions, 0, valid_counts - 1)
-        window_idx = self._sorted_order[positions]
+    def __init__(self, dataset: DiffusionDataset, batch_size: int, num_train_timesteps: int):
+        self.batch_size = batch_size
+        self.T = num_train_timesteps
+        tmin = torch.from_numpy(dataset.window_tmin)
+        self.sorted_tmin, self.order = torch.sort(tmin, stable=True)
+        self.n_batches = len(dataset) // batch_size
+        if int(self.sorted_tmin[0]) != 0:
+            raise ValueError("noise-first sampling needs a source with t_min = 0 (the target)")
 
-        # Vectorized `_window` over the batch (same clamping: obs indices
-        # clamp at the episode start, action indices at the episode end).
-        start = self._win_start[window_idx][:, None]
-        last = self._win_len[window_idx][:, None] - 1
-        t = self._win_t[window_idx][:, None]
-        obs_off = np.arange(self.obs_horizon) - (self.obs_horizon - 1)
-        obs_idx = start + np.minimum(np.maximum(t + obs_off, 0), last)
-        act_idx = start + np.minimum(t + np.arange(self.action_horizon), last)
+    def __len__(self) -> int:
+        return self.n_batches
 
-        out = {
-            "obs": torch.from_numpy(self.obs[obs_idx]),
-            "action": torch.from_numpy(self.action[act_idx]),
-            "timesteps": torch.from_numpy(timesteps.astype(np.int64)),
-        }
-        # Padded (cross-embodiment) dataset: without the mask the zero-padded
-        # action dims would enter the loss (the reason ambient + padded was
-        # refused before CHANGES.md item 57).
-        if self.action_mask_per_episode is not None:
-            out["action_mask"] = torch.from_numpy(
-                self.action_mask_per_episode[self._win_epi[window_idx]]
-            )
-        return out
+    def __iter__(self):
+        for _ in range(self.n_batches):
+            t = torch.randint(0, self.T, (self.batch_size,))
+            count = torch.searchsorted(self.sorted_tmin, t, right=True)
+            pos = (torch.rand(self.batch_size) * count).long().clamp_max(count - 1)
+            idx = self.order[pos]
+            yield list(zip(idx.tolist(), t.tolist(), strict=True))

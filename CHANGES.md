@@ -9,6 +9,119 @@ comments ("See CHANGES.md item N") -- never renumber; append the next number.
 
 ---
 
+## 2026-10-01 (evening) — migrate to Bundle's design (MIGRATION.md), re-implemented
+
+### 63. Bundle migration: term-aligned padding, shared/frozen normalizer, noise-first sampler, val store, new checkpoints
+
+Branch `bundle-migration` (worktree `$WORK/code/ced-migrate`). MIGRATION.md (on `main`) asks
+this repo ("Branch") to match "Bundle" for diffusion training/model/eval. **Bundle's code is
+not available**, so everything below is re-implemented from MIGRATION.md's description, not
+copied; bitwise parity with Bundle (section 8 checks 2 and 4) cannot be tested. Items marked
+**[reconstructed]** are choices the doc does not pin down.
+
+Source (`src/mjlab_hand/`):
+- **`diffusion/padding.py` (NEW).** Term-aligned layout from `schemas.json` ($MJHAND_SCHEMAS ->
+  `outputs/analysis/schemas.json` -> tracked `configs/schemas.json`, generated from
+  `spaces_reference.json`). Each obs term gets a block as wide as the family max; each hand's
+  values at the block start [reconstructed: within-block placement]; actions front-packed; pad
+  0. Family widths grasp 191/28, rotation 91/22 -- exactly MIGRATION's numbers. `build_plan`,
+  `obs_index`, `pad_obs`, `pad_action`, `obs_valid`, `action_valid`.
+- **`diffusion/normalizer.py`.** `GaussianNormalizer` removed. `LinearNormalizer.fit_masked(data,
+  groups, clip_pct, include_zero)` (min/max or percentiles over only rows using each column;
+  groups = (row_start, row_end, valid_cols) [reconstructed signature]) and
+  `fit_standardized(data, groups)` (low/high = mean -/+ std). `norm_digest` (sha256 of the bounds).
+- **`diffusion/frozen_norm.py` (NEW).** Per-family artifact JSON (bounds, plan, sources, digest),
+  `build_artifact`, `load_artifact` (re-verifies the digest), `select`. Fit over rows that use each
+  column, ranges widened to contain 0. **Deviation:** fit on the five 1M stores per family (Bundle
+  used 10M, not on Vista): `configs/norm_rotation_minmax.json` sha256:3e55ef54...,
+  `configs/norm_grasp_minmax.json` sha256:e9b840c7... (Bundle's digests differ: 3e4a9afc / 28bd9175).
+- **`diffusion/policy.py`.** Removed `normalizer_type`, per-dim clamp buffers, legacy clip,
+  `action_reconstruction_loss`, `action_mask=`. Config gains `mask_pad_loss=False`,
+  `x0_clamp=1.0`. `compute_loss(obs, action, timesteps=None, t_min=None, weight=None,
+  action_valid=None)`: noise-first `timesteps`, data-first `t_min` (t ~ U[t_min, T)), both ->
+  ValueError; weight-normalized mean of per-row losses; mask from `action_valid` only when
+  `mask_pad_loss`. `predict_action(obs, action_valid=None)`: padded channels held at
+  sqrt(ab)*c + sqrt(1-ab)*z before each net call (c = normalized raw 0, z = the initial noise
+  [reconstructed: choice of z]), set to c at the end; `x0.clamp(-x0_clamp, x0_clamp)`.
+  Old checkpoints raise on load (by design).
+- **`diffusion/dataset.py`.** Removed split/val/`only_source`, `source_real_dims`,
+  `_episode_source_ids`, `_train_val_split`, balanced weights, `sample_ambient_batch`.
+  `source_step_bounds()` returns [] for single-source stores; `source_action_dims()`.
+  `DiffusionDataset(..., ambient_tmin, mask_pad_loss)`: `episode_/window_tmin`,
+  `episode_/window_act_dim`; `__getitem__(i)` -> obs, action (+ `t_min` if ambient);
+  `__getitem__((i, t))` -> + `t`; + `action_valid` if `mask_pad_loss`.
+  `AmbientNoiseFirstBatchSampler` (DataLoader batch sampler, torch global RNG).
+- **`diffusion/validate.py` (NEW).** `DenoisedValidator`: fixed `val_windows` windows (split evenly
+  over scored hands, numpy seed 0) from a term-aligned val store; DDIM-sampled chunk vs demo,
+  MSE per hand on its own action channels + pooled [reconstructed: metric details]; hands =
+  the run's padded eval spec tasks (else all); forked torch RNG (no effect on training RNG).
+- **`diffusion/train.py`.** Single `dataset: Path`; new fields `ambient_sampler="data-first"`,
+  `mask_pad_loss`, `norm_mode="shared"|pad-aware|zscore|frozen`, `norm_clip_pct`, `norm_artifact`,
+  `x0_clamp`, `val_dataset`, `val_windows=2048`, `keep_last=3`; removed `val_fraction`, `val_*`,
+  `source_sample_mode`, `compile_mode`, `pool_sources`, `task_family`, `source_norm`. Kept wandb
+  (optional, off). `check_config` rejects: frozen without/with-only artifact, zscore with
+  x0_clamp <= 1, clip_pct without pad-aware, noise-first without ambient_tmin. Missing CUDA
+  raises. Loader: plain shuffle or noise-first batch sampler, no explicit generator. Normalizer
+  per `norm_mode` (shared = `fit` over the store incl. padding; pad-aware = `fit_masked`,
+  include_zero [reconstructed]; zscore = `fit_standardized`, grouped on padded stores; frozen =
+  artifact, family/layout checked). Refuses old tail-padded stores. Checkpoints: latest,
+  `policy_best.pt` (train loss), rolling `policy_last{k}_epoch{N}.pt` (k=0 newest; at the
+  `latest_every_epochs` cadence + final epoch [reconstructed]), `policy_best_rollout.pt`,
+  `policy_best_val.pt`; `selection.json` written last. Forced eval (and val) on the final epoch.
+  Eval rows add `pad` and `val`. `train_config.json` adds `norm_digest`. No more
+  `source_stats.json`, `train_done.json`, `best_*.json`, `val_metrics.jsonl`.
+  `save_every_epochs` accepted but unused (as in Bundle).
+- **`diffusion/evaluate.py`.** `EmbodimentStats` / `embodiment=` removed; `pad: bool` ->
+  `DiffusionActionChunkPolicy(pad_task=task)`: scatter through `obs_index` (native width mismatch
+  is an error), execute the native action prefix, hold padded channels when the checkpoint has
+  `mask_pad_loss`. Missing CUDA raises.
+- **`eval/rotation.py`.** Adds `success_rate_any`, `avg_targets_offered`,
+  `per_target_success_rate` (ended episodes), `..._incl_truncated` (all), `per_episode`
+  [reconstructed: definitions inferred from the names].
+- **`cli/train_diffusion.py`** new flags as above; **`cli/eval_diffusion.py`** drops `--embodiment`.
+- **Deleted:** `diffusion/pooling.py`.
+
+Scripts / jobs:
+- NEW `build_padded_dataset.py` (term-aligned; HANDS order; `extra.pad_scheme="term_aligned"`),
+  `padded_grid.py` (configs `scarce<Hand>_K50k/_K10k`, `all_1M/50k/10k`; store dir
+  `data/mjlab_hand_demos/padded_ta/` [deviation from Bundle's data/padded/, for staging];
+  `target_ambient_tmin`; `epochs_for` = round(784000 / (windows // 256))),
+  `check_padded_dataset.py`, `build_family_normalizer.py` (default `--stat minmax`: Bundle's
+  defaulted to zscore though its runs used minmax), `check_frozen_norm.py`,
+  `build_val_split.py` + `slurm_jobs/vista_collect_val.sbatch` (**deviation:** val stores from
+  fresh rollouts of the same experts, seed 1000, episodes whose first obs equals a 1M training
+  episode start dropped, 20k steps per hand; Bundle used its 10M collections),
+  `rescore_selected.py` (replaces `eval_checkpoints.py`; -> `final_eval.jsonl`),
+  `check_ambient_sampler.py`, `check_pad_fixes.py`.
+- Rewritten `build_ambient_rotation_manifest.py` (recipe flags; `--kind diagnostic` = Allegro x
+  sigma {0,2,100} x seeds {0,1,2}). `run_manifest_task.py` and `vista_train_manifest.sbatch` lose
+  compile; the sbatch also stages `val-dataset`. `vista_eval_checkpoints.sbatch` runs
+  `rescore_selected.py`. `promote_outputs.sh` completion marker `selection.json` (old
+  `train_done.json` still accepted), `--no-epoch-ckpts` removed. `hf_sync.py` README text.
+- Deleted: `check_pooling.py`, `eval_checkpoints.py`, `prototype_torch_compile.py`,
+  `build_scarce_specialist_manifest.py`, `slurm_jobs/train_{cross_embodiment,cross_embodiment_50k,
+  ambient_400k_20k_sweep,rotation_specialist,scarce_specialist}.sbatch` (old-cluster scripts using
+  removed flags).
+
+Verified (CPU, Vista `gg` node): term-aligned `InHand-Rotation_pad5_scarceAllegro_K50k` (4,002,225
+steps, 91/22) matches its five sources bit for bit on 1000 rows each, padding exactly 0
+(`check_padded_dataset.py`); frozen artifacts verify (`check_frozen_norm.py`);
+`check_pad_fixes.py` (both families): obs scatter == builder row for all 10 tasks, action width =
+native, held padded channels exactly 0 raw, dLoss/dPred on padded channels 0 iff
+`mask_pad_loss`; `check_ambient_sampler.py` on that store, tmin 0 20 20 20 20: 0 gating
+violations, noise-first mass flat (max/min 1.18 at 1k samples/t), data-first relative mass at
+t=0 = 0.02; all 9 diagnostic runs parse through the CLI. GPU training/eval and the val split
+are not yet run (see JOURNAL).
+
+**Open discrepancy:** MIGRATION.md says action std under Bundle's frozen minmax is 0.077
+(elsewhere 0.153 / 0.179). Ours is 0.239 (rotation) / 0.259 (grasp) on the real channels.
+Not explained by fitting on 1M instead of 10M (max |action| barely grows with data: Allegro
+12.0 at 50k and at 1M, LEAP 11.9 -> 12.8). The data scale sets the effective SNR per diffusion
+step, so sigma values may not map 1:1 onto Bundle's; compare curve shapes, not sigma indices,
+until resolved.
+
+---
+
 ## 2026-09-30 (night) — scheduling guidance for agents
 
 ### 61. `scripts/queue_wait_stats.sh` (NEW), `AGENTS.md`

@@ -1,4 +1,15 @@
-"""Rotation task evaluator: count distinct targets reached before object drops."""
+"""Rotation task evaluator: count distinct targets reached before object drops.
+
+Each env's first episode is scored. Besides avg_successes_before_drop it
+reports (CHANGES.md item 63, re-implementing Bundle's rotation.py):
+  success_rate_any          fraction of episodes with >= 1 target reached
+  avg_targets_offered       targets presented while the episode ran (1 + resamples)
+  per_target_success_rate   reached / offered, over episodes that ended
+                            within the eval window (dropped or timed out)
+  per_target_success_rate_incl_truncated   same over all episodes, including
+                            ones still running when the window ended
+  per_episode               [{successes, targets_offered, survival_s, ended}]
+"""
 
 from __future__ import annotations
 
@@ -50,6 +61,8 @@ class RotationEvaluator(TaskEvaluator):
         self.episode_step = torch.zeros(self.num_envs, dtype=torch.int64, device=device)
         self.survival_steps = torch.zeros(self.num_envs, dtype=torch.int64, device=device)
         self.done_ever = torch.zeros(self.num_envs, dtype=torch.bool, device=device)
+        self.targets_offered = torch.ones(self.num_envs, dtype=torch.int64, device=device)
+        self.per_episode: list[dict] = []
 
         # Pre-step snapshot
         self._pre_step_at_goal = torch.zeros(self.num_envs, dtype=torch.bool, device=device)
@@ -77,6 +90,7 @@ class RotationEvaluator(TaskEvaluator):
 
         # Detect target resampling: reset streaks so each new target can be counted
         target_changed = (self.last_target_quat != target_quat).any(dim=-1)
+        self.targets_offered += (target_changed & ~self.done_ever).long()
         if target_changed.any():
             self.consecutive_success[target_changed] = 0
             self.target_reached[target_changed] = False
@@ -94,6 +108,7 @@ class RotationEvaluator(TaskEvaluator):
         self.episode_step[env_ids] = 0
         self.survival_steps[env_ids] = 0
         self.done_ever[env_ids] = False
+        self.targets_offered[env_ids] = 1
 
     def on_reset(self, done_mask: torch.Tensor) -> None:
         if not done_mask.any():
@@ -145,6 +160,16 @@ class RotationEvaluator(TaskEvaluator):
         self.total_success_count += int(self.success_count[done_idx].sum().item())
         self.total_survival_steps += int(self.survival_steps[done_idx].sum().item())
         self.completed_episodes += n_done
+        self._record(done_idx, ended=True)
+
+    def _record(self, idx: torch.Tensor, ended: bool) -> None:
+        for i in idx.tolist():
+            self.per_episode.append({
+                "successes": int(self.success_count[i]),
+                "targets_offered": int(self.targets_offered[i]),
+                "survival_s": float(self.survival_steps[i]) * self.dt,
+                "ended": ended,
+            })
 
     def finalize(self) -> dict[str, float]:
         # Flush envs that never terminated during the eval window
@@ -155,6 +180,7 @@ class RotationEvaluator(TaskEvaluator):
             self.total_success_count += int(self.success_count[nd_idx].sum().item())
             self.total_survival_steps += int(self.survival_steps[nd_idx].sum().item())
             self.completed_episodes += n_nd
+            self._record(nd_idx, ended=False)
 
         avg_successes = self.total_success_count / max(self.completed_episodes, 1)
         avg_survival_time = (self.total_survival_steps / max(self.completed_episodes, 1)) * self.dt
@@ -167,6 +193,25 @@ class RotationEvaluator(TaskEvaluator):
             "avg_survival_time_s": avg_survival_time,
             "drop_rate": drop_rate,
             "avg_rot_dist": avg_rot_dist,
+            **self._episode_metrics(),
+        }
+
+    def _episode_metrics(self) -> dict:
+        eps = self.per_episode
+        if not eps:
+            return {}
+        ended = [e for e in eps if e["ended"]]
+
+        def rate(rows):
+            offered = sum(e["targets_offered"] for e in rows)
+            return sum(e["successes"] for e in rows) / offered if offered else float("nan")
+
+        return {
+            "success_rate_any": sum(e["successes"] > 0 for e in eps) / len(eps),
+            "avg_targets_offered": sum(e["targets_offered"] for e in eps) / len(eps),
+            "per_target_success_rate": rate(ended),
+            "per_target_success_rate_incl_truncated": rate(eps),
+            "per_episode": eps,
         }
 
     def report(self, metrics: dict[str, float]) -> None:
@@ -176,4 +221,8 @@ class RotationEvaluator(TaskEvaluator):
         print(f"Avg survival time:           {metrics['avg_survival_time_s']:.3f} s")
         print(f"Drop rate:                   {metrics['drop_rate']:.2%}")
         print(f"Avg rotation distance:       {metrics['avg_rot_dist']:.4f} rad")
+        if "success_rate_any" in metrics:
+            print(f"Success rate (any target):   {metrics['success_rate_any']:.2%}")
+            print(f"Per-target success rate:     {metrics['per_target_success_rate']:.3f}")
+            print(f"Avg targets offered:         {metrics['avg_targets_offered']:.2f}")
         print("=================================================\n")

@@ -119,9 +119,9 @@ def write_readme(stage_dir: Path, zarrs: list[Path], experts: dict[str, str]):
     lines += [f"| `{name}` | `{ckpt}` |" for name, ckpt in sorted(experts.items())]
     lines += [
         "",
-        "`subsets_*` are subsamples of the 1M sets; `padded/` are pooled,",
-        "per-source-normalized, zero-padded mixes built by",
-        "`scripts/build_padded_dataset.py`.",
+        "`subsets_*` are subsamples of the 1M sets; `padded/` are the old",
+        "tail-padded, per-source-normalized mixes (pre CHANGES.md item 63);",
+        "`padded_ta/` are term-aligned raw mixes from `scripts/padded_grid.py`.",
         "",
     ]
     (stage_dir / "README.md").write_text("\n".join(lines))

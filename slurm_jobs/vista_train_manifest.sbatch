@@ -22,10 +22,9 @@
 # 212 GB). So PACK=2 (4 runs, ~18h for 50k) for turnaround, PACK=4 (8 runs,
 # same SU/run within 5%, half the nodes) when the 20-running-job cap binds.
 #
-# COMPILE_MODE (default reduce-overhead; "none" = eager) torch.compiles the
-# UNet (CHANGES.md item 53). With it the same sweep gives 1 -> 3.1s | 2 ->
-# 5.9s | 4 -> 10.8s | 8 -> 21.8s per epoch: 2.3x faster alone, node
-# throughput plateau 1.38x eager's. 50k runs: ~12h at 4/node, ~24h at 8/node.
+# No torch.compile since CHANGES.md item 63 (it changes numerics; Bundle
+# never compiled). The eager timings above apply: expect ~2.3x longer per run
+# than the compiled 2026-09-28/10-01 Vista runs.
 #
 # Submit from a LOGIN node (sbatch is disabled on compute/idev nodes), from
 # the repo root, with the array sized to ceil(n_manifest_tasks / PACK):
@@ -71,17 +70,15 @@ if [[ "${1:-}" != "--node" && "${SLURM_NNODES:-1}" -gt 1 ]]; then
     bash slurm_jobs/vista_train_manifest.sbatch --node
 fi
 source .venv/bin/activate
+# The shared venv's editable install points at one checkout's src/; put THIS
+# checkout's src/ first so a job runs the code it was submitted from (e.g. a
+# git worktree on another branch). CHANGES.md item 63.
+export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
 
 : "${MANIFEST:?set MANIFEST=path/to/manifest.json via --export}"
 PACK="${PACK:-2}"
-COMPILE_MODE="${COMPILE_MODE:-reduce-overhead}"
-COMPILE_ARGS=()
-[[ "$COMPILE_MODE" != "none" ]] && COMPILE_ARGS=(--compile-mode "$COMPILE_MODE")
 
 export MUJOCO_GL=egl
-# TACC's default modules set CC=nvc; Triton (torch.compile) needs gcc to build
-# its launcher stub, else InductorError: CalledProcessError on nvc.
-export CC=gcc
 export PYOPENGL_PLATFORM=egl
 # Nodes are exclusive, so node-local /tmp is ours alone (no shared-/tmp ENOSPC
 # from concurrent wandb services, unlike the shared-node cluster) and the path
@@ -102,7 +99,7 @@ if (( ${#TASK_IDS[@]} == 0 )); then
   echo "[WARN] node slot $NODE_SLOT has no manifest tasks (N_TASKS=$N_TASKS, PACK=$PACK)"
   exit 0
 fi
-echo "[INFO] $(hostname) manifest=$MANIFEST tasks=${TASK_IDS[*]} compile=$COMPILE_MODE"
+echo "[INFO] $(hostname) manifest=$MANIFEST tasks=${TASK_IDS[*]}"
 
 # --- Stage data, redirect outputs (CHANGES.md item 55) ----------------------
 # $WORK (Stockyard) is a shared, ~full Lustre quota, so runs no longer read
@@ -143,8 +140,8 @@ MANIFEST_ABS="$(realpath "$MANIFEST")"
 mapfile -t DATASETS < <(python3 -c '
 import json, sys
 m = json.load(open(sys.argv[1]))
-ds = lambda d: d if isinstance(d, list) else [d]  # list = pooled sources
-print("\n".join(sorted({p.rstrip("/") for t in sys.argv[2:] for r in m[int(t)] for p in ds(r["dataset"])})))
+keys = ("dataset", "val-dataset")  # the training store and its val store
+print("\n".join(sorted({r[k].rstrip("/") for t in sys.argv[2:] for r in m[int(t)] for k in keys if r.get(k)})))
 ' "$MANIFEST_ABS" "${TASK_IDS[@]}")
 
 if [[ "$DATA_STAGE" != none ]]; then
@@ -177,5 +174,4 @@ cd "$RUNROOT"
 
 DRY_ARGS=()
 [[ -n "${DRY_RUN:-}" ]] && DRY_ARGS=(--dry-run)
-python3 "$REPO/scripts/run_manifest_task.py" --parallel "${DRY_ARGS[@]}" "${COMPILE_ARGS[@]}" \
-  "$MANIFEST_ABS" "${TASK_IDS[@]}"
+python3 "$REPO/scripts/run_manifest_task.py" --parallel "${DRY_ARGS[@]}" "$MANIFEST_ABS" "${TASK_IDS[@]}"

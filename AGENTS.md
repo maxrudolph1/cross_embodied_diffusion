@@ -117,8 +117,8 @@ The block above is for the original shared-node cluster. On Vista:
   login nodes needs interactive 2FA. An agent inside idev can test on the node but cannot
   submit: hand the exact `sbatch` line to the user. idev sessions can land on CPU-only `gg`
   nodes (no `nvidia-smi`); check before planning GPU work there.
-- `export CC=gcc` for anything using `torch.compile` (TACC sets `CC=nvc`). The Vista sbatch
-  compiles by default (`COMPILE_MODE=reduce-overhead`, 2.3x per run; item 53). No
+- No `torch.compile` since item 63 (it changes numerics; item 53's compile path is gone),
+  so runs are ~2.3x slower per run than the 09-28..10-01 compiled Vista runs. No
   `LD_LIBRARY_PATH` workaround needed (item 50). `OMP_NUM_THREADS=1` makes `nproc` print 1;
   the node still has 72 cores.
 
@@ -140,11 +140,16 @@ The block above is for the original shared-node cluster. On Vista:
   prints the commands. Per-node throughput is flat from ~4 to 16 packed runs, so packing sets
   wall time, not cost (ANALYSIS.md "Vista job shape"); one run alone is ~3.5x faster than one
   of 4 packed (rotation pool, 50 epochs: 2 h 22 m alone).
-- Multi-hand data: list the per-hand zarrs as `"dataset": [...]` (pooled in memory, item 56)
-  and **always pass `"source-norm": "minmax"`** (item 58; the gaussian default zeroed every
-  pooled run). Manifests: `scripts/build_ambient_rotation_manifest.py`.
-- Reporting evals: `slurm_jobs/vista_eval_checkpoints.sbatch` (item 60) runs
-  `scripts/eval_checkpoints.py` (fresh-seed, 100 episodes, best_eval/best_val/latest).
+- Multi-hand data: one pre-built **term-aligned** store per mixture
+  (`scripts/padded_grid.py --family F --config C --build` ->
+  `data/mjlab_hand_demos/padded_ta/`), trained with the recipe in MIGRATION.md section 5.2:
+  `--ambient-sampler noise-first --norm-mode frozen --norm-artifact configs/norm_<family>_minmax.json
+  --x0-clamp 1.0 --val-dataset data/mjlab_hand_demos/val/<family>_val_20k.zarr --keep-last 3
+  --num-workers 0`, eval spec `[{"task": T, "pad": true}]` at 1500 steps (item 63).
+  Manifests: `scripts/build_ambient_rotation_manifest.py`.
+- Reporting evals: `slurm_jobs/vista_eval_checkpoints.sbatch` runs
+  `scripts/rescore_selected.py --which best_rollout best_val last0 --envs 100 --steps 1500
+  --eval-seed 1234` -> `<run>/final_eval.jsonl`. Report `last0` (MIGRATION section 7).
 
 ### Getting Vista jobs scheduled fast (do this before every large submission)
 
@@ -196,22 +201,24 @@ were wrong in different ways.
   encoders, or a shared schema before it can be mixed. `build_mixed_dataset.py`
   refuses mismatched spaces rather than zero-padding; the N-hand padded
   scheme (`build_padded_dataset.py`, item 42) is the one that pads.
-- **Pooled/padded runs must use `--source-norm minmax`** (CHANGES.md item 58). With the
-  original mean/std per-source normalization every padded policy scored 0 even for a single
-  hand; minmax makes a single-hand pool numerically identical to the plain path. The sampler
-  clamps its x0 estimate to the training data's per-dim range (`action_clip_low/high`).
-- **Padded datasets are normalized once, upstream, per source.** Training
-  on them uses identity normalizers and a per-row `action_mask`; eval needs
-  the run's `source_stats.json` and an `embodiment=`. Ambient gating +
-  padded is refused on purpose (item 42).
-  A padded zarr is optional: `train-diffusion --dataset A.zarr B.zarr ...`
-  pools the per-hand zarrs in memory with the same code
-  (`mjlab_hand.diffusion.pooling`, item 56). Stats refit on a different CPU
-  can differ from a stored pool's by float32 rounding (~1e-7).
-- **Checkpoint names changed on 2026-09-20 (item 45).** New runs write
-  `policy_latest.pt`, `policy_best_val.pt` (only with `--val-fraction > 0`)
-  and `policy_best_eval.pt`; older runs have `policy_best.pt`, selected by
-  training loss, which is not a quality signal.
+- **Multi-hand stores are term-aligned and raw (item 63, Bundle's design).** Each obs term
+  (`schemas.json`, `padding.py`) has its own block as wide as the family's widest version,
+  so a column means the same term for every hand (grasp 191/28, rotation 91/22); actions are
+  front-packed; padding is 0. One shared normalizer in the policy (`--norm-mode`; experiments
+  use the frozen per-family min/max artifact, which must contain 0). Joint order *within* a
+  term still differs per hand (`outputs/analysis/spaces_reference.md`). The old tail-padded,
+  per-hand-normalized `padded/*.zarr`, in-memory pooling and `--source-norm` (items 42, 56,
+  58) are gone; train.py refuses an old tail-padded store.
+- **`--ambient-tmin` follows the store's source order, which is HANDS order** (Allegro,
+  LEAP, Shadow, Sharpa, Wuji) for term-aligned stores, not "target first". Use
+  `padded_grid.target_ambient_tmin`; a wrong order silently gates the target.
+- **Ambient runs must pass `--ambient-sampler noise-first`.** The code default
+  `data-first` (kept for parity with Bundle) starves low-noise steps 50-100x on padded stores.
+- **Checkpoints (item 63):** `policy_latest.pt`, `policy_best.pt` (train loss: not a quality
+  signal), rolling `policy_last{0,1,2}_epoch{N}.pt` (last0 = newest), `policy_best_rollout.pt`,
+  `policy_best_val.pt` (with `--val-dataset`); `selection.json` is written last and marks
+  completion. Checkpoints from before item 63 do not load in this code (their config has
+  `normalizer_type`): evaluate them from the `vista-ambient-rotation` branch.
 - **Eval rows are tagged with `eval_task`, always, including solo runs.**
   Once multi-target eval (`eval_specs`) shipped, a single-target
   `--eval-task` run is internally promoted to a one-element spec list and
@@ -228,11 +235,13 @@ were wrong in different ways.
   1.000) at every diffusion timestep, including t=99 — the observation is
   never noised, so masking/invariance schemes that rely on high-noise
   unidentifiability do not apply here.
-- Ambient (per-source timestep-gated) diffusion is falsified for grasp
-  (decisively negative, replicated across seeds) and null for rotation.
-  The one robust result is the control: an embodiment trained only on the
-  coarse end of the schedule is completely non-functional (0.000), not
-  merely degraded.
+- Ambient (per-source timestep-gated) diffusion: the Aug "falsified for grasp" result used
+  the data-first sampler and was retracted in Bundle (MIGRATION.md section 7). With
+  noise-first Bundle reports, for a starved 50k rotation target, a peak at sigma 2-3 (0.655
+  at 0 -> 1.137 at 2, 0.767 at 100; Sharpa best at 25), sign reversal at 1M, and grasp
+  hurt monotonically. Not yet reproduced in this repo. Robust in both: an embodiment trained
+  only on the coarse end of the schedule is completely non-functional (0.000; Vista
+  2026-10-01: LEAP 1.8 at sigma 0 -> 0.00 at sigma 10).
 - Adversarial invariance training does not work on the Allegro/LEAP pair:
   a fresh probe trained after the encoder freezes stays at ≥0.977 balanced
   accuracy regardless of reversal strength, while task information drops

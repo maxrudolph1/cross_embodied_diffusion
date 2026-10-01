@@ -35,11 +35,6 @@ def main() -> None:
     ap.add_argument("manifest", type=str)
     ap.add_argument("task_ids", type=int, nargs="+")
     ap.add_argument("--parallel", action="store_true", help="run all runs concurrently")
-    ap.add_argument(
-        "--compile-mode",
-        default=None,
-        help="add --compile-mode to every run that doesn't set it (CHANGES.md item 53)",
-    )
     ap.add_argument("--dry-run", action="store_true", help="print commands, don't run them")
     args = ap.parse_args()
 
@@ -49,8 +44,6 @@ def main() -> None:
         if not (0 <= task_id < len(manifest)):
             raise SystemExit(f"task_id {task_id} out of range for manifest of {len(manifest)} tasks")
         runs.extend((task_id, run_args) for run_args in manifest[task_id])
-    if args.compile_mode is not None:
-        runs = [(t, {"compile-mode": args.compile_mode, **r}) for t, r in runs]
 
     procs = []
     for i, (task_id, run_args) in enumerate(runs):

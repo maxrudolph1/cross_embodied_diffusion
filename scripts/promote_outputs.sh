@@ -12,15 +12,13 @@
 # in that sweep. The relative layout is kept, so the run lands at the same
 # repo-relative outputs/... path it had during training.
 #
-# Only runs with train_done.json (written by train-diffusion at the very end)
-# are copied; unfinished runs are skipped unless --force. Runs trained before
-# that marker existed need --force.
+# Only runs with selection.json (written by train-diffusion at the very end,
+# CHANGES.md item 63) are copied; unfinished runs are skipped unless --force.
+# Runs trained before item 63 have train_done.json instead: also accepted.
 #
 # Options:
 #   -n, --dry-run        list what would be copied, copy nothing
-#   --no-epoch-ckpts     skip policy_epoch_*.pt (keeps latest/best_val/best_eval;
-#                        ~0.27 GB each, usually most of a run's size)
-#   --force              also copy runs without train_done.json
+#   --force              also copy runs without a completion marker
 #   --src DIR            scratch outputs root
 #                        (default $SCRATCH/cross_embodied_diffusion/outputs)
 #   --dst DIR            Stockyard outputs root
@@ -29,13 +27,12 @@ set -euo pipefail
 
 SRC="${SCRATCH:?SCRATCH not set}/cross_embodied_diffusion/outputs"
 DST="${STOCKYARD:?STOCKYARD not set}/vista/cross_embodied_diffusion/outputs"
-DRY=0 FORCE=0 NO_EPOCH=0
+DRY=0 FORCE=0
 ARGS=()
 while (( $# )); do
   case "$1" in
     -n|--dry-run) DRY=1 ;;
     --force) FORCE=1 ;;
-    --no-epoch-ckpts) NO_EPOCH=1 ;;
     --src) SRC="$2"; shift ;;
     --dst) DST="$2"; shift ;;
     -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0 ;;
@@ -61,11 +58,10 @@ for a in "${ARGS[@]}"; do
 done
 
 RSYNC_OPTS=(-a)
-(( NO_EPOCH )) && RSYNC_OPTS+=(--exclude 'policy_epoch_*.pt')
 TODO=()
 for r in "${RUNS[@]}"; do
-  if [[ ! -f "$r/train_done.json" ]] && (( ! FORCE )); then
-    echo "[SKIP] unfinished (no train_done.json): ${r#"$SRC"/}"
+  if [[ ! -f "$r/selection.json" && ! -f "$r/train_done.json" ]] && (( ! FORCE )); then
+    echo "[SKIP] unfinished (no selection.json): ${r#"$SRC"/}"
     continue
   fi
   TODO+=("$r")
@@ -90,7 +86,7 @@ if FS=$(df --output=target "$DST" 2>/dev/null | tail -1) && [[ "$FS" == /work* ]
     FREE=$(( (LIMIT - USED) * 1024 ))
     echo "[INFO] /work quota: $(gb $((USED * 1024))) used, $(gb "$FREE") free"
     if (( NEED > FREE )); then
-      echo "[ERROR] not enough /work quota; free space or use --no-epoch-ckpts" >&2; exit 1
+      echo "[ERROR] not enough /work quota; free space first" >&2; exit 1
     fi
   fi
 fi

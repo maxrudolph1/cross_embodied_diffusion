@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""CLI: train a diffusion policy on a collected demo dataset."""
+"""CLI: train a diffusion policy on a collected demo dataset (CHANGES.md item 63)."""
 
 from __future__ import annotations
 
@@ -13,30 +13,9 @@ def main() -> None:
     parser.add_argument(
         "--dataset",
         type=Path,
-        nargs="+",
         required=True,
-        help="One dataset zarr, or several single-embodiment zarrs, which are pooled in memory "
-        "into a padded cross-embodiment dataset (same result as build_padded_dataset.py).",
-    )
-    parser.add_argument(
-        "--pool-sources",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="Force (or forbid) the in-memory padded pooling. Default: pool iff >1 dataset. "
-        "--pool-sources with one dataset trains it through the padded path.",
-    )
-    parser.add_argument(
-        "--source-norm",
-        choices=["gaussian", "minmax"],
-        default="gaussian",
-        help="Per-source normalization for pooled runs: mean/std, or min/max to [-1, 1] "
-        "(what the plain path's LinearNormalizer does).",
-    )
-    parser.add_argument(
-        "--task-family",
-        type=str,
-        default=None,
-        help="task_family recorded in source_stats.json for a pooled run (default: inferred).",
+        help="One store: a single-hand demo zarr, or a term-aligned padded multi-hand zarr "
+        "(scripts/build_padded_dataset.py / padded_grid.py).",
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--obs-horizon", type=int, default=2)
@@ -45,29 +24,41 @@ def main() -> None:
     parser.add_argument("--num-epochs", type=int, default=50)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--device", default="cuda:0")
-    parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=4,
+        help="DataLoader workers. The experiment recipe uses 0 (workers recreated every epoch "
+        "deadlocked in Bundle; persistent workers would change the shuffle stream).",
+    )
     parser.add_argument("--success-only", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--save-every-epochs", type=int, default=10)
+    parser.add_argument(
+        "--save-every-epochs",
+        type=int,
+        default=10,
+        help="Accepted for compatibility; not used (snapshots are --keep-last rolling ones).",
+    )
     parser.add_argument(
         "--latest-every-epochs",
         type=int,
         default=1,
-        help="Cadence for writing policy_latest.pt / policy_best_val.pt (always saved on the final "
-        "epoch and before any eval/render).",
+        help="Cadence of policy_latest.pt and the rolling policy_last{k}_epoch{N}.pt snapshots "
+        "(always also on the final epoch).",
     )
+    parser.add_argument("--keep-last", type=int, default=3, help="Rolling snapshots to keep (last0 = newest).")
     parser.add_argument(
         "--eval-task",
         type=str,
         default=None,
-        help="If set, run env eval every --eval-every-epochs during training",
+        help="If set, run env eval every --eval-every-epochs (single-hand policy).",
     )
     parser.add_argument(
         "--eval-spec",
         type=str,
         default=None,
-        help='JSON list of {"task": ..., "onehot": [..] | null} for multi-target eval '
-        "(e.g. mixed-embodiment policies). Overrides --eval-task.",
+        help='JSON list of {"task": ..., "pad": true} (term-aligned multi-hand policy) or '
+        '{"task": ..., "onehot": [..]} (2-hand onehot mixtures). Overrides --eval-task.',
     )
     parser.add_argument("--eval-every-epochs", type=int, default=10)
     parser.add_argument("--eval-num-envs", type=int, default=32)
@@ -80,101 +71,91 @@ def main() -> None:
         type=int,
         nargs="+",
         default=None,
-        help="One t_min per source (dataset order) for a mixed dataset, e.g. "
-        "'--ambient-tmin 0 50' admits source 0 everywhere and source 1 only at t >= 50.",
+        help="One t_min per source, in the store's source order (HANDS order for padded "
+        "stores; padded_grid.target_ambient_tmin). Source i trains only at t >= t_min[i].",
     )
     parser.add_argument(
-        "--val-fraction",
+        "--ambient-sampler",
+        choices=["data-first", "noise-first"],
+        default="data-first",
+        help="data-first: window then t ~ U[t_min, T) (starves low-noise steps); noise-first: "
+        "t then a window admitted at t. Ambient experiments should pass noise-first.",
+    )
+    parser.add_argument(
+        "--mask-pad-loss",
+        action="store_true",
+        help="Exclude padded action channels from the loss and hold them fixed when sampling.",
+    )
+    parser.add_argument(
+        "--norm-mode",
+        choices=["shared", "pad-aware", "zscore", "frozen"],
+        default="shared",
+        help="shared: min/max over the store incl. padding; pad-aware: per column over rows "
+        "using it; zscore: mean/std (needs --x0-clamp > 1); frozen: --norm-artifact.",
+    )
+    parser.add_argument("--norm-clip-pct", type=float, default=None, help="pad-aware only: percentile clip.")
+    parser.add_argument("--norm-artifact", type=Path, default=None, help="frozen only: norm_<family>_*.json.")
+    parser.add_argument(
+        "--x0-clamp",
         type=float,
-        default=0.0,
-        help="Fraction of trajectories per source held out for a validation "
-        "loss (denoised-action MSE on held-out episodes, not held-out "
-        "individual states). 0 (default) disables validation.",
+        default=1.0,
+        help="Sampler clamps its x0 estimate to +-this in normalized units (1.0 = min/max data range).",
     )
-    parser.add_argument("--val-seed", type=int, default=0)
     parser.add_argument(
-        "--val-embodiment",
-        type=str,
+        "--val-dataset",
+        type=Path,
         default=None,
-        help="Compute the val loss (and pick policy_best_val.pt) on this source of a pooled "
-        "dataset only, e.g. the target hand of a scarce/ambient run.",
+        help="Separate term-aligned val store (scripts/build_val_split.py); enables policy_best_val.pt.",
     )
-    parser.add_argument("--val-every-epochs", type=int, default=1)
-    parser.add_argument(
-        "--val-max-batches",
-        type=int,
-        default=20,
-        help="Cap on validation batches per check (DDIM sampling is far "
-        "costlier per batch than a training step). Pass -1 to use the "
-        "whole val set every time.",
-    )
-    parser.add_argument(
-        "--source-sample-mode",
-        choices=["uniform", "balanced"],
-        default="uniform",
-        help="Per-source sampling ratio for a padded/mixed dataset. 'uniform' "
-        "(default): proportional to row count. 'balanced': equal expected "
-        "representation per source per epoch regardless of size.",
-    )
-    parser.add_argument(
-        "--wandb-project",
-        type=str,
-        default=None,
-        help="If set, log this run to WandB under this project name.",
-    )
-    parser.add_argument(
-        "--compile-mode",
-        choices=["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"],
-        default=None,
-        help="torch.compile the denoising UNet with this mode (default: eager).",
-    )
+    parser.add_argument("--val-windows", type=int, default=2048)
+    parser.add_argument("--wandb-project", type=str, default=None, help="Optional WandB logging.")
     parser.add_argument("--wandb-run-name", type=str, default=None)
     parser.add_argument("--wandb-tags", type=str, nargs="+", default=None)
     args = parser.parse_args()
 
-    from mjlab_hand.diffusion.train import TrainConfig, train_diffusion
+    from mjlab_hand.diffusion.train import TrainConfig, check_config, train_diffusion
 
-    eval_specs = json.loads(args.eval_spec) if args.eval_spec is not None else None
-
-    train_diffusion(
-        TrainConfig(
-            dataset=args.dataset[0] if len(args.dataset) == 1 else args.dataset,
-            output_dir=args.output_dir,
-            obs_horizon=args.obs_horizon,
-            action_horizon=args.action_horizon,
-            batch_size=args.batch_size,
-            num_epochs=args.num_epochs,
-            lr=args.lr,
-            device=args.device,
-            num_workers=args.num_workers,
-            success_only=args.success_only,
-            seed=args.seed,
-            save_every_epochs=args.save_every_epochs,
-            latest_every_epochs=args.latest_every_epochs,
-            eval_task=args.eval_task,
-            eval_specs=eval_specs,
-            eval_every_epochs=args.eval_every_epochs,
-            eval_num_envs=args.eval_num_envs,
-            eval_num_steps=args.eval_num_steps,
-            render_every_epochs=args.render_every_epochs,
-            render_num_steps=args.render_num_steps,
-            render_num_envs=args.render_num_envs,
-            ambient_tmin=args.ambient_tmin,
-            val_fraction=args.val_fraction,
-            val_seed=args.val_seed,
-            val_embodiment=args.val_embodiment,
-            val_every_epochs=args.val_every_epochs,
-            val_max_batches=None if args.val_max_batches < 0 else args.val_max_batches,
-            source_sample_mode=args.source_sample_mode,
-            compile_mode=args.compile_mode,
-            wandb_project=args.wandb_project,
-            wandb_run_name=args.wandb_run_name,
-            wandb_tags=args.wandb_tags,
-            pool_sources=args.pool_sources,
-            task_family=args.task_family,
-            source_norm=args.source_norm,
-        )
+    cfg = TrainConfig(
+        dataset=args.dataset,
+        output_dir=args.output_dir,
+        obs_horizon=args.obs_horizon,
+        action_horizon=args.action_horizon,
+        batch_size=args.batch_size,
+        num_epochs=args.num_epochs,
+        lr=args.lr,
+        device=args.device,
+        num_workers=args.num_workers,
+        success_only=args.success_only,
+        seed=args.seed,
+        save_every_epochs=args.save_every_epochs,
+        latest_every_epochs=args.latest_every_epochs,
+        keep_last=args.keep_last,
+        eval_task=args.eval_task,
+        eval_specs=json.loads(args.eval_spec) if args.eval_spec is not None else None,
+        eval_every_epochs=args.eval_every_epochs,
+        eval_num_envs=args.eval_num_envs,
+        eval_num_steps=args.eval_num_steps,
+        render_every_epochs=args.render_every_epochs,
+        render_num_steps=args.render_num_steps,
+        render_num_envs=args.render_num_envs,
+        ambient_tmin=args.ambient_tmin,
+        ambient_sampler=args.ambient_sampler,
+        mask_pad_loss=args.mask_pad_loss,
+        norm_mode=args.norm_mode,
+        norm_clip_pct=args.norm_clip_pct,
+        norm_artifact=args.norm_artifact,
+        x0_clamp=args.x0_clamp,
+        val_dataset=args.val_dataset,
+        val_windows=args.val_windows,
+        wandb_project=args.wandb_project,
+        wandb_run_name=args.wandb_run_name,
+        wandb_tags=args.wandb_tags,
     )
+    try:
+        check_config(cfg)
+    except ValueError as e:
+        parser.error(str(e))
+    train_diffusion(cfg)
 
 
 if __name__ == "__main__":

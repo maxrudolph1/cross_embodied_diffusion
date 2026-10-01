@@ -4,6 +4,34 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-10-01 (evening) — Migrating to Bundle's design (MIGRATION.md), from the doc only
+
+- User pushed MIGRATION.md to `main`: make this repo ("Branch") behave like "Bundle" (another
+  checkout of the project) for diffusion training/model/eval. Bundle's code is **not
+  available** anywhere we can reach, so the user asked to re-implement it from the doc as
+  faithfully as possible. Done on branch `bundle-migration` in a separate git worktree
+  (`$WORK/code/ced-migrate`) so the running ambient sweep (`1038730`, old code, main checkout
+  on `vista-ambient-rotation`) is untouched. CHANGES.md item 63 lists every change and marks
+  the [reconstructed] choices and deviations (frozen normalizer and val store built from
+  Vista data: 1M stores and fresh expert rollouts instead of Bundle's 10M stores).
+- Why it matters now: Bundle reports, on the same rotation scarce-50k setup with noise-first
+  ambient, sigma=0 0.655 -> peak 1.137 at sigma=2 -> 0.767 at sigma=100, while our tail-padded
+  per-hand-normalized sweep sits near 0.1 at sigma=0. Earlier today I attributed that to
+  target dilution (1.3% of samples); Bundle had the same dilution, so that explanation is
+  incomplete. The leading candidates are the layout/normalization differences this migration
+  removes (term-aligned obs, one shared frozen normalizer, unmasked padded loss).
+- Verified on CPU (see item 63): store vs sources bitwise, frozen artifacts, padding plumbing
+  and masked-loss gradients, noise-first sampler mass, val-split collision filter, manifest
+  parse. Each sbatch now puts its own checkout's `src/` first on PYTHONPATH (the shared
+  venv's editable install points at the main checkout) -- without that, jobs submitted from
+  the worktree would silently run the old code.
+- Pick up here: needs a GPU node for (1) `slurm_jobs/vista_collect_val.sbatch` then
+  `scripts/build_val_split.py` (val stores), (2) the 9-run diagnostic
+  `slurm_jobs/diag_rot_ta_manifest.json` (Allegro x sigma {0,2,100} x 3 seeds) to compare with
+  Bundle's 0.655 / 1.137 / 0.767, then `rescore_selected.py`. The other four
+  `scarce<Hand>_K50k` stores are CPU builds (`padded_grid.py`). Old checkpoints (sweep
+  `1038730`) must be re-scored from the `vista-ambient-rotation` branch.
+
 ## 2026-09-30 (20:00) — Sweep job shape: queue evidence, AGENTS.md scheduling procedure
 
 - User: only 40 queued jobs allowed and some gh jobs already pending, so 40 x 2-node jobs
