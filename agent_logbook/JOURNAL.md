@@ -4,6 +4,37 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-09-30 (20:00) — Sweep job shape: queue evidence, AGENTS.md scheduling procedure
+
+- User: only 40 queued jobs allowed and some gh jobs already pending, so 40 x 2-node jobs
+  won't fit; asked to confirm whether 8-node jobs schedule slower than 16-node ones.
+- `scripts/queue_wait_stats.sh gh 3` (2026-09-30 20:00, gh 569/576 allocated, 0 idle): median
+  submit->start of jobs started in the last 3 days -- 1 node 9.1 h (n=87), 2 nodes 2.6 h (16),
+  3-4 nodes 12.6 h (13), 5-8 nodes 5.8 h (25), 9-16 nodes 13.2 h (5). Pending ages agree
+  (5-8: 6.9 h, 9-16: 10.4 h). So 8-node jobs are NOT slower than 16-node ones here.
+  Correction: an earlier coarse "2-4 nodes = 2.8 h" bin led me to recommend 20 x 4-node jobs;
+  the 2-node jobs carried that bin, 3-4-node jobs waited 12.6 h. Retracted.
+- Expected completion for 320 runs (run ~8.5 h at PACK=4, ~17 h at PACK=8): 10 x 8 nodes
+  PACK=4 ~14 h; 20 x 2 nodes PACK=8 ~19-20 h; 20 x 4 nodes PACK=4 ~21 h; 5 x 16 nodes ~22 h.
+  Recommended 10 x 8 nodes, pending `sbatch --test-only` confirmation from a login node.
+- Wrote the procedure into AGENTS.md ("Getting Vista jobs scheduled fast") + CHANGES item 61.
+
+## 2026-09-30 (evening) — Ambient minmax test runs done; sweep ready
+
+- `1036217` (Allegro target, 50k + 4x1M, minmax, 1 run/node): all 4 COMPLETED, 2h20-2h24.
+  In-training evals (32 envs, successes before drop, epochs 5..50):
+  s0 0.00 0.00 0.09 0.03 0.06 0.12 0.12 0.19 0.22 0.41;
+  s10 0.09 0.16 0.28 0.31 0.22 0.44 0.53 0.22 0.47 0.38;
+  s25 0.84 0.72 0.81 0.50 0.69 0.59 0.62 0.44 0.50 0.62;
+  s100 0.72 0.94 0.97 0.84 0.81 0.66 0.81 0.84 0.59 0.59.
+  Pipeline works end to end. Target performance rises with sigma (more gating of the other
+  hands = better Allegro), as in the Aug grasp result. Note the fixed ~700k-step budget:
+  low sigma is still improving at epoch 50 (target ~1% of samples), high sigma peaks early and
+  declines (target 50k repeated ~4000x) -- the per-run checkpoint selection matters, and a
+  step-budget ablation may be worth adding later.
+- Session moved to idev `1038503` on a `gg` (CPU-only) node, so reporting evals can't run here;
+  wrote `slurm_jobs/vista_eval_checkpoints.sbatch` (CHANGES.md item 60).
+
 ## 2026-09-30 (09:30) — minmax fix verified; sweep manifest switched to minmax
 
 - idev results (in-training evals, 32 envs, successes before drop): 1M plain 1.03 -> ~2.0-2.25;

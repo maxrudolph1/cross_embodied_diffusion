@@ -9,6 +9,32 @@ comments ("See CHANGES.md item N") -- never renumber; append the next number.
 
 ---
 
+## 2026-09-30 (night) — scheduling guidance for agents
+
+### 61. `scripts/queue_wait_stats.sh` (NEW), `AGENTS.md`
+
+`queue_wait_stats.sh [partition] [days] [time_limit] [sizes]`: partition node states,
+submit->start wait of recently started jobs and age of pending jobs by node count (fine bins),
+the user's usage vs the 40/20/96 caps, and `sbatch --test-only` projections per size (login
+nodes only; prints the command elsewhere). AGENTS.md's Vista section rewritten (limits,
+storage, running, minmax rule) plus a "Getting Vista jobs scheduled fast" procedure: measure,
+project with `--test-only`, enumerate cap-feasible shapes, choose by expected completion
+(wait + run time), tightest safe `--time`.
+
+---
+
+## 2026-09-30 (evening) — GPU job for reporting evals
+
+### 60. `slurm_jobs/vista_eval_checkpoints.sbatch` (NEW)
+
+Runs `scripts/eval_checkpoints.py` on a `gh` node for run dirs matching `RUNS` (globs relative
+to `$SCRATCH/cross_embodied_diffusion/outputs`), `PARALLEL` (default 4) processes sharing the
+GPU, optional `ALSO` control embodiment; array element a / process p = shard a*PARALLEL+p of
+n_elements*PARALLEL. Needed because idev sessions can land on CPU-only `gg` nodes. Shell
+logic (globs, sharding) dry-tested with the python call stubbed; not yet run on a GPU.
+
+---
+
 ## 2026-09-30 — per-dimension obs/action reference
 
 ### 59. `scripts/dump_spaces.py` (NEW)

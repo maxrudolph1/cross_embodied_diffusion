@@ -107,35 +107,72 @@ from inside an existing interactive allocation — use `sbatch`.
 
 The block above is for the original shared-node cluster. On Vista:
 
-- Use `slurm_jobs/vista_train_manifest.sbatch` (partition `gh`, 48h max,
-  20 running / 40 submitted jobs per user, whole-node allocation — no
-  `--gres`/`--mem`). It packs several runs per node; see CHANGES.md item 51.
-  Pass the project with `sbatch -A <project>`.
-- The cap that matters is jobs, not nodes: 96 running nodes/user (64/job).
-  Submit multi-node jobs (`-N 8`..`16`, CHANGES.md item 54) to go past 20
-  nodes. Per-node throughput is flat from 4 to 16 packed runs (GPU-bound), so
-  runs/node only sets wall time. See ANALYSIS.md "Vista job shape".
-- `$WORK` is a 1 TB quota shared with every TACC system, and it was ~97% full
-  on 2026-09-28. A checkpoint is 265 MB and each run keeps >=3, so check
-  `lfs quota -u $USER /work` before launching and keep benchmark/scratch
-  output on `$SCRATCH`. Going over quota makes `torch.save` fail
-  mid-training ("unexpected pos").
-- `sbatch` is disabled on compute nodes (including idev sessions), and ssh to
-  the login nodes needs interactive 2FA, so an agent running inside idev can
-  smoke-test on the GPU but cannot submit — hand the `sbatch` line to the user.
-- `export CC=gcc` for anything using `torch.compile` (TACC sets `CC=nvc`,
-  which Triton can't use). The Vista sbatch compiles by default
-  (`COMPILE_MODE=reduce-overhead`, 2.3x per run; CHANGES.md item 53).
-- No `LD_LIBRARY_PATH` workaround needed; torch comes from the cu128 index on
-  aarch64 (CHANGES.md item 50).
-- `$HOME` is 23 GB; `$WORK` (1 TB, shared with other projects) holds the
-  bulk data, venv and outputs via symlinks (`data/mjlab_hand_demos`, `logs`,
-  `outputs`, `.venv`). `$SCRATCH` is purged — don't keep results there.
-- `vista_train_manifest.sbatch` stages the demos it needs to `$SCRATCH` (1-node) or node
-  `/tmp` (multi-node) and writes run outputs to `$SCRATCH/cross_embodied_diffusion/outputs`
-  (CHANGES.md item 55). Copy runs worth keeping to Stockyard (the repo `outputs` target) with
-  `scripts/promote_outputs.sh <run or sweep dir, relative to the scratch outputs root>`
-  before the purge gets them.
+**Limits and environment**
+
+- Partition `gh`: 1 GH200 per node, whole-node allocation (no `--gres`/`--mem`), 48 h max.
+  Per user: **40 submitted jobs, 20 running jobs, 96 running nodes, 64 nodes/job**. Every
+  array element counts as one job. Pass the project with `sbatch -A ASC26008` (the user writes
+  it upper-case; Slurm shows `asc26008`).
+- `sbatch` (including `--test-only`) is disabled on compute nodes, idev included, and ssh to
+  login nodes needs interactive 2FA. An agent inside idev can test on the node but cannot
+  submit: hand the exact `sbatch` line to the user. idev sessions can land on CPU-only `gg`
+  nodes (no `nvidia-smi`); check before planning GPU work there.
+- `export CC=gcc` for anything using `torch.compile` (TACC sets `CC=nvc`). The Vista sbatch
+  compiles by default (`COMPILE_MODE=reduce-overhead`, 2.3x per run; item 53). No
+  `LD_LIBRARY_PATH` workaround needed (item 50). `OMP_NUM_THREADS=1` makes `nproc` print 1;
+  the node still has 72 cores.
+
+**Storage**
+
+- `$HOME` 23 GB; `$WORK`/Stockyard is a 1 TB quota shared with every TACC system (near full on
+  2026-09-28; going over makes `torch.save` fail with "unexpected pos") and holds the repo,
+  venv, bulk data and kept outputs via symlinks (`data/mjlab_hand_demos`, `outputs`, `.venv`).
+- `vista_train_manifest.sbatch` stages the demos its runs use to `$SCRATCH` (1-node) or node
+  `/tmp` (multi-node) and writes outputs to `$SCRATCH/cross_embodied_diffusion/outputs`
+  (item 55). `$SCRATCH` is purged: copy runs worth keeping with
+  `scripts/promote_outputs.sh <dir relative to the scratch outputs root>`.
+
+**Running things**
+
+- Training: `slurm_jobs/vista_train_manifest.sbatch` + a manifest (list of tasks, each a list
+  of `train-diffusion` arg dicts). `PACK` = manifest tasks per node; `-N K` makes each node of
+  a job take its own `PACK` tasks (node slot = array_index * K + node_id; item 54). `DRY_RUN=1`
+  prints the commands. Per-node throughput is flat from ~4 to 16 packed runs, so packing sets
+  wall time, not cost (ANALYSIS.md "Vista job shape"); one run alone is ~3.5x faster than one
+  of 4 packed (rotation pool, 50 epochs: 2 h 22 m alone).
+- Multi-hand data: list the per-hand zarrs as `"dataset": [...]` (pooled in memory, item 56)
+  and **always pass `"source-norm": "minmax"`** (item 58; the gaussian default zeroed every
+  pooled run). Manifests: `scripts/build_ambient_rotation_manifest.py`.
+- Reporting evals: `slurm_jobs/vista_eval_checkpoints.sbatch` (item 60) runs
+  `scripts/eval_checkpoints.py` (fresh-seed, 100 episodes, best_eval/best_val/latest).
+
+### Getting Vista jobs scheduled fast (do this before every large submission)
+
+The `gh` partition is usually ~100% allocated, so start time is set by queue position and
+backfill, and it varies a lot with job shape. **Measure; do not assume** that bigger or smaller
+jobs start sooner. On 2026-09-30 the user expected 8-node jobs to start slower than 16-node ones,
+an agent then claimed "2-4 nodes start fastest" from a coarse bin, and the fine-grained numbers
+said 2-node 2.6 h, 3-4-node 12.6 h, 5-8-node 5.8 h, 9-16-node 13.2 h median wait. Both guesses
+were wrong in different ways.
+
+1. Run `scripts/queue_wait_stats.sh [partition] [days] [time_limit]` (works on any node). It
+   prints node states, submit->start waits of recently started jobs and ages of pending jobs
+   per node count (fine bins: 1, 2, 3-4, 5-8, 9-16, ...), and the user's usage against the caps.
+   Treat small bins (n < ~10) as weak evidence; started-job waits are biased low, pending ages
+   biased high.
+2. On a login node (or ask the user to), get the scheduler's own projection for each candidate
+   shape with the exact time limit you intend: `sbatch --test-only -A ASC26008 -p gh -N <n>
+   -t <limit> --wrap=true` (the script prints the loop). This is the strongest evidence.
+3. Enumerate the shapes that fit the caps for the run count R (PACK runs per node, K nodes per
+   job, J = R / (PACK*K) jobs): J + jobs already queued <= 40, min(J, 20) * K <= 96 to run at
+   once, K <= 64. Remember to leave queue slots for the eval job(s) and any idev.
+4. Pick by **expected completion**, not start: wait(K) + run time(PACK) (+ extra waves if
+   J > 20 or J*K > 96). Packing more runs per node lengthens run time ~linearly but needs fewer
+   nodes/jobs; a slightly later start with half the run time usually wins.
+5. Use the tightest safe `--time` (measured run time + ~25-50%): shorter limits backfill into
+   more gaps. A pending job's limit can be lowered with `scontrol update JobId=<id>
+   TimeLimit=<t>` (raising it needs the user/admin). Record the choice and the evidence in
+   `RUNS.md`.
 
 ## Invariants worth knowing before touching this code
 
@@ -159,6 +196,10 @@ The block above is for the original shared-node cluster. On Vista:
   encoders, or a shared schema before it can be mixed. `build_mixed_dataset.py`
   refuses mismatched spaces rather than zero-padding; the N-hand padded
   scheme (`build_padded_dataset.py`, item 42) is the one that pads.
+- **Pooled/padded runs must use `--source-norm minmax`** (CHANGES.md item 58). With the
+  original mean/std per-source normalization every padded policy scored 0 even for a single
+  hand; minmax makes a single-hand pool numerically identical to the plain path. The sampler
+  clamps its x0 estimate to the training data's per-dim range (`action_clip_low/high`).
 - **Padded datasets are normalized once, upstream, per source.** Training
   on them uses identity normalizers and a per-row `action_mask`; eval needs
   the run's `source_stats.json` and an `embodiment=`. Ambient gating +
