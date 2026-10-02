@@ -156,3 +156,10 @@ Artifact roots are gitignored; paths are relative to repo root.
 ```md
 | id | Task | run/output dir | key config | latest artifact | status | notes |
 ```
+
+### Vista — co-training vs target-only, term-aligned (bundle-migration code), 2026-10-02
+
+| id | what | where | status | notes |
+|---|---|---|---|---|
+| cotrain-vs-target | 40 runs: Grasp + Rotation x 5 targets x sigma {0, 100} x seeds {0, 1}, `slurm_jobs/cotrain_vs_target_manifest.json`, `-N 4 --array=0-9`, PACK=1, 9 h | `$SCRATCH/cross_embodied_diffusion/outputs/diffusion/ambient_ta/` | to submit (from `$WORK/code/ced-migrate`) | queue 2026-10-02 15:15: median wait ~10.5-11.3 h for every size 1-16 nodes, so 1 run/node (~7 h, measured 7.5 min/epoch uncompiled) beats packing (~15 h at 4/node) |
+

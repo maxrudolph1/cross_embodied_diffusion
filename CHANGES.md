@@ -9,6 +9,19 @@ comments ("See CHANGES.md item N") -- never renumber; append the next number.
 
 ---
 
+## 2026-10-02 — co-training vs target-only through the ambient pipeline
+
+### 65. `scripts/build_ambient_manifest.py` (NEW)
+
+Family-generic ambient manifests (Bundle recipe, as `build_ambient_rotation_manifest.py` but
+`--families/--hands/--sigmas/--seeds`); tasks ordered (family, target, sigma, seed).
+`slurm_jobs/cotrain_vs_target_manifest.json`: Grasp + InHand-Rotation x 5 targets x sigma {0
+(full co-training), 100 (target-only)} x seeds {0, 1} = 40 runs on the `scarce<Hand>_K50k` stores,
+~784k steps each (49-51 epochs); all parse, every file present; sbatch dry run with -N 4 PACK=1
+maps job a / node i to task 4a+i (one target per job).
+
+---
+
 ## 2026-10-02 — co-training vs solo replication setup
 
 ### 64. `scripts/build_cotrain_solo_manifest.py` (NEW); grasp scarce stores
