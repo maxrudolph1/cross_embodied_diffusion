@@ -4,6 +4,21 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-10-02 (15:40) — Worktree consolidated; main checkout now on bundle-migration
+
+- User asked why the migration lived in `$WORK/code/ced-migrate`: it was a git worktree of
+  this repo (same history), used so the running sweep and its old-code evals were untouched.
+  Consolidated on request: pending `vista-ambient-rotation` work committed there (`0687fc7`:
+  plot script, sweep results, eval sbatch now imports its own checkout), main checkout switched
+  to `bundle-migration`, worktree removed (its ignored manifests/logs copied over first; data
+  is symlinked, untouched).
+- **Re-scoring the old sweep (1038730) needs the old code**, which is no longer checked out.
+  Do it from a temporary worktree:
+  `git worktree add ../ced-old vista-ambient-rotation`, symlink `data/mjlab_hand_demos`,
+  `outputs`, `logs`, `.venv` into it, submit `slurm_jobs/vista_eval_checkpoints.sbatch` from
+  there (it puts that checkout's `src/` first), then `git worktree remove`.
+- New runs (`cotrain_vs_target_manifest.json`, 40 runs) are submitted from the main checkout.
+
 ## 2026-10-01 (evening) — Migrating to Bundle's design (MIGRATION.md), from the doc only
 
 - User pushed MIGRATION.md to `main`: make this repo ("Branch") behave like "Bundle" (another

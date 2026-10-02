@@ -42,7 +42,7 @@ match the raw val episodes) and is deterministic. `slurm_jobs/cotrain_solo_manif
 
 ### 63. Bundle migration: term-aligned padding, shared/frozen normalizer, noise-first sampler, val store, new checkpoints
 
-Branch `bundle-migration` (worktree `$WORK/code/ced-migrate`). MIGRATION.md (on `main`) asks
+Branch `bundle-migration` (built in a temporary worktree, `$WORK/code/ced-migrate`; consolidated into the main checkout on 2026-10-02). MIGRATION.md (on `main`) asks
 this repo ("Branch") to match "Bundle" for diffusion training/model/eval. **Bundle's code is
 not available**, so everything below is re-implemented from MIGRATION.md's description, not
 copied; bitwise parity with Bundle (section 8 checks 2 and 4) cannot be tested. Items marked
