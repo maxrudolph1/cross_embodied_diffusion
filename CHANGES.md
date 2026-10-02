@@ -9,6 +9,22 @@ comments ("See CHANGES.md item N") -- never renumber; append the next number.
 
 ---
 
+## 2026-10-02 — co-training vs solo replication setup
+
+### 64. `scripts/build_cotrain_solo_manifest.py` (NEW); grasp scarce stores
+
+Per target hand: `cotrain` = `<Family>_pad5_scarce<Hand>_K50k` (target 50k + four 1M), no
+ambient flags, frozen family min/max, target-only padded eval; `solo` = the target's
+`subsets_50k` store, shared min/max (the plain single-hand path), `--eval-task`. Both ~784k
+steps (`epochs_for`: 49-51 epochs co-train, 4000-4041 solo), num_workers 0, keep-last 3, the
+family val store (solo scores the target's native dims), evals 32 x 1500 every ~10%. Built the
+five `Grasp_pad5_scarce<Hand>_K50k` stores (4.05M steps each, all pass check_padded_dataset).
+Verified on GPU: the single-hand validator path un-scatters the val store exactly (20/20 rows
+match the raw val episodes) and is deterministic. `slurm_jobs/cotrain_solo_manifest.json`:
+2 families x 5 hands x 2 arms x seeds 0-2 = 60 runs, all parse; ordered family/hand/arm/seed.
+
+---
+
 ## 2026-10-01 (evening) — migrate to Bundle's design (MIGRATION.md), re-implemented
 
 ### 63. Bundle migration: term-aligned padding, shared/frozen normalizer, noise-first sampler, val store, new checkpoints
