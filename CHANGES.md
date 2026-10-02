@@ -113,6 +113,26 @@ violations, noise-first mass flat (max/min 1.18 at 1k samples/t), data-first rel
 t=0 = 0.02; all 9 diagnostic runs parse through the CLI. GPU training/eval and the val split
 are not yet run (see JOURNAL).
 
+**GPU checks (2026-10-02, idev on gh node c610-072):**
+- Training on GPU: 4-epoch run on `InHand-Rotation_pad5_all_10k` (noise-first, frozen norm),
+  in-training + forced final eval with `pad: true` on all 5 hands -- no width/order errors;
+  rolling `last0..2`, `best_rollout`, `selection.json` correct.
+- `scripts/check_env_alignment.py` (NEW): live env obs scattered through the plan vs the store's
+  episode starts, all 5 rotation hands OK (padding 0 in both, max per-column z <= 2.03).
+  Negative control: Allegro obs tail-padded instead gives z = 194 on 5 columns (term-aligned:
+  1.6), so the check detects misalignment. (Shadow is a useless control: its widths are the
+  family max except actions, so both layouts coincide.)
+- `rescore_selected.py`: 15 rows (5 tasks x best_rollout/last0/last2), resume skips all.
+- Val stores: `vista_collect_val.sbatch` logic run directly (13 min for 10 tasks, 64 episodes,
+  seed 1000); `build_val_split.py`: 0 start collisions with the 1M stores (new seed -> new
+  initial states; Bundle saw 254/400 between its 1M and 10M), ~20k steps per hand (Shadow
+  rotation 19,541, all its 64 episodes); `{grasp,rotation}_val_20k.zarr` pass
+  `check_padded_dataset.py`.
+- Recipe run, 1 epoch on `scarceAllegro_K50k` (sigma 2, val store, target-only spec): **7.5 min /
+  epoch (15,633 steps) uncompiled, alone on a GH200**; validator 2048 windows in ~1 s
+  (val 0.986 after 1 epoch); eval 32 envs x 1500 steps 91 s. => ~7 h per 50-epoch run alone,
+  ~15-16 h at 4 runs/node.
+
 **Open discrepancy:** MIGRATION.md says action std under Bundle's frozen minmax is 0.077
 (elsewhere 0.153 / 0.179). Ours is 0.239 (rotation) / 0.259 (grasp) on the real channels.
 Not explained by fitting on 1M instead of 10M (max |action| barely grows with data: Allegro

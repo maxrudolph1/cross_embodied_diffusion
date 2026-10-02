@@ -25,7 +25,11 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
   parse. Each sbatch now puts its own checkout's `src/` first on PYTHONPATH (the shared
   venv's editable install points at the main checkout) -- without that, jobs submitted from
   the worktree would silently run the old code.
-- Pick up here: needs a GPU node for (1) `slurm_jobs/vista_collect_val.sbatch` then
+- 2026-10-02: on a GPU idev (c610-072) every GPU check passed (CHANGES item 63, "GPU checks"):
+  padded eval on all 5 hands, env-vs-store column alignment (with a negative control that
+  fails as it should), rescore, val stores built (0 start collisions, ~20k steps/hand), and the
+  recipe timing: 7.5 min/epoch uncompiled alone -> ~7 h per 50-epoch run.
+- Pick up here (superseded parts done 10-02): needs a GPU node for (1) `slurm_jobs/vista_collect_val.sbatch` then
   `scripts/build_val_split.py` (val stores), (2) the 9-run diagnostic
   `slurm_jobs/diag_rot_ta_manifest.json` (Allegro x sigma {0,2,100} x 3 seeds) to compare with
   Bundle's 0.655 / 1.137 / 0.767, then `rescore_selected.py`. The other four
