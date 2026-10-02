@@ -27,6 +27,10 @@
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:?SLURM_SUBMIT_DIR not set -- run this via sbatch}"
 source .venv/bin/activate
+# Run THIS checkout's code even when the shared venv's editable install points
+# at another checkout (main checkout moved to bundle-migration on 2026-10-02;
+# re-score these old checkpoints from a worktree of this branch).
+export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
 
 : "${RUNS:?set RUNS='glob relative to the outputs root' via --export}"
 OUT_ROOT="${OUT_ROOT:-${SCRATCH:?}/cross_embodied_diffusion/outputs}"
