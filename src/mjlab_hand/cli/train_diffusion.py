@@ -108,6 +108,12 @@ def main() -> None:
         help="Separate term-aligned val store (scripts/build_val_split.py); enables policy_best_val.pt.",
     )
     parser.add_argument("--val-windows", type=int, default=2048)
+    parser.add_argument(
+        "--init-checkpoint",
+        type=Path,
+        default=None,
+        help="Fine-tune: start from this checkpoint's weights and normalizers (fresh optimizer).",
+    )
     parser.add_argument("--wandb-project", type=str, default=None, help="Optional WandB logging.")
     parser.add_argument("--wandb-run-name", type=str, default=None)
     parser.add_argument("--wandb-tags", type=str, nargs="+", default=None)
@@ -147,6 +153,7 @@ def main() -> None:
         x0_clamp=args.x0_clamp,
         val_dataset=args.val_dataset,
         val_windows=args.val_windows,
+        init_checkpoint=args.init_checkpoint,
         wandb_project=args.wandb_project,
         wandb_run_name=args.wandb_run_name,
         wandb_tags=args.wandb_tags,

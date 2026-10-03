@@ -82,6 +82,9 @@ class TrainConfig:
     x0_clamp: float = 1.0
     val_dataset: Path | None = None
     val_windows: int = 2048
+    # Fine-tuning: start from this checkpoint's weights AND normalizers
+    # (architecture must match). Fresh optimizer. CHANGES.md item 67.
+    init_checkpoint: Path | None = None
     # Optional WandB logging (off unless wandb_project is set; Branch-only,
     # no effect on training).
     wandb_project: str | None = None
@@ -216,6 +219,22 @@ def train_diffusion(cfg: TrainConfig) -> Path:
     )
     policy = DiffusionPolicy(policy_cfg).to(device)
     policy.set_normalizers(obs_norm, act_norm)
+    if cfg.init_checkpoint is not None:
+        init = DiffusionPolicy.load(cfg.init_checkpoint, device=device)
+        arch = ("obs_dim", "action_dim", "obs_horizon", "action_horizon", "num_train_timesteps",
+                "num_inference_steps", "down_dims", "diffusion_step_embed_dim")
+        diff = {k: (getattr(init.cfg, k), getattr(policy_cfg, k)) for k in arch
+                if tuple(np.atleast_1d(getattr(init.cfg, k))) != tuple(np.atleast_1d(getattr(policy_cfg, k)))}
+        if diff:
+            raise ValueError(f"--init-checkpoint architecture mismatch (checkpoint, run): {diff}")
+        policy.load_state_dict(init.state_dict())
+        # Keep the checkpoint's scaling: the weights were trained against it.
+        policy.set_normalizers(init.obs_normalizer, init.action_normalizer)
+        init_digest = norm_digest(init.obs_normalizer, init.action_normalizer)
+        if init_digest != digest:
+            print(f"[WARN] --norm-mode gives {digest}, checkpoint has {init_digest}; using the checkpoint's")
+        digest = init_digest
+        print(f"[INFO] initialized from {cfg.init_checkpoint} (normalizer {digest})")
     opt = torch.optim.AdamW(policy.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
 
     specs = _eval_specs(cfg)

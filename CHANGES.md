@@ -9,6 +9,24 @@ comments ("See CHANGES.md item N") -- never renumber; append the next number.
 
 ---
 
+## 2026-10-03 — fine-tuning co-trained policies
+
+### 67. `train.py` / CLI `--init-checkpoint`; `scripts/build_finetune_manifest.py` (NEW)
+
+- `--init-checkpoint PATH` (`TrainConfig.init_checkpoint`): load that checkpoint's weights and
+  normalizers into the new run (architecture fields must match, else ValueError), fresh
+  optimizer; the checkpoint's normalizer wins over `--norm-mode` (warning if they differ);
+  `norm_digest` recorded is the checkpoint's. Smoke test (GPU): Rotation-Allegro co-train
+  `policy_last0` -> 196 steps at lr 1e-5 on the 10k store, target-only gating: first-epoch loss
+  0.0096 (vs ~0.36 from scratch), max weight change 1.3e-3, normalizers identical.
+- `build_finetune_manifest.py`: per (family, target, co-train seed, lr) fine-tune from
+  `ambient_ta/<Task>_sigma0_seed<k>/<--init>` on the same pooled store gated to the target only
+  (tmin 0 / 100, noise-first), eval + val every epoch. `slurm_jobs/finetune_manifest.json`:
+  init = policy_best_val.pt, lr {1e-4, 1e-5}, 10 epochs (~156k steps), 2 families x 5 targets
+  x seeds {0, 1} = 40 runs -> `outputs/diffusion/ambient_ta_ft/`; all parse, all inputs exist.
+
+---
+
 ## 2026-10-03 — co-train vs target-only plots
 
 ### 66. `scripts/plot_cotrain_vs_target.py` (NEW)
