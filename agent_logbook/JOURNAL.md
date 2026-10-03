@@ -4,6 +4,70 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-10-02 (19:15) — HANDOFF: co-training vs target-only (job 1043385) queued; what's next
+
+State at handoff (the agent's idev box is being killed; nothing of this session runs any more):
+
+**Running / queued**
+- `1043385` (`ct-vs-to`, submitted ~16:30 by the user from `~/cross_embodied_diffusion` on
+  `bundle-migration`): 10 array jobs x 4 nodes, PACK=1, `--time=09:00:00`, manifest
+  `slurm_jobs/cotrain_vs_target_manifest.json` (gitignored; regenerate with
+  `scripts/build_ambient_manifest.py --families Grasp InHand-Rotation --sigmas 0 100 --seeds 0 1
+  --out slurm_jobs/cotrain_vs_target_manifest.json`). 40 runs = {Grasp, InHand-Rotation} x 5
+  targets x sigma {0 = full co-training, 100 = target-only} x seeds {0, 1}, each on the target's
+  `<Family>_pad5_scarce<Hand>_K50k` store (target 50k + other four hands at 1M), Bundle recipe
+  (noise-first, frozen min/max, x0 1.0, val store, keep-last 3, target-only padded eval 32 x 1500).
+  Array element a = one target (a 0-4 grasp Allegro..Wuji, 5-9 rotation); node i = task 4a+i
+  (sigma0 s0, sigma0 s1, sigma100 s0, sigma100 s1). Outputs:
+  `$SCRATCH/cross_embodied_diffusion/outputs/diffusion/ambient_ta/<Task>_sigma<s>_seed<k>/`.
+  At 19:14 all 10 PENDING (Priority); queue median wait was ~10.5-11.3 h for 1-16 node jobs.
+- Expected run time ~7 h alone/node (rotation measured 7.5 min/epoch uncompiled, ~50 epochs +
+  10 evals). **Grasp speed is unmeasured** -- when the jobs start, check epoch time vs the 9 h
+  limit (grasp obs 191 vs 91, heavier sim). A pending/running job's limit can only be lowered
+  by the user (`scontrol update ... TimeLimit`), not raised.
+
+**When 1043385 finishes**
+1. Completion marker is `selection.json` per run (`ls .../ambient_ta/*/selection.json | wc -l`
+   should be 40). Check logs `slurm_jobs/vista_train_manifest/logs/task_1043385_*.{out,err}`.
+2. Fresh-seed re-score (user submits from a login node, from `~/cross_embodied_diffusion`):
+   `sbatch -A ASC26008 --array=0-9 --export=ALL,RUNS='diffusion/ambient_ta/*' slurm_jobs/vista_eval_checkpoints.sbatch`
+   -> `<run>/final_eval.jsonl` (best_rollout, best_val, last0; 100 envs x 1500 steps, seed 1234).
+   Report `last0` (Bundle's choice), show all three.
+3. Compare sigma0 (co-train) vs sigma100 (target-only) per target and family, mean of 2 seeds.
+   What the user wants to know: does co-training with 4M source + 50k target beat 50k alone, as
+   it did on the other compute? Bundle's logs (MIGRATION.md section 7): co-train minus solo =
+   grasp +0.46, rotation -0.27 at 50k -- so expect a gain on grasp and possibly a loss on
+   rotation. `scripts/plot_ambient_rot_sweep.py` (on `vista-ambient-rotation`) plots per-hand
+   score vs sigma; it reads `posthoc_eval.json`/in-training rows and the old metric names --
+   adapt it to `final_eval.jsonl` for these runs.
+4. Promote runs worth keeping: `scripts/promote_outputs.sh diffusion/ambient_ta` (needs
+   `selection.json`; checks /work quota).
+
+**Ready but not launched (on hold per user: "don't focus on ambient sigma not 0/100")**
+- `slurm_jobs/diag_rot_ta_manifest.json` (Allegro x sigma {0,2,100} x 3 seeds) and the 320-run
+  `build_ambient_rotation_manifest.py --kind sweep`; `slurm_jobs/cotrain_solo_manifest.json`
+  (60 runs, solo = single-hand 50k store with shared norm instead of sigma=100 -- superseded by
+  1043385's design, kept for reference).
+
+**Open issues**
+- Normalized action std under our frozen min/max is 0.24 (rot) / 0.26 (grasp) vs Bundle's quoted
+  0.077 (MIGRATION.md is itself inconsistent: 0.077/0.153/0.179). Unresolved; sigma values may
+  not map 1:1 to Bundle's. See CHANGES item 63.
+- Old 320-run tail-padded sweep `1038730` (`vista-ambient-rotation` code) was never re-scored;
+  provisional plots + finding (co-training works only for the column-aligned Allegro/LEAP pair)
+  are in that branch's JOURNAL 2026-10-01 21:10. Re-scoring needs a worktree of
+  `vista-ambient-rotation` (steps in the 15:40 entry below). Probably superseded by 1043385.
+- Branches diverged: `vista-ambient-rotation` (CHANGES item 62, sweep results, plot script) and
+  `bundle-migration` (items 63-65). Merge vista-ambient-rotation into bundle-migration when
+  convenient (conflicts only in CHANGES.md / logbooks). Both pushed; nothing merged to `main`.
+- Rotation-Shadow val store has 19,541 steps (< 20k target; all 64 collected episodes kept).
+
+**Session environment notes**
+- The agent cannot `sbatch` from idev/compute nodes; hand commands to the user. GPU checks need
+  a `gh` idev; `gg` idevs have no GPU.
+- Monitoring pattern used: a bash loop (`squeue` state changes, error grep over the task logs,
+  hourly digest of eval_metrics) run under the Monitor tool, re-armed every 30 min.
+
 ## 2026-10-02 (15:40) — Worktree consolidated; main checkout now on bundle-migration
 
 - User asked why the migration lived in `$WORK/code/ced-migrate`: it was a git worktree of
