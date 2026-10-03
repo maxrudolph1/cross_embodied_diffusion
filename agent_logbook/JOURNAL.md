@@ -151,6 +151,39 @@ State at handoff (the agent's idev box is being killed; nothing of this session 
   `scarce<Hand>_K50k` stores are CPU builds (`padded_grid.py`). Old checkpoints (sweep
   `1038730`) must be re-scored from the `vista-ambient-rotation` branch.
 
+## 2026-10-01 (21:10) — Ambient rotation sweep 1038730 done; layout signal in the results
+
+- All 10 jobs COMPLETED (9h20-9h55 of 12h), 320/320 runs with train_done.json, no errors.
+- Provisional plots (in-training evals, 32 envs): `outputs/plots/ambient_rot_{by_hand,hands}.png`,
+  `ambient_rot_summary.csv` (scripts/plot_ambient_rot_sweep.py, CHANGES item 62).
+- Target score rises with sigma for every hand, but sigma=0 (full co-training, last epoch)
+  differs sharply by hand: LEAP 0.58 (~ its sigma=100 0.52), Allegro 0.36, Shadow / Sharpa /
+  Wuji ~0.05. Allegro and LEAP are the only pair with identical obs/action width and term
+  layout, i.e. the only hands whose tail-padded columns line up term for term. So co-training
+  works where columns align and fails where tail padding misaligns them -- supporting the
+  term-aligned layout of the Bundle migration (bundle-migration branch, item 63) as the
+  explanation for Bundle's much better sigma=0 (0.655), rather than target dilution alone.
+- Next: fresh-seed re-score of all 320 (old code, this checkout), then rerun on the migrated code.
+
+## 2026-10-01 (02:45) — Reporting evals of the ambient minmax test runs (job 1038574)
+
+`eval_checkpoints.py`, 100 envs, env seed 1000, successes before drop (drop rate):
+
+| sigma | ckpt | Allegro (target, 50k) | LEAP (control, 1M, gated) |
+|---|---|---|---|
+| 0 | best_eval / best_val / latest | 0.31 / 0.19 / 0.38 | 1.84 / 1.78 / 1.76 |
+| 10 | best_eval / best_val / latest | 0.41 / 0.48 / 0.42 | 0.00 / 0.00 / 0.00 |
+| 25 | best_eval / best_val / latest | 0.56 / 0.65 / 0.66 | 0.00 / 0.00 / 0.00 |
+| 100 | best_eval / best_val / latest | 0.81 / 1.11 / 0.90 | 0.00 / 0.00 / 0.00 |
+
+- Target improves monotonically with sigma (co-training hurts Allegro; target-only best), one
+  seed. The sweep (4 seeds, 16 sigmas, 5 hands) will say how robust this is.
+- Control: LEAP is fully functional when co-trained at every timestep (1.8 at sigma=0) and
+  exactly 0.00 already at sigma=10 -- withholding only the 10 lowest-noise of 100 timesteps
+  makes a hand non-functional. Same as the Aug grasp/rotation ambient control (ANALYSIS.md
+  2026-08-27 "The control is the real finding"), now with minmax padded 5-hand pools.
+  The dense low-sigma grid (1..8) in the sweep will locate where this collapse happens.
+
 ## 2026-09-30 (20:00) — Sweep job shape: queue evidence, AGENTS.md scheduling procedure
 
 - User: only 40 queued jobs allowed and some gh jobs already pending, so 40 x 2-node jobs

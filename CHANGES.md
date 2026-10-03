@@ -201,6 +201,20 @@ Not explained by fitting on 1M instead of 10M (max |action| barely grows with da
 step, so sigma values may not map 1:1 onto Bundle's; compare curve shapes, not sigma indices,
 until resolved.
 
+## 2026-10-01 — plots for the ambient rotation sweep
+
+### 62. `scripts/plot_ambient_rot_sweep.py` (NEW)
+
+Reads `$SCRATCH/.../ambient_rot/*_sigma*_seed*`; per run uses `posthoc_eval.json` (fresh-seed)
+when present, else in-training evals (titles then say PROVISIONAL). Writes to `outputs/plots/`:
+`ambient_rot_by_hand.png` (one panel per target hand, score vs sigma for best_eval / best_val /
+latest, seed dots), `ambient_rot_hands.png` (all hands, one checkpoint rule `--ckpt`, raw and
+normalized to sigma=100, direct labels), `ambient_rot_control.png` (only if post-hoc control
+evals exist), `ambient_rot_summary.csv` (every value; the table view). x axis: sigma 0..25
+evenly spaced with a break before 100. Colours: dataviz reference categorical palette, fixed
+order (validator not run: no Node.js on Vista; the palette is pre-validated, 3 series all-pairs,
+5 as lines with mandatory direct labels).
+
 ---
 
 ## 2026-09-30 (night) — scheduling guidance for agents
