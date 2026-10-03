@@ -9,6 +9,18 @@ comments ("See CHANGES.md item N") -- never renumber; append the next number.
 
 ---
 
+## 2026-10-03 — co-train vs target-only plots
+
+### 66. `scripts/plot_cotrain_vs_target.py` (NEW)
+
+Per family, three panels (best in-training eval, best val loss, last epoch): co-training
+(sigma 0) vs target-only (sigma 100) per target, bars = mean of seeds, dots = seeds, per-pair
+difference labels; `outputs/plots/cotrain_vs_target_{grasp,rotation}.png` + summary CSV. Uses
+`final_eval.jsonl` (rescore_selected.py) when all three rules are there, else in-training evals
+(marked PROVISIONAL; best_val = the eval row at selection.json's best_val epoch).
+
+---
+
 ## 2026-10-02 — co-training vs target-only through the ambient pipeline
 
 ### 65. `scripts/build_ambient_manifest.py` (NEW)
