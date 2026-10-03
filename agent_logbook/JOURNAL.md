@@ -4,6 +4,21 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-10-03 (13:40) — Co-training vs target-only (1043385) done: grasp gain replicates
+
+- All 10 jobs COMPLETED (6h30-6h58 of 9h), 40/40 runs with selection.json, no errors.
+- Provisional (final in-training eval, 32 envs, mean of 2 seeds), co-train sigma0 vs target-only
+  sigma100:
+  - Grasp (success_rate): Allegro 0.875 vs 0.328, LEAP 0.734 vs 0.438, Shadow 0.828 vs 0.359,
+    Sharpa 0.703 vs 0.266, Wuji 0.812 vs 0.391 -> mean **+0.434** (Bundle: +0.46). Replicates.
+  - Rotation (avg_successes_before_drop): Allegro 1.047 vs 1.047, LEAP 1.094 vs 0.609, Shadow
+    0.344 vs 0.406, Sharpa 0.578 vs 0.594, Wuji 0.812 vs 0.844 -> mean **+0.075**; ~neutral
+    except LEAP (+0.48). Bundle reported -0.27; not reproduced (2 seeds, 32 envs: noisy).
+  - vs the old tail-padded sweep (1038730), where co-training collapsed to ~0.05 for Shadow /
+    Sharpa / Wuji rotation targets: with term-aligned padding they are on par with target-only.
+- Next: fresh-seed re-score (`vista_eval_checkpoints.sbatch`, RUNS='diffusion/ambient_ta/*'),
+  then plots from final_eval.jsonl.
+
 ## 2026-10-02 (19:15) — HANDOFF: co-training vs target-only (job 1043385) queued; what's next
 
 State at handoff (the agent's idev box is being killed; nothing of this session runs any more):

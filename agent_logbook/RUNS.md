@@ -161,5 +161,5 @@ Artifact roots are gitignored; paths are relative to repo root.
 
 | id | what | where | status | notes |
 |---|---|---|---|---|
-| cotrain-vs-target `1043385` | 40 runs: Grasp + Rotation x 5 targets x sigma {0, 100} x seeds {0, 1}, `slurm_jobs/cotrain_vs_target_manifest.json`, `-N 4 --array=0-9`, PACK=1, 9 h | `$SCRATCH/cross_embodied_diffusion/outputs/diffusion/ambient_ta/` | pending (submitted 2026-10-02 ~16:30; all 10 PENDING at 19:14, handoff -- see JOURNAL 2026-10-02 19:15) | queue 2026-10-02 15:15: median wait ~10.5-11.3 h for every size 1-16 nodes, so 1 run/node (~7 h, measured 7.5 min/epoch uncompiled) beats packing (~15 h at 4/node) |
+| cotrain-vs-target `1043385` | 40 runs: Grasp + Rotation x 5 targets x sigma {0, 100} x seeds {0, 1}, `slurm_jobs/cotrain_vs_target_manifest.json`, `-N 4 --array=0-9`, PACK=1, 9 h | `$SCRATCH/cross_embodied_diffusion/outputs/diffusion/ambient_ta/` | **done** 2026-10-03: 10/10 COMPLETED (6h30-6h58), 40/40 selection.json; provisional results JOURNAL 2026-10-03 13:40; re-score pending | queue 2026-10-02 15:15: median wait ~10.5-11.3 h for every size 1-16 nodes, so 1 run/node (~7 h, measured 7.5 min/epoch uncompiled) beats packing (~15 h at 4/node) |
 
