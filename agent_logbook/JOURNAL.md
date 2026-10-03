@@ -4,6 +4,27 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-10-03 (16:45) — Co-train vs target-only, fresh-seed re-score: grasp +0.38..+0.44, rotation -0.04..-0.15
+
+- Re-score of all 40 runs (`rescore_selected.py`, best_rollout / best_val / last0, 100 envs x 1500
+  steps, eval seed 1234) run on the user's gh idev (c619-132), 4 shards, 13:54-16:41, 120/120,
+  no errors (the duplicate batch job 1045799 was cancelled). Rows in `<run>/final_eval.jsonl`.
+- Mean over 5 targets of (co-train sigma0 minus target-only sigma100), 2 seeds:
+
+  | | best in-training eval | best val loss | last epoch |
+  |---|---|---|---|
+  | Grasp (success rate) | +0.441 | +0.380 | +0.376 |
+  | Rotation (successes before drop) | -0.066 | -0.147 | -0.041 |
+
+  Grasp: co-training wins for all 5 targets under all 3 rules (last0: Allegro 0.83 vs 0.41,
+  LEAP 0.61/0.36, Shadow 0.64/0.42, Sharpa 0.80/0.30, Wuji 0.90/0.42) -- replicates the user's
+  other-compute result and Bundle's +0.46. Rotation: slightly negative for 4/5 targets (Wuji
+  worst, -0.18..-0.35), LEAP positive (+0.05..+0.31) -- leans toward Bundle's -0.27, weaker.
+- Figures (tracked): `media/figures/cotrain_vs_target_{overview,grasp,rotation}.png` +
+  `cotrain_vs_target_summary.csv` (`scripts/plot_cotrain_vs_target.py`), and the old tail-padded
+  sweep's provisional `media/figures/ambient_rot_{by_hand,hands}.png`.
+- Fine-tuning of the co-trained runs (`1045839`, 40 runs) queued (RUNS.md).
+
 ## 2026-10-03 (13:40) — Co-training vs target-only (1043385) done: grasp gain replicates
 
 - All 10 jobs COMPLETED (6h30-6h58 of 9h), 40/40 runs with selection.json, no errors.

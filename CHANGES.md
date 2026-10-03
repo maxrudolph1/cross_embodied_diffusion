@@ -35,7 +35,9 @@ Per family, three panels (best in-training eval, best val loss, last epoch): co-
 (sigma 0) vs target-only (sigma 100) per target, bars = mean of seeds, dots = seeds, per-pair
 difference labels; `outputs/plots/cotrain_vs_target_{grasp,rotation}.png` + summary CSV. Uses
 `final_eval.jsonl` (rescore_selected.py) when all three rules are there, else in-training evals
-(marked PROVISIONAL; best_val = the eval row at selection.json's best_val epoch).
+(marked PROVISIONAL; best_val = the eval row at selection.json's best_val epoch). Also
+`cotrain_vs_target_overview.png`: both families, one checkpoint rule (`--overview-ckpt`,
+default last0), per target + mean over targets. Final figures copied to `media/figures/`.
 
 ---
 

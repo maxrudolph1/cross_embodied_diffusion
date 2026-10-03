@@ -14,7 +14,9 @@ Score per run and checkpoint rule:
 Metric: grasp success_rate, rotation avg_successes_before_drop.
 
 Writes outputs/plots/cotrain_vs_target_{grasp,rotation}.png (3 panels: best
-eval, best val, last; bars = mean of seeds, dots = seeds) and
+eval, best val, last; bars = mean of seeds, dots = seeds),
+cotrain_vs_target_overview.png (both families, one checkpoint rule --
+--overview-ckpt, default last0 -- per target plus the mean over targets) and
 cotrain_vs_target_summary.csv (every value: the table view).
 """
 
@@ -68,6 +70,7 @@ def main() -> None:
     ap.add_argument("--runs", type=Path,
                     default=Path(os.path.expandvars("$SCRATCH/cross_embodied_diffusion/outputs/diffusion/ambient_ta")))
     ap.add_argument("--out", type=Path, default=Path("outputs/plots"))
+    ap.add_argument("--overview-ckpt", default="last0", choices=[r for r, _ in RULES])
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
@@ -134,6 +137,60 @@ def main() -> None:
         fig.savefig(args.out / f"cotrain_vs_target_{short}.png", dpi=150)
         plt.close(fig)
         print(f"[INFO] {fam}: {len(fr) // len(RULES)} runs, provisional={prov} -> cotrain_vs_target_{short}.png")
+
+    overview(recs, args.out, args.overview_ckpt)
+
+
+def overview(recs: list[dict], out: Path, rule: str) -> None:
+    """Both families side by side: per target and the mean over targets."""
+    fams = [f for f in FAMILIES if any(r["family"] == f for r in recs)]
+    fig, axes = plt.subplots(1, len(fams), figsize=(6.6 * len(fams), 4.2), facecolor=SURFACE, squeeze=False)
+    prov = any(r["source"].startswith("in-training") for r in recs)
+    for ax, fam in zip(axes[0], fams):
+        fr = [r for r in recs if r["family"] == fam and r["checkpoint"] == rule]
+        groups = HANDS + ["mean"]
+        x = np.arange(len(groups), dtype=float)
+        x[-1] += 0.4  # visual gap before the mean
+        width = 0.36
+        for j, (sig, name) in enumerate(ARMS):
+            off = (j - 0.5) * (width + 0.04)
+            per = {h: [r["value"] for r in fr if r["target"] == h and r["sigma"] == sig] for h in HANDS}
+            seed_means = defaultdict(list)  # mean over targets, per seed
+            for r in fr:
+                if r["sigma"] == sig:
+                    seed_means[r["seed"]].append(r["value"])
+            per["mean"] = [float(np.mean(v)) for v in seed_means.values()]
+            means = [np.mean(per[g]) for g in groups]
+            ax.bar(x + off, means, width, color=SERIES[sig], label=name, zorder=2, edgecolor=SURFACE, linewidth=2)
+            for i, g in enumerate(groups):
+                ax.scatter([x[i] + off] * len(per[g]), per[g], s=14, color=INK, alpha=0.55, zorder=3, linewidths=0)
+        for i, g in enumerate(groups):
+            a = [r["value"] for r in fr if r["sigma"] == "0" and (g == "mean" or r["target"] == g)]
+            b = [r["value"] for r in fr if r["sigma"] == "100" and (g == "mean" or r["target"] == g)]
+            top = max(a + b)
+            ax.text(x[i], top * 1.03 + 0.02, f"{np.mean(a) - np.mean(b):+.2f}", ha="center", fontsize=8, color=INK2)
+        ax.set_xticks(x)
+        ax.set_xticklabels(groups, fontsize=9, color=INK2)
+        ax.set_facecolor(SURFACE)
+        ax.tick_params(colors=INK2, length=0)
+        ax.grid(axis="y", color=GRID, linewidth=0.8, zorder=0)
+        for sp in ("top", "right"):
+            ax.spines[sp].set_visible(False)
+        for sp in ("left", "bottom"):
+            ax.spines[sp].set_color(GRID)
+        ax.set_ylabel(FAMILIES[fam][2], color=INK2, fontsize=9)
+        ax.set_title(fam, color=INK, fontsize=10, loc="left", pad=10)
+        ax.set_ylim(0, max(r["value"] for r in fr) * 1.2 + 0.05)
+    h, lab = axes[0][0].get_legend_handles_labels()
+    fig.legend(h, lab, loc="upper right", ncol=2, frameon=False, fontsize=9, labelcolor=INK2)
+    label = dict(RULES)[rule]
+    src = "PROVISIONAL: in-training evals" if prov else "fresh-seed re-score, 100 episodes"
+    fig.suptitle(f"Co-training (target 50k + four hands at 1M) vs target-only 50k; checkpoint = {label}  [{src}]",
+                 x=0.01, ha="left", color=INK, fontsize=11)
+    fig.tight_layout(rect=(0, 0, 1, 0.9))
+    fig.savefig(out / "cotrain_vs_target_overview.png", dpi=150)
+    plt.close(fig)
+    print("[INFO] -> cotrain_vs_target_overview.png")
 
 
 if __name__ == "__main__":
