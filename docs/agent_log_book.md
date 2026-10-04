@@ -54,8 +54,8 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
      quoted 0.077 (CHANGES item 63). σ values may not map 1:1 onto Bundle's.
   4. Possible follow-ups the user has not decided on: an lr/epochs sweep for fine-tuning to trade target
      score against forgetting, and ambient σ values other than 0/100 (on hold per the user).
-  5. Branch `vista-ambient-rotation` has been merged into `bundle-migration`. `main` sits at the
-     pre-restructure commit `ff0e174`.
+  5. Branch `vista-ambient-rotation` has been merged into `bundle-migration`. `main` was fast-forwarded to
+     `bundle-migration` on 2026-10-04 (`8f43037`), so the two are identical.
 
 ## Environment & install (living reference)
 
