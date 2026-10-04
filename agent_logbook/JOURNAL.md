@@ -4,6 +4,45 @@ Newest entries first. Link run/collection IDs from `RUNS.md` / `COLLECTIONS.md`.
 
 ---
 
+## 2026-10-04 (00:20) — Fine-tuning co-trained policies wins in both families
+
+- Fine-tunes `1045839` (40 runs: from each co-trained run's policy_best_val.pt, 10 epochs on
+  target-only data, lr 1e-4 / 1e-5, 2 seeds) all COMPLETED, no errors.
+- Re-scored on this gh idev (c619-132): fine-tunes 120/120 (`rescore_selected.py`, 100 eps x 1500
+  steps, seed 1234), finished 00:15.
+- Mean over 5 targets x 2 seeds (best_rollout / best_val / last0):
+
+  | | Grasp (success) | Rotation (successes before drop) |
+  |---|---|---|
+  | target-only 50k | 0.37 / 0.38 / 0.38 | 0.73 / 0.73 / 0.70 |
+  | co-trained | 0.81 / 0.76 / 0.76 | 0.66 / 0.58 / 0.66 |
+  | co-trained + FT lr 1e-4 | 0.87 / 0.84 / 0.84 | **1.38** / **1.26** / 1.29 |
+  | co-trained + FT lr 1e-5 | **0.92** / **0.93** / **0.91** | 1.25 / 1.20 / **1.34** |
+
+  Co-train-then-fine-tune beats both co-training and target-only in both families; for rotation
+  it roughly doubles both (co-training alone slightly hurt). Checkpoint selection matters much
+  less than training condition. Figures: `conditions_{overview,grasp,rotation}.png`.
+- **Cross-embodiment done (04:00, 300 scores, last0, 100 episodes).** Mean own target vs other 4 hands:
+
+  | | Grasp own | Grasp others | Rotation own | Rotation others |
+  |---|---|---|---|---|
+  | co-trained | 0.76 | 0.98 | 0.66 | 1.45 |
+  | FT lr 1e-4 | 0.84 | **0.00** | 1.29 | **0.00** |
+  | FT lr 1e-5 | 0.91 | 0.82 | 1.34 | 0.25 |
+
+  Fine-tuning trades generality for the target: lr 1e-4 forgets the other hands completely
+  (catastrophic forgetting, 0.00 almost everywhere off-diagonal) in both families; lr 1e-5 keeps
+  most of grasp (0.82) but loses most of rotation (0.25). So lr 1e-5 is the best target policy
+  for grasp AND stays a reasonable grasp generalist; for rotation no single policy is good at
+  both. Figures: `media/figures/cross_embodiment_{grasp,rotation}.png` (+ summary CSV),
+  `media/figures/conditions_*.png`.
+- (earlier, co-trained only) Cross-embodiment (last0, every generalist on all 5 hands of its family): co-trained 80/80 done --
+  each generalist is near-perfect on the four 1M hands (grasp 0.94-1.00) and weakest on its own
+  50k target (diagonal grasp 0.61-0.90, rotation 0.44-0.84). Fine-tuned cross evals (160)
+  running on the idev (`cross_ft_idev_p*.log`), then heatmaps `cross_embodiment_{grasp,rotation}.png`.
+- Note: a waiter that `pgrep -f`'d for "rescore_selected" never fired because the launching
+  shell's own command line contained that string; launched by hand instead. Use a pid file.
+
 ## 2026-10-03 (16:45) — Co-train vs target-only, fresh-seed re-score: grasp +0.38..+0.44, rotation -0.04..-0.15
 
 - Re-score of all 40 runs (`rescore_selected.py`, best_rollout / best_val / last0, 100 envs x 1500

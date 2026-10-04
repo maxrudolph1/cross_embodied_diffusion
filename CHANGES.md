@@ -9,6 +9,22 @@ comments ("See CHANGES.md item N") -- never renumber; append the next number.
 
 ---
 
+## 2026-10-04 — cross-embodiment evals and condition plots
+
+### 68. `scripts/eval_cross_embodiment.py`, `scripts/plot_conditions.py` (NEW)
+
+- `eval_cross_embodiment.py`: scores a run's checkpoint(s) (`--which`, resolved like
+  rescore_selected) on all five hands of its family with `pad=True` -> `<run>/cross_eval.jsonl`;
+  same protocol as rescore (100 envs x 1500 steps, seed 1234); `--skip-target` reuses the run's
+  target row from final_eval.jsonl; resumable; `--shard i/n`.
+- `plot_conditions.py`: conditions target-only / co-trained / co-trained + FT lr 1e-4 / 1e-5 x
+  selection best_rollout / best_val / last0 on the target hand (`conditions_<family>.png`,
+  `conditions_overview.png`), and 5x5 cross-embodiment heatmaps per generalist condition
+  (last0; row = policy's target hand, column = evaluated hand; `cross_embodiment_<family>.png`;
+  not-yet-evaluated cells grey), plus summary CSVs.
+
+---
+
 ## 2026-10-03 — fine-tuning co-trained policies
 
 ### 67. `train.py` / CLI `--init-checkpoint`; `scripts/build_finetune_manifest.py` (NEW)
