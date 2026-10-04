@@ -1,13 +1,34 @@
 # Code changes
 
 Exact source edits made by agent sessions, so another agent can reproduce or revert them.
-Newest first. Repo-relative paths. Artifacts and run registries live in
-[`agent_logbook/RUNS.md`](agent_logbook/RUNS.md) /
-[`agent_logbook/COLLECTIONS.md`](agent_logbook/COLLECTIONS.md); narrative in
-[`agent_logbook/JOURNAL.md`](agent_logbook/JOURNAL.md). Numbered items are cited from code
-comments ("See CHANGES.md item N") -- never renumber; append the next number.
+Newest first. Repo-relative paths. Jobs live in [`RUNS.md`](RUNS.md), datasets in
+[`COLLECTIONS.md`](COLLECTIONS.md), and session narrative in the [agent log book](agent_log_book.md).
+Numbered items are cited from code comments ("See CHANGES.md item N", meaning this file,
+`docs/CHANGES.md`). Never renumber; append the next number. Items before 69 may cite the old
+`agent_logbook/` and `ANALYSIS.md` paths: those files are now `docs/RUNS.md`, `docs/COLLECTIONS.md` and
+`docs/archive/`.
 
 ---
+
+## 2026-10-04 — repo moved; docs restructured into `docs/`
+
+### 69. Docs layout: `docs/` with agent and experiment log books (no code behaviour change)
+
+- Repo moved from `/work/09312/rudolph/code/cross_embodied_diffusion` to
+  `/work/09312/rudolph/documents/cross_embodied_diffusion`; `~/cross_embodied_diffusion` re-pointed. The venv's
+  absolute paths were rewritten in place (agent log A38). Nothing in the repo hard-codes the location.
+- NEW `docs/agent_log_book.md`, `docs/experiment_log_book.md`, `docs/README.md`. Moved: `CHANGES.md`,
+  `MIGRATION.md`, `agent_logbook/{RUNS,COLLECTIONS}.md` -> `docs/`; `media/figures/*` -> `docs/plots/`
+  (+ `ambient_rot_summary.csv` from `outputs/plots/`). Archived verbatim: `agent_logbook/JOURNAL.md`,
+  `ANALYSIS.md` -> `docs/archive/`. Deleted `agent_logbook/README.md`.
+- `docs/RUNS.md`: new header, "how to recreate" and a job table with exact `sbatch` lines (from
+  `sacct ... SubmitLine`); old content kept as legacy sections. `docs/COLLECTIONS.md`: new "Current stores".
+- `AGENTS.md` documentation map / logbook protocol / standing findings, `.cursor/rules/agent-logbook.mdc`,
+  `README.md` pointer. Comment-only path updates in `slurm_jobs/{train_rl_experts,train_rl_experts_node011,
+  collect_1M,build_ambient,vista_train_manifest}.sbatch` and `scripts/{compare_matched_embodiments,
+  measure_ambient_threshold,plot_ambient_sweep}.py`.
+- Plot scripts still default to `outputs/plots/`; copy the final figures into `docs/plots/`.
+
 
 ## 2026-10-04 — cross-embodiment evals and condition plots
 
@@ -655,12 +676,12 @@ These entries were written on 2026-08-31 for work committed on 08-27 and 08-31 t
 **shipped without any logbook update**. Both commits touched `scripts/` and produced
 results under `outputs/`; neither appears in any logbook file before now. The numbers below
 were re-derived from the run directories on 08-31, not copied from the commit messages —
-see the verification note in [`agent_logbook/JOURNAL.md`](agent_logbook/JOURNAL.md) 2026-08-31.
+see the verification note in [`archive/JOURNAL_2026-08-22_to_2026-10-04.md`](archive/JOURNAL_2026-08-22_to_2026-10-04.md) 2026-08-31.
 
 ### 36. `scripts/plot_ambient_sweep.py` — FIX: two eval-row schemas blanked every seed-1 endpoint
 
 Committed in `b3b458e` (2026-08-27 22:20). **This fix changed a published conclusion**; see
-item 39 and the correction in [`ANALYSIS.md`](ANALYSIS.md).
+item 39 and the correction in [`ANALYSIS.md`](archive/ANALYSIS_2026-08-26_to_2026-09-28.md).
 
 `train.py` gained `eval_specs` (multi-target eval) partway through the project — CHANGES
 item 15. After that change, even the single `--eval-task` path writes an `eval_task` key
@@ -771,7 +792,7 @@ documentation only. Summarises what `README.md` does not: that the active work i
 cross-embodiment diffusion BC rather than the upstream mjlab_hand RL benchmark, the pipeline
 order, the required env vars (`MUJOCO_GL`, the `/usr/lib64` `LD_LIBRARY_PATH` prepend,
 per-job `WARP_CACHE_PATH`), the logbook protocol from `.cursor/rules/agent-logbook.mdc`, the
-invariants recorded in this file, and the standing findings from [`ANALYSIS.md`](ANALYSIS.md).
+invariants recorded in this file, and the standing findings from [`ANALYSIS.md`](archive/ANALYSIS_2026-08-26_to_2026-09-28.md).
 
 It also records that `src/mjlab_hand/env_cfg.py` is dead upstream leftover — it imports
 `mjlab_hand.anymal_c`, which does not exist in this repo, so the module cannot be imported.

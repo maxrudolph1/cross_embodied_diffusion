@@ -11,7 +11,7 @@
 #
 # Fills in the remaining RL expert checkpoints needed for "all embodiments,
 # both tasks": the 4 rotation experts (Allegro/LEAP/Shadow/Wuji) already
-# finished at model_9999.pt (see agent_logbook/RUNS.md) and are NOT redone
+# finished at model_9999.pt (see docs/RUNS.md) and are NOT redone
 # here. This array trains the 6 combos that were missing or only partially
 # trained, all fresh from scratch (user's explicit choice over resuming the
 # partial checkpoints), each to the standard 10000 iterations / 2048 envs:

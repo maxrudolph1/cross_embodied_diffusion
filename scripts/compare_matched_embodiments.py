@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Elementwise comparison of Allegro vs LEAP -- the only observation/action
 space pair that matches in both dimension and term layout (see
-`analyze_spaces.py` / ANALYSIS.md), so it's the one pair where a
+`analyze_spaces.py` / docs/archive/ANALYSIS_2026-08-26_to_2026-09-28.md), so it's the one pair where a
 per-dimension comparison means "same physical quantity, dimension j in
 both".
 

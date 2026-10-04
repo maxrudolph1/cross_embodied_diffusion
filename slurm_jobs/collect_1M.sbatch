@@ -11,7 +11,7 @@
 #
 # Collects a ~1M-transition demo dataset per (task, embodiment) pair, but only
 # for the pairs that already have a finished expert checkpoint as of
-# 2026-09-09 (see agent_logbook/RUNS.md): Grasp-Wuji and all 5
+# 2026-09-09 (see docs/RUNS.md): Grasp-Wuji and all 5
 # InHand-Rotation hands are "done" (model_9999.pt); Grasp-Sharpa is past its
 # standard 10k budget (running to 12500, checkpoint below is whatever's
 # latest at submit time) so treated as expert-ready too. Grasp-Allegro/LEAP/
@@ -21,7 +21,7 @@
 # Episode counts are sized to land at/above 1M transitions using this
 # project's established per-family measured rates (grasp caps at ~498
 # steps/episode regardless of hand; rotation terminates early on
-# object_dropped and varies by hand -- see agent_logbook/COLLECTIONS.md for
+# object_dropped and varies by hand -- see docs/COLLECTIONS.md for
 # the historical per-hand rates used below). Actual n_steps will vary a bit;
 # that's expected and matches prior collections in this project.
 #

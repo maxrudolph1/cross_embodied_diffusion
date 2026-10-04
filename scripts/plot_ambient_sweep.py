@@ -43,7 +43,7 @@ FAMILIES = {
     "rotation": ("InHand-Rotation-Allegro", "InHand-Rotation-LEAP"),
 }
 HEADLINE = {"grasp": "success_rate", "rotation": "avg_successes_before_drop"}
-# Dataset/run-dir path component -- matches the literal paths in ANALYSIS.md
+# Dataset/run-dir path component -- matches the literal paths in docs/archive/ANALYSIS_2026-08-26_to_2026-09-28.md
 # (e.g. data/mixed_noc/Grasp_A400k_L400k.zarr), distinct from the lowercase
 # `family` key used elsewhere for metric lookups.
 DISPLAY_FAMILY = {"grasp": "Grasp", "rotation": "InHand-Rotation"}

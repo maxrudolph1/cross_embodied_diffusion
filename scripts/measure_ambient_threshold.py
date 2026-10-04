@@ -6,7 +6,7 @@ measures W1 per dimension over pooled std (reusing `wasserstein1()` from
 `compare_matched_embodiments.py`), as a function of diffusion timestep t.
 Answers whether the Ambient-Diffusion premise -- that the sample becomes
 unidentifiable at high noise -- actually holds here, before spending any
-training compute on the sigma* sweep. See CHANGES.md item 28 / ANALYSIS.md
+training compute on the sigma* sweep. See CHANGES.md item 28 / docs/archive/ANALYSIS_2026-08-26_to_2026-09-28.md
 "the premise check, before the sweep lands".
 
 Only the action is noised: the observation is never noised in this

@@ -1,5 +1,31 @@
 # Data collections
 
+> **How to update this file.** Whenever a dataset is collected, derived, moved or deleted, and whenever
+> the user says "update the log books", add a dated section at the top of
+> [Current stores](#current-stores-vista-2026-10-04), or edit the matching row. Give the path, how it was
+> built (the exact command or script), its source (expert checkpoint or parent stores), its size
+> (episodes/steps, obs/action width) and where it is mirrored. Link the agent log book entry `A<N>` that built
+> it. Experiment log book entries link here for their **Data** field.
+
+## Current stores (Vista, 2026-10-04)
+
+All paths are under `data/mjlab_hand_demos/` (symlink to `$WORK/vista/cross_embodied_diffusion/data/...`).
+
+| Store | What | Built by | Size | Used by |
+|---|---|---|---|---|
+| `<Task>_expert_1M.zarr` (10) | 1M-step expert demos per task × hand | `collect-demos` on the old cluster (sections below), pulled from HF | ~1M steps each | sources of all pools |
+| `subsets_50k/`, `subsets_10k/` | per-hand subsets of the 1M sets | `scripts/subsample_dataset.py` | 50k / 10k steps | target-only data, pools |
+| `padded_ta/<Family>_pad5_scarce<Hand>_K50k.zarr` (5 grasp + 5 rotation) | **term-aligned** pool: target hand 50k + the other four at 1M, in HANDS order (Allegro, LEAP, Shadow, Sharpa, Wuji); obs/act grasp 191/28, rotation 91/22, padding 0 | `scripts/padded_grid.py --family F --config scarce<Hand>_K50k --build` (CHANGES 63, 64) | ~4.0M steps each (17 GB in total) | [E14](experiment_log_book.md#e14), [E15](experiment_log_book.md#e15) |
+| `padded_ta/InHand-Rotation_pad5_all_10k.zarr` | term-aligned pool of the five 10k subsets | `padded_grid.py --config all_10k --build` | ~50k steps | GPU smoke tests ([A32](agent_log_book.md#a32)) |
+| `val/{grasp,rotation}_val_20k.zarr` (+ per-hand `val/<Task>_val_20k.zarr`, `val/raw/`) | held-out val stores: fresh expert rollouts, seed 1000, 64 episodes per task, episodes whose start matches a 1M training start dropped (0 found); term-aligned | `slurm_jobs/vista_collect_val.sbatch` then `scripts/build_val_split.py` (CHANGES 63) | ~20k steps per hand (Rotation-Shadow 19,541) | `--val-dataset` in [E14](experiment_log_book.md#e14), [E15](experiment_log_book.md#e15) |
+| `padded/` | **old** tail-padded Gaussian-normalized pools (AllHands, Scarce) | `build_padded_dataset.py` before item 63 | 21 GB | E9, E11 only; train.py now refuses them |
+| `configs/norm_{grasp,rotation}_minmax.json` (tracked) | frozen per-family min/max normalizers, fit on the five 1M stores, ranges contain 0 | `scripts/build_family_normalizer.py` (CHANGES 63) | — | every term-aligned run |
+
+---
+
+## Older sections (as recorded at the time)
+
+
 Sections are dated individually and are not in strict date order; there is no single snapshot
 date. Some older sections describe datasets that no longer exist on disk (see the 2026-09-12
 section's note) — check a path exists before pointing new work at it. The main
@@ -391,7 +417,7 @@ Note how few episodes 50k is: **100-106 demonstrations**.
 ## 1M-transition datasets from currently-finished experts (2026-09-09)
 
 User: collect 1M-transition datasets for every task/embodiment pair using already-expert
-checkpoints. Not all 10 pairs have a finished expert yet (see `agent_logbook/RUNS.md` for the
+checkpoints. Not all 10 pairs have a finished expert yet (see `RUNS.md` for the
 node-011 driver saga) -- as of submission, only these 7 are done or effectively done:
 
 `sbatch slurm_jobs/collect_1M.sbatch`, job `85711`, array `0-6`, 256 envs, `max_episode_steps=500`,
@@ -470,7 +496,7 @@ InHand-Rotation-Wuji 329M.
 ## Cross-embodiment padded datasets (2026-09-10)
 
 Built by `scripts/build_padded_dataset.py` for the new pad-to-max-dim BC scheme (see
-`agent_logbook/JOURNAL.md`, "New cross-embodiment BC scheme"). Each pools all 5 embodiments of
+`archive/JOURNAL_2026-08-22_to_2026-10-04.md`, "New cross-embodiment BC scheme"). Each pools all 5 embodiments of
 one task family into a single obs/action space, zero-padded to the family's max dim, each
 source normalized (mean 0, var 1) with its own static stats before padding.
 

@@ -9,10 +9,10 @@ Read `AGENTS.md` at the repo root before starting work and follow it. It is
 the single source for this repo's agent instructions (shared with Claude
 Code via `CLAUDE.md`), including the logbook protocol:
 
-- Before non-trivial work: read `agent_logbook/JOURNAL.md`, `RUNS.md`,
-  `COLLECTIONS.md`.
-- After meaningful work, same turn: `RUNS.md` (runs), `COLLECTIONS.md`
-  (datasets), `CHANGES.md` (numbered code changes), `ANALYSIS.md`
-  (analysis conclusions), and a dated `JOURNAL.md` entry.
+- At session start: read `docs/agent_log_book.md` ("Current state" + newest entries).
+- When the user says "update the log books", or after meaningful work: follow the
+  "How to update" paragraph at the top of `docs/agent_log_book.md`,
+  `docs/experiment_log_book.md`, `docs/RUNS.md` and `docs/COLLECTIONS.md`, and add
+  numbered items to `docs/CHANGES.md` for code changes.
 
 Do not duplicate `AGENTS.md` content here; edit `AGENTS.md` instead.

@@ -84,6 +84,13 @@ Prints success rate (grasp) or average successes before drop (rotation), and wri
 uv run eval-policy --task InHand-Rotation-Allegro --wandb-run-path entity/project/run_id
 ```
 
+## Project docs (diffusion / BC work)
+
+The cross-embodiment diffusion work is documented in [`docs/`](docs/README.md): the
+[agent log book](docs/agent_log_book.md) covers implementation and reproduction, the
+[experiment log book](docs/experiment_log_book.md) covers results and plots, and
+[RUNS.md](docs/RUNS.md) lists every Slurm job and how to recreate it. Agent instructions are in [`AGENTS.md`](AGENTS.md).
+
 ## Data layout (diffusion / BC work)
 
 All code and Slurm jobs refer to data by **repo-relative paths** and must be

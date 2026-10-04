@@ -1,10 +1,84 @@
-# Training runs
+# Slurm jobs (RUNS)
 
-Statuses are as of each row's or section's own date — there is no single snapshot date. For the
-latest state of anything still `running`, check the newest `JOURNAL.md` entries and `sacct`.
-Artifact roots are gitignored; paths are relative to repo root.
+> **How to update this file.** Whenever a Slurm job (or an idev/interactive run that produces
+> results) is launched, finishes, fails or is cancelled, and whenever the user says "update the log
+> books", edit this file in the same turn, without asking. (1) Add one row per job at the **top** of
+> the [job table](#job-table), newest first: job ID, the date submitted, a one-line purpose, the
+> **exact submit command** (copy it from `sacct -X -j <id> -o SubmitLine%300`), the command that
+> regenerates the manifest (manifests are gitignored), the output root, the status (`pending` /
+> `running` / `done` / `failed` / `cancelled`, with dates and wall time), and links to the
+> [experiment log book](experiment_log_book.md) entry `E<N>` and the [agent log book](agent_log_book.md)
+> entry `A<N>`. (2) When the status changes, edit that row instead of adding a new one. (3) Record
+> the evidence for the chosen job shape (queue stats, `--test-only`) in the row's notes. Narrative and
+> debugging belong in the agent log book. Results belong in the experiment log book. This file records
+> what ran and how to run it again.
 
-## RL (rsl_rl / mjlab `train`)
+## How to recreate a job (Vista)
+
+All Vista training goes through one launcher plus a manifest. A manifest is a JSON list of tasks, and each
+task is a list of `train-diffusion` argument dicts. Submit from a **login node** (sbatch is disabled in idev),
+from the repo root:
+
+```bash
+cd ~/documents/cross_embodied_diffusion
+mkdir -p slurm_jobs/vista_train_manifest/logs
+# 1. regenerate the manifest (see the row's "manifest" column), e.g.
+.venv/bin/python scripts/build_ambient_manifest.py --families Grasp InHand-Rotation \
+    --sigmas 0 100 --seeds 0 1 --out slurm_jobs/cotrain_vs_target_manifest.json
+# 2. dry run: stages data and prints the train-diffusion commands
+sbatch -A ASC26008 -N 4 --array=0 --export=ALL,MANIFEST=<manifest>,PACK=1,DRY_RUN=1 slurm_jobs/vista_train_manifest.sbatch
+# 3. submit with the row's exact command
+```
+
+- **Array sizing:** with `-N K` and `PACK` tasks per node, array element `a`, node `i` runs manifest tasks
+  `[(a*K+i)*PACK, (a*K+i+1)*PACK)`. So `--array=0-(ceil(n_tasks/(K*PACK))-1)`.
+- **Storage:** data is staged to `$SCRATCH` (or node `/tmp` when K>1). Outputs go to
+  `$SCRATCH/cross_embodied_diffusion/outputs/<output-dir>`. Logs go to
+  `slurm_jobs/vista_train_manifest/logs/task_<job>_<a>.{out,err}`. A run is complete when `selection.json`
+  exists. Keep runs with `scripts/promote_outputs.sh <dir under outputs>`.
+- **Reporting re-score** (fresh seeds; `<run>/final_eval.jsonl`):
+  `sbatch -A ASC26008 --array=0-9 --export=ALL,RUNS='diffusion/<root>/*' slurm_jobs/vista_eval_checkpoints.sbatch`,
+  or on a gh idev: `.venv/bin/python scripts/rescore_selected.py --run <dirs> --which best_rollout best_val last0
+  --envs 100 --steps 1500 --eval-seed 1234 --shard i/n`.
+- **Cross-embodiment eval** (`<run>/cross_eval.jsonl`):
+  `.venv/bin/python scripts/eval_cross_embodiment.py --run <dirs> --which last0 --skip-target --shard i/n`.
+- **Before a large submission**, follow AGENTS.md "Getting Vista jobs scheduled fast"
+  (`scripts/queue_wait_stats.sh`, then `sbatch --test-only`).
+- **Old-code jobs** (pre CHANGES item 63, i.e. `1030560`–`1038730`): their checkpoints do not load in the current
+  code, and their manifest builders no longer exist on `bundle-migration`. Recreate them from a worktree of
+  `vista-ambient-rotation` (commit `0687fc7`), as described in agent log [A33](agent_log_book.md#a33).
+
+## Job table
+
+Vista (TACC GH200, project ASC26008), newest first. Output roots are relative to
+`$SCRATCH/cross_embodied_diffusion/outputs/` unless they say otherwise.
+
+| Job | Submitted | Purpose | Exact submit command | Manifest (regenerate) | Output | Status | Log books |
+|---|---|---|---|---|---|---|---|
+| idev c619-132 (cross-eval) | 2026-10-03/04 | Cross-embodiment eval of 80 co-trained + 160 fine-tuned generalists on all 5 hands | on the gh idev: `scripts/eval_cross_embodiment.py --run <dirs> --which last0 --skip-target --shard p/N` (4 shards co-train, 6 shards FT; logs `slurm_jobs/vista_train_manifest/logs/cross_{cotrain,ft}_idev_p*.log`) | — | `<run>/cross_eval.jsonl` | done 2026-10-04 04:00 | [E16](experiment_log_book.md#e16), [A37](agent_log_book.md#a37) |
+| idev c619-132 (rescore FT) | 2026-10-03 | Fresh-seed re-score of the 40 fine-tunes | `scripts/rescore_selected.py --run diffusion/ambient_ta_ft/* --which best_rollout best_val last0 --envs 100 --steps 1500 --eval-seed 1234 --shard p/6` (logs `rescore_ft_idev_p*.log`) | — | `<run>/final_eval.jsonl` | done 2026-10-04 00:15 | [E15](experiment_log_book.md#e15), [A37](agent_log_book.md#a37) |
+| `1045839` | 2026-10-03 | Fine-tune each co-trained σ0 run from `policy_best_val.pt`, target-only gating, lr {1e-4,1e-5}, 10 epochs: 40 runs | `sbatch -A ASC26008 -N 4 --array=0-9 --time=03:00:00 --job-name=ft-cotrain --export=ALL,MANIFEST=slurm_jobs/finetune_manifest.json,PACK=1 slurm_jobs/vista_train_manifest.sbatch` | `scripts/build_finetune_manifest.py --lrs 1e-4 1e-5 --out slurm_jobs/finetune_manifest.json` (needs the `ambient_ta` runs) | `diffusion/ambient_ta_ft/` | done 2026-10-03, 10/10 COMPLETED (~1h35 each) | [E15](experiment_log_book.md#e15), [A36](agent_log_book.md#a36) |
+| `1045799` | 2026-10-03 | Batch re-score of `ambient_ta` (duplicate of the idev re-score) | `sbatch -A ASC26008 --array=0-9 --export=ALL,RUNS=diffusion/ambient_ta/* slurm_jobs/vista_eval_checkpoints.sbatch` | — | — | cancelled (the idev did it) | [A36](agent_log_book.md#a36) |
+| idev c619-132 (rescore co-train) | 2026-10-03 | Fresh-seed re-score of the 40 `ambient_ta` runs | `scripts/rescore_selected.py --run diffusion/ambient_ta/* --which best_rollout best_val last0 --envs 100 --steps 1500 --eval-seed 1234 --shard p/4` (logs `rescore_ambient_ta_idev_p*.log`) | — | `<run>/final_eval.jsonl` | done 2026-10-03 16:41 | [E14](experiment_log_book.md#e14), [A36](agent_log_book.md#a36) |
+| `1043385` | 2026-10-02 | Co-train (σ0) vs target-only (σ100), Grasp + Rotation × 5 targets × 2 seeds: 40 runs, Bundle recipe, term-aligned | `sbatch -A ASC26008 -N 4 --array=0-9 --time=09:00:00 --job-name=ct-vs-to --export=ALL,MANIFEST=slurm_jobs/cotrain_vs_target_manifest.json,PACK=1 slurm_jobs/vista_train_manifest.sbatch` | `scripts/build_ambient_manifest.py --families Grasp InHand-Rotation --sigmas 0 100 --seeds 0 1 --out slurm_jobs/cotrain_vs_target_manifest.json` | `diffusion/ambient_ta/` | done 2026-10-03, 10/10 COMPLETED (6h30–6h58) | [E14](experiment_log_book.md#e14), [A34](agent_log_book.md#a34) |
+| idev 1037050 | 2026-10-02 | Collect val-store rollouts (10 tasks, 64 eps, seed 1000), then `build_val_split.py` | body of `slurm_jobs/vista_collect_val.sbatch` run directly; log `collect_val_idev1037050.log` | — | `data/mjlab_hand_demos/val/` | done | [A32](agent_log_book.md#a32) |
+| `1038730` | 2026-09-30 | Ambient rotation sweep, tail-padded, 16 σ × 4 seeds × 5 targets: 320 runs (old code) | `sbatch -A ASC26008 -N 8 --array=0-9 --time=12:00:00 --job-name=amb-rot --export=ALL,MANIFEST=slurm_jobs/ambient_rot_manifest.json,PACK=4 slurm_jobs/vista_train_manifest.sbatch` | at `0687fc7`: `scripts/build_ambient_rotation_manifest.py --kind sweep --out slurm_jobs/ambient_rot_manifest.json` | `diffusion/ambient_rot/` | done 2026-10-01, 10/10 COMPLETED (9h20–9h55); never re-scored | [E13](experiment_log_book.md#e13), [A31](agent_log_book.md#a31) |
+| `1038574` | 2026-10-01 | Reporting evals of the 4 ambient minmax test runs (+ LEAP control) | `sbatch -A ASC26008 --time=1:00:00 --export=ALL,RUNS=diffusion/diag_rot/*_minmax_seed0,ALSO=InHand-Rotation-LEAP slurm_jobs/vista_eval_checkpoints.sbatch` (old-code version of the sbatch) | — | `<run>/posthoc_eval.json` | done (23 min) | [E12](experiment_log_book.md#e12), [A30](agent_log_book.md#a30) |
+| `1036217` | 2026-09-30 | Ambient minmax test, Allegro target, σ {0,10,25,100}, 1 run/node (old code) | `sbatch -A ASC26008 -N 1 --array=0-3 --time=8:00:00 --job-name=diag-amb-mm --export=ALL,MANIFEST=slurm_jobs/diag_rot_ambient_minmax_manifest.json,PACK=1 slurm_jobs/vista_train_manifest.sbatch` (limit later lowered to 5 h) | hand-edited from the diagnostic manifest; generator not recorded | `diffusion/diag_rot/*_minmax_seed0` | done 2026-09-30 (2h20–2h24) | [E12](experiment_log_book.md#e12), [A28](agent_log_book.md#a28) |
+| `1036212` | 2026-09-30 | Same as `1036217`, PACK=4 single job | `sbatch -A ASC26008 -N 1 --time=24:00:00 --job-name=diag-amb-mm --export=ALL,MANIFEST=slurm_jobs/diag_rot_ambient_minmax_manifest.json,PACK=4 slurm_jobs/vista_train_manifest.sbatch` | — | — | cancelled (replaced by `1036217`) | |
+| idev 1031788 | 2026-09-29/30 | Padded-path diagnostic: specialists plain vs `--pool-sources` (Gaussian), then minmax | on the idev: the sbatch body with `MANIFEST=slurm_jobs/diag_rot_idev_manifest.json`, then `diag_rot_idev2_manifest.json`; logs `idev_1031788_diag{,2,_posthoc}.log` | at `0687fc7`-era code (hand-built manifests) | `diffusion/diag_rot_idev/` | done (Gaussian runs killed) | [E11](experiment_log_book.md#e11), [A26](agent_log_book.md#a26) |
+| `1035261` | 2026-09-29 | 8-run diagnostic (Gaussian padded) | `sbatch -A ASC26008 -N 2 --time=24:00:00 --job-name=diag-rot --export=ALL,MANIFEST=slurm_jobs/diag_rot_manifest.json,PACK=4 slurm_jobs/vista_train_manifest.sbatch` | at `0687fc7`: `build_ambient_rotation_manifest.py --kind diagnostic` | — | cancelled (superseded by the idev diagnostic) | [A26](agent_log_book.md#a26) |
+| idev 1031790 (gh-dev, 4 nodes) | 2026-09-28 | Job-shape benchmark | scripts in `$SCRATCH/bench_multinode/` (purgeable) | — | `$SCRATCH/bench_multinode/` | done | [E10](experiment_log_book.md#e10), [A22](agent_log_book.md#a22) |
+| `1030560` | 2026-09-27 | Scarce co-training sweep (Gaussian tail-padded pools), 40 runs, compiled | `sbatch -A ASC26008 --array=0-4 --export=ALL,MANIFEST=slurm_jobs/scarce_manifest.json,PACK=4 slurm_jobs/vista_train_manifest.sbatch` | `scripts/build_scarce_specialist_manifest.py` (deleted in item 63; `git show 1fb9bf6:scripts/build_scarce_specialist_manifest.py`) | `outputs/diffusion/scarce/` on `$WORK` | done (21h42); scores ~0, explained by [E11](experiment_log_book.md#e11) | [A22](agent_log_book.md#a22) |
+
+Old-cluster jobs (2026-08-22 → 2026-09-27; partition `allnodes`, `slurm-node-*`) are below. They are kept
+as originally recorded and are not runnable on Vista.
+
+---
+
+## Legacy registry — old cluster
+
+### RL (rsl_rl / mjlab `train`)
 
 | ID | Task | Run dir | Config | Latest ckpt | Status | Notes |
 |----|------|---------|--------|-------------|--------|-------|
@@ -27,14 +101,14 @@ Artifact roots are gitignored; paths are relative to repo root.
 | rl-wuji-grasp-v2 | Grasp-Wuji | `logs/rsl_rl/wuji_grasp/2026-09-08_02-26-59_slurm2` | 2048 envs, 10k iters, seed 42, run `slurm2`; Slurm array `84348` task 4 | `model_9999.pt` | **done** | Ran on `slurm-node-011` (good driver) -- 7h, 2.5s/iter. Synced to wandb: `https://wandb.ai/maxrudolph/mjlab/runs/xlek6ud9` |
 | rl-sharpa-rot-v2 | InHand-Rotation-Sharpa | `logs/rsl_rl/sharpa_in_hand_rotation/2026-09-08_02-27-58_slurm2` | 2048 envs, 10k iters, seed 42, run `slurm2`; Slurm array `84348` task 5 | `model_9999.pt` | **done** | Ran on `slurm-node-011` -- 15h13m, 5.5s/iter. Synced to wandb by the (now-stopped) background watcher |
 
-### Slurm batch
+#### Slurm batch
 
 - Array dir: `slurm_jobs/array_20260823_022315/`
 - Submit: `sbatch slurm_jobs/array_20260823_022315/submission.sh`
 - Resources: 1 GPU, 16 CPUs, 128GB, 36h, partition `allnodes`, array `0-8`
 - Skipped Grasp-Allegro (already on local GPU)
 
-### Slurm batch — RL expert completion pass, `train_rl_experts.sbatch` (2026-09-07)
+#### Slurm batch — RL expert completion pass, `train_rl_experts.sbatch` (2026-09-07)
 
 - Submit: `sbatch slurm_jobs/train_rl_experts.sbatch`
 - Job `84348`, array `0-5`, one task per missing/incomplete combo (see table above)
@@ -44,12 +118,12 @@ Artifact roots are gitignored; paths are relative to repo root.
 - Once done, rerun `scripts/select_experts.py` to refresh `outputs/experts*.json` before using these as demo-collection sources
 - **Logger mistake**: script used `--agent.logger tensorboard` (copied from the old array pattern) instead of `train`'s actual default (`wandb`) -- none of the 6 runs stream to wandb live. Fixed retroactively: `wandb sync --sync-tensorboard -p mjlab <rundir>` imports a tfevents dir as a wandb run after the fact. Grasp-Wuji (task 4, finished first) synced manually -> `https://wandb.ai/maxrudolph/mjlab/runs/xlek6ud9`. The other 5 are handled by a background watcher, `nohup`'d independent of any single tool call (survives the multi-hour training window): polls `sacct` every 10 min, syncs each task's run dir the moment it reaches `COMPLETED`/`FAILED`/etc. Script + logs (not checked in, scratch dir): `sync_rl_experts_wandb.sh`, `wandb_sync.log`, `sync_watcher.log`.
 
-### Plots / videos (RL)
+#### Plots / videos (RL)
 
 - Curves: `outputs/plots/*.png` (+ `comparison_all_runs.png`)
 - Videos: `outputs/videos/<Task>_model_<iter>/rl-video-step-0.mp4` for Allegro/LEAP/Sharpa/Wuji grasp and all five in-hand rotation hands (Shadow grasp missing)
 
-## Diffusion policy
+### Diffusion policy
 
 | ID | Task | Output dir | Dataset | Config highlights | Latest | Status | Notes |
 |----|------|------------|---------|-------------------|--------|--------|-------|
@@ -58,7 +132,7 @@ Artifact roots are gitignored; paths are relative to repo root.
 | dp-leap-rot-400k | InHand-Rotation-LEAP | `outputs/diffusion/InHand-Rotation-LEAP_400k` | `data/demos/InHand-Rotation-LEAP_expert_400k.zarr` | 500 epochs, bs 256, `EVAL_FINAL_ONLY=1` (eval only at epoch 500); Slurm job `80853`, `slurm-node-011` | `policy_epoch_0500.pt` / `policy_best.pt` (loss 0.006254) | **done** | 7h22m (09:00-16:22). Final eval (32 rollouts): **2.31** avg successes before drop, 100% drop rate, 24.9s survival. Logs: `slurm_jobs/train_diffusion/logs/task_80853_0.{out,err}` |
 | dp-allegro-rot-400k | InHand-Rotation-Allegro | `outputs/diffusion/InHand-Rotation-Allegro_400k` | `data/demos/InHand-Rotation-Allegro_expert_400k.zarr` | 500 epochs, bs 256, `EVAL_FINAL_ONLY=1`; Slurm job `80854` | `policy_epoch_0500.pt` / `policy_best.pt` (loss 0.003741) | **done** | 7h51m (10:54-18:45), ran concurrently with `dp-leap-rot-400k` on a separate GPU allocation. Final eval: **1.62** avg successes before drop, 100% drop rate, 17.1s survival. Logs: `slurm_jobs/train_diffusion/logs/task_80854_0.{out,err}` |
 
-### Specialist + scarce co-training sweep, `train_scarce_specialist.sbatch` (2026-09-12/13)
+#### Specialist + scarce co-training sweep, `train_scarce_specialist.sbatch` (2026-09-12/13)
 
 - Manifest: `slurm_jobs/scarce_specialist_manifest.json` (built by
   `scripts/build_scarce_specialist_manifest.py`, 40 array-task entries / 80 total runs); each
@@ -86,7 +160,7 @@ Artifact roots are gitignored; paths are relative to repo root.
   scarce co-training: only `source_stats.json`/`train_config.json` written for 4 configs, no
   runs trained at all. Do not treat this sweep as a source of rotation specialists.
 
-### InHand-Rotation specialist backfill, `train_rotation_specialist.sbatch` (2026-09-22)
+#### InHand-Rotation specialist backfill, `train_rotation_specialist.sbatch` (2026-09-22)
 
 - User asked for 1M + 50k specialist policies per embodiment for in-hand reorientation -- the
   gap identified above. Manifest builder (`build_scarce_specialist_manifest.py`) extended with
@@ -129,6 +203,16 @@ Artifact roots are gitignored; paths are relative to repo root.
   (50k, ~10s/epoch, ~9h left, ~20h total) and 109/200 (1M, ~127s/epoch, ~3h left, ~14h total) --
   both on track to finish well inside the limit. Eval results not yet tabulated.
 
+#### Scripts
+
+- `scripts/watch_eval_diffusion.py` — eval every N epochs while training
+- Diffusion train/collect CLIs live under `src/mjlab_hand` (added Aug 23)
+
+
+---
+
+## Legacy registry text — Vista (as recorded at the time; the job table above supersedes it)
+
 ### Vista (TACC GH200) — 2026-09-28
 
 | id | what | where | status | notes |
@@ -146,17 +230,6 @@ Artifact roots are gitignored; paths are relative to repo root.
 | diag-rot-idev2 | on idev `1031788`: `spec1M_padded_minmax`, `pool_cotrain_minmax` (`slurm_jobs/diag_rot_idev2_manifest.json`); the two gaussian padded runs of diag-rot-idev were killed at 1M ep ~60 / 50k ep ~950 (all evals 0.00) | `.../diag_rot_idev/` | running (started 2026-09-29 23:47) | tests CHANGES.md item 58 |
 | ambient-rot `1038730` | 320 runs, `slurm_jobs/ambient_rot_manifest.json` (minmax), `-N 8 --array=0-9`, PACK=4, 12 h limit; submitted by user 2026-09-30 21:18 | `$SCRATCH/cross_embodied_diffusion/outputs/diffusion/ambient_rot/` | running: element 0 started 2026-10-01 10:53 (~13.5 h queue wait), all 10 running by ~11:45; ~11.2 min/epoch at 4 runs/node -> ~10 h of the 12 h limit | shape chosen from queue evidence (JOURNAL 2026-09-30 20:00); each 8-node job = half of one target hand |
 | vista-eval `1038574` | reporting evals of the 4 `diag_rot/*_minmax_seed0` runs, ALSO=LEAP | `<run>/posthoc_eval.json` | done 2026-10-01 (23 min); results in JOURNAL 2026-10-01 02:45 | |
-
-### Scripts
-
-- `scripts/watch_eval_diffusion.py` — eval every N epochs while training
-- Diffusion train/collect CLIs live under `src/mjlab_hand` (added Aug 23)
-
-## Template (copy for new runs)
-
-```md
-| id | Task | run/output dir | key config | latest artifact | status | notes |
-```
 
 ### Vista — co-training vs target-only, term-aligned (bundle-migration code), 2026-10-02
 

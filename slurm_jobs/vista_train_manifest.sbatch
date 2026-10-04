@@ -50,8 +50,8 @@
 #
 # The job holds (and bills) all K nodes until its slowest node finishes, so
 # put equal-length runs in the same job. A node whose runs fail does not stop
-# the others (--kill-on-bad-exit=0). Measured trade-offs: ANALYSIS.md
-# "Vista job shape".
+# the others (--kill-on-bad-exit=0). Measured trade-offs: docs/experiment_log_book.md
+# E10 ("Vista job shape").
 #
 # STORAGE (CHANGES.md item 55): demos are staged to $SCRATCH (1-node) or node
 # /tmp (multi-node) and outputs land in $SCRATCH/cross_embodied_diffusion/

@@ -24,7 +24,7 @@
 # under job 85163 (Grasp-Sharpa, task 3 of that job, already lucked onto
 # node-011 directly and is left running as-is). Iteration budgets below are
 # REMAINING iterations to reach the standard 10000 total (not "10000 more" --
-# see the resume+max-iterations overshoot bug noted in agent_logbook/JOURNAL.md,
+# see the resume+max-iterations overshoot bug noted in docs/archive/JOURNAL_2026-08-22_to_2026-10-04.md,
 # 2026-09-09): current checkpoints were Allegro=5800, LEAP=5200, Shadow=4900.
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:?SLURM_SUBMIT_DIR not set -- run this via sbatch}"

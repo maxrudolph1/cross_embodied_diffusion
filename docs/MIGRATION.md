@@ -25,7 +25,7 @@ Compute and scheduling material is out of scope, except where it changes numeric
 
 **Bundle log citation keys:**
 
-- J = `agent_logbook/JOURNAL.md`
+- J = `archive/JOURNAL_2026-08-22_to_2026-10-04.md`
 - R = `RUNS.md`
 - C = `CHANGES.md` (followed by the item number)
 - A = `ANALYSIS.md`

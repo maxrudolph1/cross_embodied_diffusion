@@ -16,7 +16,7 @@
 # data/mixed_noc/: the ambient sweep does not re-litigate conditioning,
 # already shown capacity-neutral in both seeds by the mixed-matrix work.
 #
-# See CHANGES.md item 28 / ANALYSIS.md "Ambient-sweep diagonal datasets".
+# See CHANGES.md item 28 / docs/COLLECTIONS.md "Ambient-sweep diagonal datasets".
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:?SLURM_SUBMIT_DIR not set -- run this via sbatch}"
 source .venv/bin/activate

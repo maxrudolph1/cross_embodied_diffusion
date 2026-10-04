@@ -7,38 +7,36 @@ points to it, so edit here, not there.
 
 ## Documentation map
 
-| File | What it is | Who writes it |
-|---|---|---|
-| `AGENTS.md` (this file) | Summary: what the repo is, env setup, data paths, protocol, invariants, standing findings | Update when a new invariant or standing finding is established |
-| `README.md` | Human-facing: install, upstream RL usage, "Data layout" for new machines | Humans / agents on user-visible changes |
-| `agent_logbook/JOURNAL.md` | Dated narrative per session, newest first: requests, decisions, failures, "pick up here" handoffs | Every session doing non-trivial work |
-| `agent_logbook/RUNS.md` | Registry of training / eval / Slurm runs | Whenever a run starts, finishes or fails |
-| `agent_logbook/COLLECTIONS.md` | Registry of datasets: source checkpoint, sizes, how derived sets were built, where they're mirrored | Whenever a dataset is collected, derived or moved |
-| `CHANGES.md` | Numbered source edits, exact enough to reproduce or revert. Code comments cite "CHANGES.md item N" | Every source / script / sbatch change |
-| `ANALYSIS.md` | Studies that are neither runs nor code changes (probes, post-mortems); raw numbers in `outputs/analysis/*.json`, figures in `outputs/plots/*.png` | When an analysis produces a conclusion |
+Everything lives in [`docs/`](docs/README.md). **When the user says "update the log books", follow the
+"How to update" paragraph at the top of each file below. Do it without asking.**
 
-Per-user agent memory (e.g. Claude Code's `~/.claude/projects/.../memory/`)
-is private to one person's machine. Anything another collaborator needs must
-go in the files above, not only there.
+| File | What it is | When to write it |
+|---|---|---|
+| [`docs/agent_log_book.md`](docs/agent_log_book.md) | **Start here.** Current state, environment/install, and numbered, dated entries (newest first) for every session's implementation work, with a TOC | Every session that changes code, data, jobs or results |
+| [`docs/experiment_log_book.md`](docs/experiment_log_book.md) | Numbered, dated experiments: question, data, policy inputs/outputs, protocol, results with embedded plots, takeaways, and links to runs and agent entries | Whenever an experiment produces results or a comparison |
+| [`docs/RUNS.md`](docs/RUNS.md) | Every Slurm job (and result-producing idev run): exact submit command, how to regenerate its manifest, outputs, status | Whenever a job starts, finishes, fails or is cancelled |
+| [`docs/COLLECTIONS.md`](docs/COLLECTIONS.md) | Datasets: what exists, how each was built, sizes, mirrors | Whenever a dataset is built, moved or deleted |
+| [`docs/CHANGES.md`](docs/CHANGES.md) | Numbered source edits, exact enough to reproduce or revert. Code comments cite "CHANGES.md item N", which means this file | Every source / script / sbatch change (next number; never renumber) |
+| [`docs/plots/`](docs/plots/) | Figures (+ summary CSVs) embedded in the experiment log book | With each experiment entry |
+| [`docs/MIGRATION.md`](docs/MIGRATION.md) | Reference: the "Bundle" design this code re-implements (CHANGES item 63) | Read-only reference |
+| [`docs/archive/`](docs/archive/) | Verbatim old `JOURNAL.md` and `ANALYSIS.md` (to 2026-10-04); the log books summarize them | Never edited |
+| `README.md` | Human-facing: install, upstream RL usage, "Data layout" | On user-visible changes |
+
+Per-user agent memory (e.g. Claude Code's `~/.claude/projects/.../memory/`) is private to one machine.
+Anything another collaborator needs must go in the files above.
 
 ## Logbook protocol
 
-1. **Before non-trivial work**, read `agent_logbook/JOURNAL.md` (at least the
-   recent entries), `RUNS.md` and `COLLECTIONS.md`, so you reuse prior runs,
-   datasets and lessons instead of redoing them.
-2. **After meaningful work, in the same turn**, update:
-   - training / eval / Slurm jobs → `RUNS.md`
-   - dataset collection or derivation → `COLLECTIONS.md`
-   - any source, script or sbatch change → a new numbered item in
-     `CHANGES.md` (next number; never renumber, code cites these)
-   - an analysis conclusion → `ANALYSIS.md`, and the standing findings
-     below if it changes them
-   - always → a dated `JOURNAL.md` entry, prepended (newest first)
-3. Record facts: date, task, command / config highlights, artifact paths,
-   metrics, status (`running` / `done` / `failed` / `aborted`). Do not invent
-   results; say what was verified and what was not.
-4. Do not commit gitignored artifacts (`logs/`, `data/`, most of `outputs/`
-   — see `.gitignore` and `CHANGES.md` item 23 for exactly what is tracked).
+1. **At session start**, read `docs/agent_log_book.md`: "Current state" plus the newest few entries. Before
+   launching or analysing anything, also check `docs/RUNS.md`, `docs/COLLECTIONS.md` and the relevant
+   `docs/experiment_log_book.md` entries, so you reuse prior runs, datasets and lessons.
+2. **After meaningful work, in the same turn**, or whenever the user says "update the log books", update the
+   agent log book (entry, TOC row, Current state), RUNS.md, COLLECTIONS.md, CHANGES.md and the experiment log
+   book, as their headers describe. Copy figures into `docs/plots/`.
+3. Record facts: date, command / config, artifact paths, metrics with their eval protocol, and status. Do not
+   invent results. Say what was and was not verified.
+4. Do not commit gitignored artifacts (`logs/`, `data/`, `outputs/`; see `.gitignore`). Figures go to
+   `docs/plots/`, not `outputs/plots/`.
 
 ## What this repo actually is right now
 
@@ -57,8 +55,8 @@ of that benchmark**, not the RL benchmark itself:
    `src/mjlab_hand/diffusion/evaluate.py`.
 5. Cross-embodiment experiments (mixed-embodiment training, padded
    all-hands pooling, scarce co-training, ambient diffusion,
-   state-equivalence probes) build on steps 2-4 — see
-   `agent_logbook/COLLECTIONS.md` and `ANALYSIS.md`.
+   state-equivalence probes, fine-tuning) build on steps 2-4 — see
+   `docs/experiment_log_book.md`.
 
 ## Data paths are repo-relative; bulk storage is symlinked in
 
@@ -138,7 +136,7 @@ The block above is for the original shared-node cluster. On Vista:
   of `train-diffusion` arg dicts). `PACK` = manifest tasks per node; `-N K` makes each node of
   a job take its own `PACK` tasks (node slot = array_index * K + node_id; item 54). `DRY_RUN=1`
   prints the commands. Per-node throughput is flat from ~4 to 16 packed runs, so packing sets
-  wall time, not cost (ANALYSIS.md "Vista job shape"); one run alone is ~3.5x faster than one
+  wall time, not cost (experiment log book E10); one run alone is ~3.5x faster than one
   of 4 packed (rotation pool, 50 epochs: 2 h 22 m alone).
 - Multi-hand data: one pre-built **term-aligned** store per mixture
   (`scripts/padded_grid.py --family F --config C --build` ->
@@ -177,7 +175,7 @@ were wrong in different ways.
 5. Use the tightest safe `--time` (measured run time + ~25-50%): shorter limits backfill into
    more gaps. A pending job's limit can be lowered with `scontrol update JobId=<id>
    TimeLimit=<t>` (raising it needs the user/admin). Record the choice and the evidence in
-   `RUNS.md`.
+   `docs/RUNS.md`.
 
 ## Invariants worth knowing before touching this code
 
@@ -229,7 +227,13 @@ were wrong in different ways.
   `mjlab_hand.anymal_c`, which does not exist in this repo, so the module
   cannot be imported. Left in place; do not extend it.
 
-## Standing findings (see `ANALYSIS.md` for the full analysis)
+## Standing findings (details in `docs/experiment_log_book.md`)
+
+- **Current best recipe for a scarce (50k) target** (E14-E16): co-train on the term-aligned 5-hand pool
+  (target 50k + four 1M), then fine-tune 10 epochs on the target only. Grasp 0.91 / rotation 1.34 (last0)
+  vs target-only 0.38 / 0.70. lr 1e-4 forgets the other hands completely; lr 1e-5 keeps grasp
+  generality (0.82) but not rotation (0.25). Co-training alone: grasp +0.38..+0.44, rotation
+  -0.04..-0.15 vs target-only.
 
 - The observation identifies the embodiment perfectly (linear probe AUC
   1.000) at every diffusion timestep, including t=99 — the observation is
@@ -239,7 +243,7 @@ were wrong in different ways.
   the data-first sampler and was retracted in Bundle (MIGRATION.md section 7). With
   noise-first Bundle reports, for a starved 50k rotation target, a peak at sigma 2-3 (0.655
   at 0 -> 1.137 at 2, 0.767 at 100; Sharpa best at 25), sign reversal at 1M, and grasp
-  hurt monotonically. Not yet reproduced in this repo. Robust in both: an embodiment trained
+  hurt monotonically. Not yet reproduced in this repo (only sigma 0/100 run on term-aligned stores, E14). Robust in both: an embodiment trained
   only on the coarse end of the schedule is completely non-functional (0.000; Vista
   2026-10-01: LEAP 1.8 at sigma 0 -> 0.00 at sigma 10).
 - Adversarial invariance training does not work on the Allegro/LEAP pair:
@@ -247,6 +251,5 @@ were wrong in different ways.
   accuracy regardless of reversal strength, while task information drops
   substantially. Always score invariance with a fresh probe on held-out
   data, never the adversary's own training accuracy.
-- Sequential transfer (pretrain on one embodiment, fine-tune on another) is
-  the one cross-embodiment-sharing idea that measurement has not yet ruled
-  out.
+- Sequential transfer works: co-train then fine-tune on the target (E15) is the best
+  target policy found so far in both families (see the first bullet).
