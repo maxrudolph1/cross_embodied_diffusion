@@ -10,6 +10,22 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
 
 ---
 
+## 2026-10-06 — regime box plots
+
+### 72. `scripts/plot_condition_boxes.py` (NEW)
+
+- One figure per eval metric (rotation: successes before drop, success rate on >= 1 target, per-target
+  success rate, survival time, final rotation distance, drop rate; grasp: success rate). Per target hand a
+  cluster of four box-and-whiskers over individual runs (dots on top): sigma = 0, 0 < sigma < 100 pooled,
+  sigma = 100 (from `--runs`, default `ambient_ta_r`), and co-trained + fine-tuned (`--ft-runs`, default
+  `ambient_ta_ft`, every lr and seed); plus an "all targets" cluster. Whiskers = min/max, no outliers dropped.
+- Score: `--which` (default best_val) row of `final_eval.jsonl` at 100 envs x 1500 steps; unscored runs are
+  skipped, so re-running after E19 is scored adds those runs.
+- Writes `<out>/<prefix>_<metric>.png` + `<prefix>_summary.csv` (default prefix `rotation_conditions_box`).
+  Colours: reference categorical slots 1-4, fixed order (validator not runnable on Vista).
+
+---
+
 ## 2026-10-05 — random-draw 50k target subsets; ambient sigma plots
 
 ### 71. `scripts/plot_ambient_sigma.py` (NEW)

@@ -37,6 +37,7 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 | # | Date | Finding |
 |---|---|---|
+| [E20](#e20) | 2026-10-06 | Per target and metric, co-train-then-fine-tune is best (mean 1.23 successes before drop vs 0.71 pooled ambient σ, 0.64 target-only, 0.43 full co-training); full co-training is worst for 4 of 5 hands. |
 | [E19](#e19) | 2026-10-06 | (running) Rotation ambient σ fine grid 1–20 × 3 seeds (+ σ 0/100 seeds 1–2) on random-draw 50k targets, to locate the low-σ peak of E18 and measure seed variance. |
 | [E18](#e18) | 2026-10-06 | Rotation ambient σ sweep (random-draw 50k targets): σ 10–20 is best (mean 0.85 successes before drop vs 0.64 target-only and 0.43 full co-training), and above σ≈30 it is flat at the target-only level. |
 | [E17](#e17) | 2026-10-04 | The demos were collected at env seed 0, so seed-0 evals replay training starts. Target-only 50k grasp policies memorize (0.92–0.95 on training starts vs 0.32–0.39 on new ones), while co-trained and fine-tuned policies generalize. |
@@ -77,6 +78,60 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 ---
 
 ## Entries
+
+<a id="e20"></a>
+### E20 — 2026-10-06 — Rotation regimes per target: co-training, ambient gating, target-only, fine-tuning
+
+**Question.** Per target hand and per metric, how do the training regimes compare: full co-training (σ=0),
+ambient gating (0<σ<100, pooled), target-only (σ=100), and co-training followed by fine-tuning?
+**Status.** done (re-plot of existing runs; will be re-run when [E19](#e19) is scored).
+
+**Data.** σ runs: [E18](#e18) (`_K50kr`, target 50k random draw + four hands at 1M), σ 0..100 step 10, seed 0.
+Fine-tuned: [E15](#e15)'s rotation fine-tunes, which used the **older first-episodes** 50k subsets (`_K50k`)
+and started from the co-trained σ0 runs on those subsets; lr 1e-4 and 1e-5 × 2 seeds per target.
+
+**Policy inputs/outputs.** As [E14](#e14).
+
+**Protocol.** Checkpoint `best_val` for every run, re-scored at 100 envs × 1500 steps, eval seed 1234.
+Runs per target: σ0 1, 0<σ<100 9, σ100 1, fine-tuned 4. `scripts/plot_condition_boxes.py` (CHANGES 72).
+
+**Results.** Mean over runs and targets (σ0 / 0<σ<100 / σ100 / fine-tuned):
+
+| Metric | σ = 0 | 0 < σ < 100 | σ = 100 | fine-tuned |
+|---|---|---|---|---|
+| successes before drop | 0.43 | 0.71 | 0.64 | **1.23** |
+| episodes reaching ≥ 1 target | 0.35 | 0.52 | 0.48 | **0.74** |
+| per-target success rate | 0.27 | 0.35 | 0.32 | **0.54** |
+| survival time before drop (s) | 7.1 | 11.7 | 11.4 | **13.8** |
+| final rotation distance (rad, lower better) | 0.80 | 0.60 | 0.60 | **0.54** |
+
+Successes before drop, mean per target (σ0 / 0<σ<100 / σ100 / fine-tuned): Allegro 0.72 / 0.96 / 0.97 / 1.74;
+LEAP 0.54 / 0.47 / 0.35 / 1.28; Shadow 0.32 / 0.46 / 0.48 / 0.74; Sharpa 0.19 / 0.71 / 0.66 / 0.98;
+Wuji 0.40 / 0.96 / 0.75 / 1.38. Fine-tuned by lr: 1e-4 1.26, 1e-5 1.20.
+
+![Successes before drop per target and regime](plots/rotation_conditions_box_avg_successes_before_drop.png)
+![Episodes reaching at least one target](plots/rotation_conditions_box_success_rate_any.png)
+![Per-target success rate](plots/rotation_conditions_box_per_target_success_rate.png)
+![Survival time before drop](plots/rotation_conditions_box_avg_survival_time_s.png)
+![Rotation distance to target at episode end (lower is better)](plots/rotation_conditions_box_avg_rot_dist.png)
+![Drop rate (1.00 everywhere; does not separate regimes)](plots/rotation_conditions_box_drop_rate.png)
+
+Raw values: [`plots/rotation_conditions_box_summary.csv`](plots/rotation_conditions_box_summary.csv).
+
+**Takeaways.**
+- **Fine-tuning has the highest mean for every target and every informative metric**, about 2× target-only
+  on successes before drop (1.23 vs 0.64). Shadow is the closest case: its fine-tuned runs (0.61–0.97) overlap
+  the best gated run (0.64).
+- **Pooled across σ, ambient gating is only slightly above target-only** (0.71 vs 0.64): σ above ~30 sits at
+  the target-only level, and the gain is concentrated at σ 10–20 ([E18](#e18)).
+- **Full co-training is the worst regime for 4 of 5 targets** on every metric; LEAP is the exception.
+- Caveat: the fine-tuned box is on the older first-episodes subsets, the σ boxes on the random draws. On the
+  old subsets σ0/σ100 scored higher (0.58/0.73, E18) than on the random draws (0.43/0.64), so part of the
+  fine-tuning margin could come from the data draw, though not most of it (fine-tuned 1.23 vs 0.73).
+  Fine-tuning the E18/E19 runs on `_K50kr` (e.g. from σ 0 and σ 10–20) would remove this confound.
+- σ0 and σ100 are single runs per target until [E19](#e19) lands (it adds seeds 1–2 and σ 1–18).
+
+**Links.** RUNS: `1049683`, `1045839` · Agent log: [A41](agent_log_book.md#a41) · CHANGES 72.
 
 <a id="e19"></a>
 ### E19 — 2026-10-06 — Ambient σ fine grid (1–20) × 3 seeds, rotation

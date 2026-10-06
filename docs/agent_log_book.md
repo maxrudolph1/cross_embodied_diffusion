@@ -30,7 +30,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 ## Current state
 
-*Last updated 2026-10-06 (A40).*
+*Last updated 2026-10-06 (A41).*
 
 - **Repo location:** `/work/09312/rudolph/documents/cross_embodied_diffusion` (`~/documents/cross_embodied_diffusion`),
   branch `bundle-migration`. `~/cross_embodied_diffusion` is a compatibility symlink to it on Vista.
@@ -39,7 +39,8 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 - **Queued:** job `1052839` (submitted 2026-10-06 10:27), the rotation σ fine-grid × 3-seed sweep, 150 runs incl. σ 0/100 seeds 1–2
   ([E19](experiment_log_book.md#e19); exact command in the [RUNS](RUNS.md) row; ~8.7 h per run after the queue wait).
   When it finishes: `sbatch -A ASC26008 --array=0-14 --export=ALL,RUNS='diffusion/ambient_ta_r/*',WHICH=best_val
-  slurm_jobs/vista_eval_checkpoints.sbatch` (already-scored runs are skipped), then `scripts/plot_ambient_sigma.py`.
+  slurm_jobs/vista_eval_checkpoints.sbatch` (already-scored runs are skipped), then `scripts/plot_ambient_sigma.py`
+  and `scripts/plot_condition_boxes.py --out docs/plots` (E20's figures).
 - **Nothing else of this project is running.** The latest finished job, `1049683` (rotation ambient σ sweep, 55 runs), has
   finished and been re-scored: [E18](experiment_log_book.md#e18). Earlier: `1043385` / `1045839`
   ([E14](experiment_log_book.md#e14)–[E16](experiment_log_book.md#e16)).
@@ -93,6 +94,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A41](#a41) | 2026-10-06 | Box-and-whisker plots of σ=0 / 0<σ<100 / σ=100 / fine-tuned per rotation target, one figure per metric (E20). |
 | [A40](#a40) | 2026-10-06 | Fast-forwarded `main`, benchmarked run packing on the current code (PACK=2 is fastest overall), and set up the 150-run rotation σ fine-grid × 3-seed sweep (+ σ 0/100 seeds 1–2). |
 | [A39](#a39) | 2026-10-04 → 10-06 | Found that the demos were collected at seed 0 and the 50k subsets are prefixes (target-only grasp memorizes), rebuilt random-draw rotation subsets, ran and plotted the rotation σ 0–100 sweep (`1049683`). |
 | [A38](#a38) | 2026-10-04 | Moved the repo to `~/documents/`, fixed the venv paths, and restructured all docs into `docs/` (agent and experiment log books, RUNS, plots). |
@@ -137,6 +139,25 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a41"></a>
+### A41 — 2026-10-06 — Box plots of every rotation regime per target, per metric
+
+**Request.** Plots of the current policies showing performance across σ more clearly: one plot per metric,
+including fine-tuning per target; per target a cluster of box-and-whiskers for σ=0, 0<σ<100 pooled, σ=100,
+and fine-tuned.
+
+**Done.** New `scripts/plot_condition_boxes.py` (CHANGES 72), run with defaults (`--runs ambient_ta_r
+--ft-runs ambient_ta_ft --which best_val --out docs/plots`): 6 figures
+`docs/plots/rotation_conditions_box_<metric>.png` + `rotation_conditions_box_summary.csv` (75 runs: 5 σ0,
+45 0<σ<100, 5 σ100, 20 fine-tuned). Results and caveats in [E20](experiment_log_book.md#e20).
+
+**Verified / not verified.** Verified: run counts per group, every figure rendered and inspected (layout,
+footnote). Not verified: palette with the dataviz validator (no node on Vista). The fine-tunes are on the old
+`_K50k` subsets (noted in the figures and E20).
+
+**Pointers.** CHANGES 72 · Experiments: [E20](experiment_log_book.md#e20) · Re-run the script after
+`1052839` is scored to add E19's runs.
 
 <a id="a40"></a>
 ### A40 — 2026-10-06 — `main` fast-forwarded; packing benchmark; σ fine-grid sweep set up
