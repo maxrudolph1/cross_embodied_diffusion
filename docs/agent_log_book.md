@@ -36,9 +36,9 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
   branch `bundle-migration`. `~/cross_embodied_diffusion` is a compatibility symlink to it on Vista.
   The `/work` checkout is now level with `origin/bundle-migration` (A39 pulled the A38 docs restructure; `/work`
   was writable again on 2026-10-05).
-- **Ready to submit (user, login node):** the rotation σ fine-grid × 3-seed sweep, 130 runs
+- **Ready to submit (user, login node):** the rotation σ fine-grid × 3-seed sweep, 150 runs incl. σ 0/100 seeds 1–2
   ([E19](experiment_log_book.md#e19); exact command in the [RUNS](RUNS.md) row; ~8.7 h per run after the queue wait).
-  When it finishes: `sbatch -A ASC26008 --array=0-12 --export=ALL,RUNS='diffusion/ambient_ta_r/*',WHICH=best_val
+  When it finishes: `sbatch -A ASC26008 --array=0-14 --export=ALL,RUNS='diffusion/ambient_ta_r/*',WHICH=best_val
   slurm_jobs/vista_eval_checkpoints.sbatch` (already-scored runs are skipped), then `scripts/plot_ambient_sigma.py`.
 - **Nothing else of this project is running.** The latest finished job, `1049683` (rotation ambient σ sweep, 55 runs), has
   finished and been re-scored: [E18](experiment_log_book.md#e18). Earlier: `1043385` / `1045839`
@@ -93,7 +93,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
-| [A40](#a40) | 2026-10-06 | Fast-forwarded `main`, benchmarked run packing on the current code (PACK=2 is fastest overall), and set up the 130-run rotation σ fine-grid × 3-seed sweep. |
+| [A40](#a40) | 2026-10-06 | Fast-forwarded `main`, benchmarked run packing on the current code (PACK=2 is fastest overall), and set up the 150-run rotation σ fine-grid × 3-seed sweep (+ σ 0/100 seeds 1–2). |
 | [A39](#a39) | 2026-10-04 → 10-06 | Found that the demos were collected at seed 0 and the 50k subsets are prefixes (target-only grasp memorizes), rebuilt random-draw rotation subsets, ran and plotted the rotation σ 0–100 sweep (`1049683`). |
 | [A38](#a38) | 2026-10-04 | Moved the repo to `~/documents/`, fixed the venv paths, and restructured all docs into `docs/` (agent and experiment log books, RUNS, plots). |
 | [A37](#a37) | 2026-10-04 | Re-scored the 40 fine-tunes and cross-evaluated every generalist on all 5 hands: co-train then fine-tune wins on the target, and lr 1e-4 forgets the other hands. |
@@ -153,13 +153,16 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
   `1049683`) removed and the rest sorted by (seed, hand, σ): 130 runs. Recipe differs from E18 only in
   `ambient-tmin` and `output-dir`. DRY_RUN of node slots 0 and 64 at PACK=2: tasks 0 1 and 128 129, correct σ,
   seed and tmin order.
+- On request, added the baselines σ 0 and 100 × seeds {1, 2} (20 runs, same builder flags, `--sigmas 0 100
+  --seeds 1 2`) to the same manifest and re-sorted: 150 runs, all output dirs unique and new. DRY_RUN: slot 74
+  = tasks 148 149 (Wuji σ20/σ100 seed 2), slot 75 exits with "no manifest tasks".
 - **Packing benchmark** (idev c634-142, GH200, otherwise idle): the E18 rotation recipe on
   `padded_ta/InHand-Rotation_pad5_all_10k.zarr`, no in-training eval/val, 20 epochs (196 steps each), K
   copies run concurrently through `scripts/run_manifest_task.py --parallel`, timed between epochs 5 and 20 from
   per-line timestamps: K=1 33.4 steps/s per run; K=2 26.2 (52.5 per node); K=4 15.4 (61.6 per node). K=1 matches
   the full runs of `1049683` (~34 steps/s), so the small store is a fair proxy. Estimated full-run time
   (784k steps + 10 evals): 6.8 h / ~8.7 h / ~14.7 h.
-- Shape (RUNS row): PACK=2 × 5 nodes × 13 jobs = 65 nodes in one wave, `-t 12:00:00`. PACK=1 would need 130
+- Shape (RUNS row): PACK=2 × 5 nodes × 15 jobs = 75 nodes in one wave, `-t 12:00:00`. PACK=1 would need 150
   nodes, i.e. two waves under the 96-node cap (~13.6 h + waits); PACK=4 one wave but ~14.7 h.
   `queue_wait_stats.sh gh 3`: median waits 10–16 h for every size 1–16 nodes.
 

@@ -37,7 +37,7 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 | # | Date | Finding |
 |---|---|---|
-| [E19](#e19) | 2026-10-06 | (running) Rotation ambient σ fine grid 1–20 × 3 seeds on random-draw 50k targets, to locate the low-σ peak of E18 and measure seed variance. |
+| [E19](#e19) | 2026-10-06 | (running) Rotation ambient σ fine grid 1–20 × 3 seeds (+ σ 0/100 seeds 1–2) on random-draw 50k targets, to locate the low-σ peak of E18 and measure seed variance. |
 | [E18](#e18) | 2026-10-06 | Rotation ambient σ sweep (random-draw 50k targets): σ 10–20 is best (mean 0.85 successes before drop vs 0.64 target-only and 0.43 full co-training), and above σ≈30 it is flat at the target-only level. |
 | [E17](#e17) | 2026-10-04 | The demos were collected at env seed 0, so seed-0 evals replay training starts. Target-only 50k grasp policies memorize (0.92–0.95 on training starts vs 0.32–0.39 on new ones), while co-trained and fine-tuned policies generalize. |
 | [E16](#e16) | 2026-10-04 | Fine-tuning at lr 1e-4 forgets every non-target hand (0.00). lr 1e-5 keeps most of grasp (0.82) but not rotation (0.25). Co-trained grasp generalists score 0.94–1.00 on the four hands they saw at 1M. |
@@ -90,9 +90,10 @@ other four at 1M).
 
 **Policy inputs/outputs.** As [E14](#e14)/[E18](#e18).
 
-**Protocol.** σ ∈ {1, 2, 3, 6, 9, 12, 15, 18, 20} × 5 targets × seeds {0, 1, 2}; σ20 seed 0 reused from E18,
-so 130 new runs. Recipe identical to E18 except σ. Report `best_val`, re-scored at 100 envs × 1500 steps, seed
-1234. E18's σ 0/10/100 exist for seed 0 only.
+**Protocol.** σ ∈ {1, 2, 3, 6, 9, 12, 15, 18, 20} × 5 targets × seeds {0, 1, 2}, plus the baselines σ 0 and 100
+× seeds {1, 2}; σ 0/20/100 seed 0 reused from E18, so 150 new runs and 3 seeds at σ 0, 1–20 and 100. Recipe
+identical to E18 except σ and seed. Report `best_val`, re-scored at 100 envs × 1500 steps, seed 1234. σ 10–90
+(except 20) stay single-seed (E18).
 
 **Results.** Pending.
 
