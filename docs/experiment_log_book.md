@@ -37,6 +37,7 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 | # | Date | Finding |
 |---|---|---|
+| [E19](#e19) | 2026-10-06 | (running) Rotation ambient σ fine grid 1–20 × 3 seeds on random-draw 50k targets, to locate the low-σ peak of E18 and measure seed variance. |
 | [E18](#e18) | 2026-10-06 | Rotation ambient σ sweep (random-draw 50k targets): σ 10–20 is best (mean 0.85 successes before drop vs 0.64 target-only and 0.43 full co-training), and above σ≈30 it is flat at the target-only level. |
 | [E17](#e17) | 2026-10-04 | The demos were collected at env seed 0, so seed-0 evals replay training starts. Target-only 50k grasp policies memorize (0.92–0.95 on training starts vs 0.32–0.39 on new ones), while co-trained and fine-tuned policies generalize. |
 | [E16](#e16) | 2026-10-04 | Fine-tuning at lr 1e-4 forgets every non-target hand (0.00). lr 1e-5 keeps most of grasp (0.82) but not rotation (0.25). Co-trained grasp generalists score 0.94–1.00 on the four hands they saw at 1M. |
@@ -76,6 +77,26 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 ---
 
 ## Entries
+
+<a id="e19"></a>
+### E19 — 2026-10-06 — Ambient σ fine grid (1–20) × 3 seeds, rotation
+
+**Question.** [E18](#e18) found the best σ at 10–20 on a step-10 grid with one seed. Where exactly is the
+peak in σ 1–20, and how large is seed-to-seed variance?  **Status.** running (ready 2026-10-06, to be
+submitted by the user).
+
+**Data.** As [E18](#e18): `padded_ta/InHand-Rotation_pad5_scarce<Hand>_K50kr.zarr` (target 50k random draw +
+other four at 1M).
+
+**Policy inputs/outputs.** As [E14](#e14)/[E18](#e18).
+
+**Protocol.** σ ∈ {1, 2, 3, 6, 9, 12, 15, 18, 20} × 5 targets × seeds {0, 1, 2}; σ20 seed 0 reused from E18,
+so 130 new runs. Recipe identical to E18 except σ. Report `best_val`, re-scored at 100 envs × 1500 steps, seed
+1234. E18's σ 0/10/100 exist for seed 0 only.
+
+**Results.** Pending.
+
+**Links.** RUNS: fine-grid row (to submit) · Agent log: [A40](agent_log_book.md#a40).
 
 <a id="e18"></a>
 ### E18 — 2026-10-06 — Ambient σ sweep, rotation, random-draw 50k targets

@@ -135,9 +135,10 @@ The block above is for the original shared-node cluster. On Vista:
 - Training: `slurm_jobs/vista_train_manifest.sbatch` + a manifest (list of tasks, each a list
   of `train-diffusion` arg dicts). `PACK` = manifest tasks per node; `-N K` makes each node of
   a job take its own `PACK` tasks (node slot = array_index * K + node_id; item 54). `DRY_RUN=1`
-  prints the commands. Per-node throughput is flat from ~4 to 16 packed runs, so packing sets
-  wall time, not cost (experiment log book E10); one run alone is ~3.5x faster than one
-  of 4 packed (rotation pool, 50 epochs: 2 h 22 m alone).
+  prints the commands. Per-node throughput, measured 2026-10-06 on the current (uncompiled) rotation recipe
+  (A40): 1 run 33.4 steps/s; 2 packed 26.2 each (52.5/node); 4 packed 15.4 each (61.6/node). A
+  ~784k-step run is ~6.8 h alone, ~8.7 h at PACK=2, ~14.7 h at PACK=4. (The older compiled-code
+  numbers in ANALYSIS "Vista job shape" no longer apply.)
 - Multi-hand data: one pre-built **term-aligned** store per mixture
   (`scripts/padded_grid.py --family F --config C --build` ->
   `data/mjlab_hand_demos/padded_ta/`), trained with the recipe in MIGRATION.md section 5.2:

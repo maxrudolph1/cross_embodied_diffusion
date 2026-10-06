@@ -30,13 +30,17 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 ## Current state
 
-*Last updated 2026-10-06 (A39).*
+*Last updated 2026-10-06 (A40).*
 
 - **Repo location:** `/work/09312/rudolph/documents/cross_embodied_diffusion` (`~/documents/cross_embodied_diffusion`),
   branch `bundle-migration`. `~/cross_embodied_diffusion` is a compatibility symlink to it on Vista.
   The `/work` checkout is now level with `origin/bundle-migration` (A39 pulled the A38 docs restructure; `/work`
   was writable again on 2026-10-05).
-- **Nothing of this project is running.** The latest job, `1049683` (rotation ambient σ sweep, 55 runs), has
+- **Ready to submit (user, login node):** the rotation σ fine-grid × 3-seed sweep, 130 runs
+  ([E19](experiment_log_book.md#e19); exact command in the [RUNS](RUNS.md) row; ~8.7 h per run after the queue wait).
+  When it finishes: `sbatch -A ASC26008 --array=0-12 --export=ALL,RUNS='diffusion/ambient_ta_r/*',WHICH=best_val
+  slurm_jobs/vista_eval_checkpoints.sbatch` (already-scored runs are skipped), then `scripts/plot_ambient_sigma.py`.
+- **Nothing else of this project is running.** The latest finished job, `1049683` (rotation ambient σ sweep, 55 runs), has
   finished and been re-scored: [E18](experiment_log_book.md#e18). Earlier: `1043385` / `1045839`
   ([E14](experiment_log_book.md#e14)–[E16](experiment_log_book.md#e16)).
 - **Headline results:**
@@ -59,8 +63,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
   4. Open discrepancy: under our frozen min/max, the normalized action std is 0.24/0.26, against Bundle's
      quoted 0.077 (CHANGES item 63). σ values may not map 1:1 onto Bundle's.
   5. `$SCRATCH/ced_docs` (the A38 clone used while `/work` was read-only) can be deleted.
-  6. `main` was fast-forwarded to `bundle-migration` on 2026-10-04 (`8f43037`); A39's commits are on
-     `bundle-migration` only.
+  6. `main` was fast-forwarded to `bundle-migration` (`a72da5a`) on 2026-10-06 (A40).
 
 ## Environment & install (living reference)
 
@@ -90,6 +93,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A40](#a40) | 2026-10-06 | Fast-forwarded `main`, benchmarked run packing on the current code (PACK=2 is fastest overall), and set up the 130-run rotation σ fine-grid × 3-seed sweep. |
 | [A39](#a39) | 2026-10-04 → 10-06 | Found that the demos were collected at seed 0 and the 50k subsets are prefixes (target-only grasp memorizes), rebuilt random-draw rotation subsets, ran and plotted the rotation σ 0–100 sweep (`1049683`). |
 | [A38](#a38) | 2026-10-04 | Moved the repo to `~/documents/`, fixed the venv paths, and restructured all docs into `docs/` (agent and experiment log books, RUNS, plots). |
 | [A37](#a37) | 2026-10-04 | Re-scored the 40 fine-tunes and cross-evaluated every generalist on all 5 hands: co-train then fine-tune wins on the target, and lr 1e-4 forgets the other hands. |
@@ -133,6 +137,38 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a40"></a>
+### A40 — 2026-10-06 — `main` fast-forwarded; packing benchmark; σ fine-grid sweep set up
+
+**Request.** Fast-forward `main` to `bundle-migration`. Set up ambient runs for rotation, 5 targets, 3 seeds,
+σ ∈ {1,2,3,6,9,12,15,18,20}, with Slurm parameters chosen so everything finishes as fast as possible.
+
+**Done.**
+- `git push origin bundle-migration:main` (`2fa899e..a72da5a`, fast-forward checked with
+  `git merge-base --is-ancestor`); local `main` moved to `a72da5a`.
+- Manifest `slurm_jobs/ambient_rot_fine_manifest.json` (gitignored): `scripts/build_ambient_manifest.py
+  --families InHand-Rotation --size 50kr --sigmas 1 2 3 6 9 12 15 18 20 --seeds 0 1 2 --root
+  outputs/diffusion/ambient_ta_r`, then the 5 runs whose output dirs already exist (σ20 seed 0, from
+  `1049683`) removed and the rest sorted by (seed, hand, σ): 130 runs. Recipe differs from E18 only in
+  `ambient-tmin` and `output-dir`. DRY_RUN of node slots 0 and 64 at PACK=2: tasks 0 1 and 128 129, correct σ,
+  seed and tmin order.
+- **Packing benchmark** (idev c634-142, GH200, otherwise idle): the E18 rotation recipe on
+  `padded_ta/InHand-Rotation_pad5_all_10k.zarr`, no in-training eval/val, 20 epochs (196 steps each), K
+  copies run concurrently through `scripts/run_manifest_task.py --parallel`, timed between epochs 5 and 20 from
+  per-line timestamps: K=1 33.4 steps/s per run; K=2 26.2 (52.5 per node); K=4 15.4 (61.6 per node). K=1 matches
+  the full runs of `1049683` (~34 steps/s), so the small store is a fair proxy. Estimated full-run time
+  (784k steps + 10 evals): 6.8 h / ~8.7 h / ~14.7 h.
+- Shape (RUNS row): PACK=2 × 5 nodes × 13 jobs = 65 nodes in one wave, `-t 12:00:00`. PACK=1 would need 130
+  nodes, i.e. two waves under the 96-node cap (~13.6 h + waits); PACK=4 one wave but ~14.7 h.
+  `queue_wait_stats.sh gh 3`: median waits 10–16 h for every size 1–16 nodes.
+
+**Verified / not verified.** Verified: the ff push, manifest contents, dry-run slot mapping, the benchmark.
+Not verified: a full-length PACK=2 run (the 8.7 h is extrapolated, hence the 12 h limit); `sbatch --test-only`
+projections (need a login node).
+
+**Pointers.** RUNS: fine-grid row · Experiments: [E19](experiment_log_book.md#e19) · AGENTS.md "Running
+things" packing numbers updated.
 
 <a id="a39"></a>
 ### A39 — 2026-10-04 → 10-06 — Eval-seed/memorization check, random-draw 50k rotation subsets, rotation σ sweep
