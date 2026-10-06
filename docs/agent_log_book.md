@@ -36,7 +36,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
   branch `bundle-migration`. `~/cross_embodied_diffusion` is a compatibility symlink to it on Vista.
   The `/work` checkout is now level with `origin/bundle-migration` (A39 pulled the A38 docs restructure; `/work`
   was writable again on 2026-10-05).
-- **Ready to submit (user, login node):** the rotation σ fine-grid × 3-seed sweep, 150 runs incl. σ 0/100 seeds 1–2
+- **Queued:** job `1052839` (submitted 2026-10-06 10:27), the rotation σ fine-grid × 3-seed sweep, 150 runs incl. σ 0/100 seeds 1–2
   ([E19](experiment_log_book.md#e19); exact command in the [RUNS](RUNS.md) row; ~8.7 h per run after the queue wait).
   When it finishes: `sbatch -A ASC26008 --array=0-14 --export=ALL,RUNS='diffusion/ambient_ta_r/*',WHICH=best_val
   slurm_jobs/vista_eval_checkpoints.sbatch` (already-scored runs are skipped), then `scripts/plot_ambient_sigma.py`.
@@ -170,7 +170,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 Not verified: a full-length PACK=2 run (the 8.7 h is extrapolated, hence the 12 h limit); `sbatch --test-only`
 projections (need a login node).
 
-**Pointers.** RUNS: fine-grid row · Experiments: [E19](experiment_log_book.md#e19) · AGENTS.md "Running
+**Pointers.** RUNS: `1052839` · Experiments: [E19](experiment_log_book.md#e19) · AGENTS.md "Running
 things" packing numbers updated.
 
 <a id="a39"></a>

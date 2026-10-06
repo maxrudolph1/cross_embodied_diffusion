@@ -82,8 +82,8 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 ### E19 — 2026-10-06 — Ambient σ fine grid (1–20) × 3 seeds, rotation
 
 **Question.** [E18](#e18) found the best σ at 10–20 on a step-10 grid with one seed. Where exactly is the
-peak in σ 1–20, and how large is seed-to-seed variance?  **Status.** running (ready 2026-10-06, to be
-submitted by the user).
+peak in σ 1–20, and how large is seed-to-seed variance?  **Status.** running: job `1052839`, submitted
+2026-10-06 10:27, pending in the queue.
 
 **Data.** As [E18](#e18): `padded_ta/InHand-Rotation_pad5_scarce<Hand>_K50kr.zarr` (target 50k random draw +
 other four at 1M).
@@ -97,7 +97,7 @@ identical to E18 except σ and seed. Report `best_val`, re-scored at 100 envs ×
 
 **Results.** Pending.
 
-**Links.** RUNS: fine-grid row (to submit) · Agent log: [A40](agent_log_book.md#a40).
+**Links.** RUNS: `1052839` · Agent log: [A40](agent_log_book.md#a40).
 
 <a id="e18"></a>
 ### E18 — 2026-10-06 — Ambient σ sweep, rotation, random-draw 50k targets
