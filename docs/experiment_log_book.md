@@ -37,6 +37,8 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 | # | Date | Finding |
 |---|---|---|
+| [E18](#e18) | 2026-10-06 | Rotation ambient σ sweep (random-draw 50k targets): σ 10–20 is best (mean 0.85 successes before drop vs 0.64 target-only and 0.43 full co-training), and above σ≈30 it is flat at the target-only level. |
+| [E17](#e17) | 2026-10-04 | The demos were collected at env seed 0, so seed-0 evals replay training starts. Target-only 50k grasp policies memorize (0.92–0.95 on training starts vs 0.32–0.39 on new ones), while co-trained and fine-tuned policies generalize. |
 | [E16](#e16) | 2026-10-04 | Fine-tuning at lr 1e-4 forgets every non-target hand (0.00). lr 1e-5 keeps most of grasp (0.82) but not rotation (0.25). Co-trained grasp generalists score 0.94–1.00 on the four hands they saw at 1M. |
 | [E15](#e15) | 2026-10-04 | Co-training on all 5 hands and then fine-tuning on the 50k target beats both co-training and target-only training: grasp 0.91 vs 0.76/0.38, rotation 1.34 vs 0.66/0.70. |
 | [E14](#e14) | 2026-10-03 | With term-aligned padding, co-training gives a large grasp gain (+0.38..+0.44) and a small rotation loss (−0.04..−0.15) against target-only 50k. |
@@ -74,6 +76,146 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 ---
 
 ## Entries
+
+<a id="e18"></a>
+### E18 — 2026-10-06 — Ambient σ sweep, rotation, random-draw 50k targets
+
+**Question.** How does the target hand's performance change with the ambient gate σ, from full co-training
+(σ=0) to target-only (σ=100) in steps of 10? Bundle reported a peak at low σ for a starved 50k rotation target.
+Also, do the σ 0/100 conclusions of [E14](#e14) hold with properly random 50k target subsets
+(see [E17](#e17))?  **Status.** done.
+
+**Data.** Per target hand: `data/mjlab_hand_demos/padded_ta/InHand-Rotation_pad5_scarce<Hand>_K50kr.zarr`:
+the target's 50k drawn **at random** from its 1M store (`subsets_50kr/`, draw seed 0), plus the other four
+hands at 1M (~4.0M windows; [COLLECTIONS](COLLECTIONS.md)). Val store `val/rotation_val_20k.zarr`.
+
+**Policy inputs/outputs.** Same as [E14](#e14): last 2 term-aligned observations (rotation width 91) → an
+8-step action chunk at width 22 (only the hand's native prefix is executed); frozen family min/max
+normalizer, x0 clamp 1.0.
+
+**Protocol.**
+- **Training:** noise-first ambient sampler; the target trains every timestep, the other four hands only
+  t ≥ σ, σ ∈ {0, 10, …, 100}; 5 targets × 11 σ × seed 0 = 55 runs, ~784k steps (50–51 epochs), lr 1e-4,
+  batch 256. Identical to [E14](#e14) except the dataset.
+- **Reporting:** checkpoint `best_val` (user's choice), re-scored with `rescore_selected.py`, 100 envs ×
+  1500 steps, eval seed 1234. One training seed.
+- σ 0/100 comparison: [E14](#e14)'s runs on the old first-episodes subsets (`_K50k`), best_val, seeds 0/1.
+
+**Results.** Successes before drop (rotations completed before the object falls):
+
+| σ | 0 | 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 | 90 | 100 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Allegro | 0.72 | **1.28** | 1.12 | 0.87 | 0.85 | 0.93 | 0.97 | 0.88 | 0.80 | 0.93 | 0.97 |
+| LEAP | 0.54 | **0.85** | 0.58 | 0.48 | 0.34 | 0.39 | 0.49 | 0.34 | 0.31 | 0.49 | 0.35 |
+| Shadow | 0.32 | 0.55 | **0.64** | 0.45 | 0.45 | 0.50 | 0.38 | 0.41 | 0.40 | 0.32 | 0.48 |
+| Sharpa | 0.19 | 0.58 | 0.66 | 0.70 | 0.68 | **0.91** | 0.71 | 0.71 | 0.75 | 0.69 | 0.66 |
+| Wuji | 0.40 | 0.98 | **1.21** | 1.08 | 0.93 | 0.81 | 1.10 | 0.77 | 0.88 | 0.88 | 0.75 |
+| **mean** | 0.43 | **0.85** | 0.84 | 0.72 | 0.65 | 0.71 | 0.73 | 0.62 | 0.63 | 0.66 | 0.64 |
+
+Other metrics, mean over hands (σ 0 / 10 / 20 / 100):
+
+| Metric | σ 0 | σ 10 | σ 20 | σ 100 |
+|---|---|---|---|---|
+| episodes reaching ≥ 1 target | 0.35 | 0.58 | 0.58 | 0.48 |
+| per-target success rate | 0.27 | 0.43 | 0.40 | 0.32 |
+| survival time before drop (s) | 7.1 | 10.9 | 12.1 | 11.4 |
+| final rotation distance to target (rad, lower better) | 0.80 | 0.58 | 0.58 | 0.60 |
+| drop rate | 1.00 | 1.00 | 1.00 | 1.00 |
+
+![Successes before drop vs σ per target hand; old first-episodes σ 0/100 runs as diamonds](plots/ambient_sigma_rotation.png)
+![Every eval metric vs σ, one line per target hand, dashed = mean over hands](plots/ambient_sigma_rotation_metrics.png)
+
+Raw values (every metric, every run, plus the old-subset reference runs):
+[`plots/ambient_sigma_rotation_summary.csv`](plots/ambient_sigma_rotation_summary.csv).
+
+**Uncertainty.** One training seed. Episode-sampling SE per run is 0.05–0.12 (median 0.08). Mean over the 5
+hands, 1 SE from episode sampling only: σ10 − σ100 = **+0.21 ± 0.05**, σ20 − σ100 = +0.20 ± 0.05,
+σ0 − σ100 = −0.21 ± 0.05. Seed-to-seed variation is not included; per hand it was ~0.1–0.2 in [E14](#e14)'s
+2-seed runs.
+
+**σ 0/100 confirmation (old vs random subsets).** Mean over hands, best_val: old first-episodes subsets
+(E14 runs, mean of seeds 0/1) σ0 0.58, σ100 0.73, gap −0.15; random draw (seed 0) σ0 0.43, σ100 0.64, gap −0.21.
+
+**Takeaways.**
+- **Keeping the other hands out of the lowest 10–20% of diffusion steps is the best setting:** +0.21 successes
+  over target-only (0.85 vs 0.64, +33%) and about double full co-training (0.43). Four of five hands peak at
+  σ 10–20. Sharpa peaks at σ 50 and is flat from 20 to 100. Every informative metric gives the same ordering.
+- This reproduces, qualitatively, Bundle's noise-first result: a peak at low σ (σ* = 2–3 on Bundle's grid),
+  with Sharpa again the exception. Our grid has step 10, so the true peak could be anywhere in 1–20.
+- **Full co-training (σ0) is the worst setting for 4 of 5 hands.** LEAP is the exception (0.54 vs 0.35
+  target-only). The other hands help the target only when kept out of the low-noise steps, where the fine,
+  hand-specific action detail is denoised.
+- Above σ≈30 the curve is flat at about the target-only level: data from other hands admitted only at high
+  noise neither helps nor hurts.
+- **[E14](#e14)'s rotation conclusion holds with random subsets:** full co-training does not beat target-only
+  (−0.21 here, −0.15 with the old subsets). Both conditions score lower with the random draw (0.43/0.64 vs
+  0.58/0.73). With one draw and one or two seeds this was not tested further.
+- Drop rate is 1.00 everywhere: within 1500 steps nearly every episode ends in a drop, so it does not
+  separate conditions.
+- Next: more seeds (at least σ 0, 10, 20, 100), a finer grid in σ 1–20, the same sweep for grasp (Bundle saw
+  gating hurt grasp monotonically), and fine-tuning from the σ 10–20 runs ([E15](#e15)).
+
+**Links.** RUNS: `1049683` + idev rescore row · Agent log: [A39](agent_log_book.md#a39) · CHANGES 70, 71.
+
+<a id="e17"></a>
+### E17 — 2026-10-04 — Eval seed 0 replays the training starts: memorization check
+
+**Question.** Target-only grasp runs scored 0.56–0.84 at their first in-training eval (epoch 5) and ~0.3–0.4
+afterwards, and their re-scored `best_rollout` (= the epoch-5 checkpoint) was ~0.35. Why? And do the 50k
+policies generalize, or memorize their demos?  **Status.** done.
+
+**Data.** The 1M stores and the `subsets_50k/` 50k subsets ([COLLECTIONS](COLLECTIONS.md), 2026-10-05 section);
+the policies of [E14](#e14) and [E15](#e15).
+
+**Protocol.**
+- **Collection seed:** not recorded in the store attrs, the HF mirror or the sbatch files. Determined from
+  the data instead: episode-start obs of the 1M store vs `env.reset()` obs of fresh eval envs, by
+  nearest-neighbour distance (exact match < 1e-4).
+- **Memorization:** `last0` checkpoints (plus the epoch-5 `best_rollout` of Grasp-Allegro target-only),
+  100 envs × 1500 steps, eval seed 0 (training starts) vs seed 1234 (new starts, the reporting seed;
+  seed-1234 values from `final_eval.jsonl`). One run per cell (training seed 0).
+
+**Results.**
+- **The 1M demos were collected at env seed 0.** Seed 0 with 256 / 100 / 32 envs: 100% of reset states
+  appear exactly in the 1M store; seeds 1234 and 7: 0%.
+- **Each `subsets_50k/` store is the first ~100 episodes of its 1M store** (bitwise), so a seed-0 eval with
+  ≤ 100 envs starts every env from a training start. In-training evals use the train seed (0) in a fresh env
+  only at the first eval; later evals reuse the env without reseeding, which is why only the first eval was
+  inflated.
+- Same checkpoint (Grasp-Allegro target-only, epoch 5) at seeds 0 / 1234 / 7: **0.91 / 0.38 / 0.46**.
+
+| Target | Condition | Seed 0 (training starts) | Seed 1234 (new starts) | Gap |
+|---|---|---|---|---|
+| Grasp-Allegro | target-only | 0.95 | 0.39 | **+0.56** |
+| Grasp-Allegro | co-trained | 0.84 | 0.77 | +0.07 |
+| Grasp-Allegro | co-trained + FT 1e-5 | 1.00 | 0.97 | +0.03 |
+| Grasp-Sharpa | target-only | 0.92 | 0.32 | **+0.60** |
+| Grasp-Sharpa | co-trained | 0.71 | 0.72 | −0.01 |
+| Grasp-Sharpa | co-trained + FT 1e-5 | 0.98 | 0.97 | +0.01 |
+| Rotation-Allegro | target-only | 1.14 | 1.09 | +0.05 |
+| Rotation-Allegro | co-trained | 0.98 | 0.79 | +0.19 |
+| Rotation-Allegro | co-trained + FT 1e-5 | 1.82 | 1.55 | +0.27 |
+| Rotation-Wuji | target-only | 1.08 | 0.88 | +0.20 |
+| Rotation-Wuji | co-trained | 0.60 | 0.52 | +0.08 |
+| Rotation-Wuji | co-trained + FT 1e-5 | 1.47 | 1.80 | −0.33 |
+
+Grasp: success rate. Rotation: successes before drop. Only the first episode per env replays a training
+start (later auto-resets do not), so the seed-0 column understates pure memorization.
+
+**Takeaways.**
+- **Target-only grasp policies memorize.** They succeed on 92–95% of their ~100 training starts and on 32–39%
+  of new ones: 50k grasp demos cover only ~100 initial object poses.
+- **Co-training removes the grasp gap**, and fine-tuning the co-trained policy on the same 100 episodes does
+  not bring it back while reaching 0.97 on new starts. The [E14](#e14)/[E15](#e15) gains are generalization
+  gains, measured on held-out starts.
+- **Rotation shows no consistent memorization signal** (gaps −0.33 to +0.27, mixed signs, within noise for 100
+  episodes).
+- **Never score at env seed 0.** Reported numbers (seed 1234) are unaffected. In-training curves and
+  `best_rollout` of runs on the old `subsets_50k/` are biased at the first eval. Re-collection is not needed:
+  the seed is known and the reporting seed is disjoint. The rotation subsets were rebuilt as random draws
+  ([E18](#e18), CHANGES 70), which cuts the seed-0 overlap to 1–2 of 32 in-training eval starts.
+
+**Links.** Agent log: [A39](agent_log_book.md#a39) · CHANGES 70.
 
 <a id="e16"></a>
 ### E16 — 2026-10-04 — Cross-embodiment generality of the generalists (co-trained vs fine-tuned)
@@ -205,6 +347,12 @@ Raw values: [`plots/cotrain_vs_target_summary.csv`](plots/cotrain_vs_target_summ
 
 **Links.** RUNS: `1043385` + idev rescore row · Agent log: [A32](agent_log_book.md#a32)–[A36](agent_log_book.md#a36) ·
 CHANGES 63, 65, 66.
+
+> **Update 2026-10-06:** The 50k targets here are the first ~100 episodes of the 1M stores, and the first
+> in-training eval (seed 0) starts from those training states, so `best_rollout` of the target-only grasp
+> runs is the inflated epoch-5 checkpoint. The target-only grasp policies memorize (0.92–0.95 on training
+> starts vs 0.32–0.39 on new ones), so the grasp gain is a generalization gain. See [E17](#e17). The rotation
+> result was re-checked with random 50k draws in [E18](#e18): co-training is still below target-only (−0.21).
 
 <a id="e13"></a>
 ### E13 — 2026-10-01 — Ambient rotation sweep on tail-padded stores (old layout)

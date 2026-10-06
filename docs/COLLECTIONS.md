@@ -14,14 +14,38 @@ All paths are under `data/mjlab_hand_demos/` (symlink to `$WORK/vista/cross_embo
 | Store | What | Built by | Size | Used by |
 |---|---|---|---|---|
 | `<Task>_expert_1M.zarr` (10) | 1M-step expert demos per task × hand | `collect-demos` on the old cluster (sections below), pulled from HF | ~1M steps each | sources of all pools |
-| `subsets_50k/`, `subsets_10k/` | per-hand subsets of the 1M sets | `scripts/subsample_dataset.py` | 50k / 10k steps | target-only data, pools |
+| `subsets_50k/`, `subsets_10k/` | per-hand subsets of the 1M sets. **These are the first ~100 episodes of each 1M store, not a random draw** (bitwise; see below), so their starts are the seed-0 eval starts, and rotation's are biased to short episodes | `scripts/subsample_dataset.py` (no `--random-seed`) | 50k / 10k steps | target-only data, pools |
+| `subsets_50kr/InHand-Rotation-<Hand>_expert_50kr.zarr` (5) | **random-draw** 50k rotation subsets of the 1M sets (draw seed 0) | `scripts/subsample_dataset.py --source <1M> --target-steps 50000 --success-only --random-seed 0` (CHANGES 70) | 102-112 episodes, 49.9-50.0k steps | `_K50kr` pools |
 | `padded_ta/<Family>_pad5_scarce<Hand>_K50k.zarr` (5 grasp + 5 rotation) | **term-aligned** pool: target hand 50k + the other four at 1M, in HANDS order (Allegro, LEAP, Shadow, Sharpa, Wuji); obs/act grasp 191/28, rotation 91/22, padding 0 | `scripts/padded_grid.py --family F --config scarce<Hand>_K50k --build` (CHANGES 63, 64) | ~4.0M steps each (17 GB in total) | [E14](experiment_log_book.md#e14), [E15](experiment_log_book.md#e15) |
+| `padded_ta/InHand-Rotation_pad5_scarce<Hand>_K50kr.zarr` (5) | term-aligned pool: target hand's `subsets_50kr` + the other four at 1M | `scripts/padded_grid.py --family InHand-Rotation --config scarce<Hand>_K50kr --build` (CHANGES 70); `check_padded_dataset.py --rows 1000` OK | 3.94-4.00M windows, ~1.3 GB each | [E18](experiment_log_book.md#e18) |
 | `padded_ta/InHand-Rotation_pad5_all_10k.zarr` | term-aligned pool of the five 10k subsets | `padded_grid.py --config all_10k --build` | ~50k steps | GPU smoke tests ([A32](agent_log_book.md#a32)) |
 | `val/{grasp,rotation}_val_20k.zarr` (+ per-hand `val/<Task>_val_20k.zarr`, `val/raw/`) | held-out val stores: fresh expert rollouts, seed 1000, 64 episodes per task, episodes whose start matches a 1M training start dropped (0 found); term-aligned | `slurm_jobs/vista_collect_val.sbatch` then `scripts/build_val_split.py` (CHANGES 63) | ~20k steps per hand (Rotation-Shadow 19,541) | `--val-dataset` in [E14](experiment_log_book.md#e14), [E15](experiment_log_book.md#e15) |
 | `padded/` | **old** tail-padded Gaussian-normalized pools (AllHands, Scarce) | `build_padded_dataset.py` before item 63 | 21 GB | E9, E11 only; train.py now refuses them |
 | `configs/norm_{grasp,rotation}_minmax.json` (tracked) | frozen per-family min/max normalizers, fit on the five 1M stores, ranges contain 0 | `scripts/build_family_normalizer.py` (CHANGES 63) | — | every term-aligned run |
 
 ---
+
+## 2026-10-05 — Demo provenance: collection seed 0, 50k subsets are prefixes; random-draw rotation subsets
+
+Built in agent log [A39](agent_log_book.md#a39).
+
+- **The 1M stores were collected at env seed 0** (`collect-demos` default; none of
+  `slurm_jobs/collect_1M*.sbatch` pass `--seed`; the store attrs and the HF mirror, which holds only store
+  tarballs and RL `params/*.yaml`, do not record it). Verified from the data: episode-start obs of
+  `Grasp-Allegro_expert_1M.zarr` vs `env.reset()` obs of a fresh eval env -- seed 0 with 256 / 100 / 32
+  envs: 100% exact matches; seeds 1234 and 7: 0% (median NN distance ~0.52).
+- **Every `subsets_50k/*_expert_50k.zarr` equals the first 100-123 episodes of its 1M store** (bitwise;
+  checked Grasp-Allegro, Grasp-Shadow, InHand-Rotation-Wuji), so a seed-0 eval with <= 100 envs starts
+  every env from a training start. Grasp episodes nearly all run 500 steps, so the grasp prefix is an
+  unbiased draw; **rotation prefixes are biased toward early-ending episodes** (mean length prefix / 1M:
+  Allegro 429/458, LEAP 483/486, Shadow 406/438, Sharpa 452/464, Wuji 447/478).
+- Val stores (seed 1000, start-collision filtered) and reporting evals (seed 1234) share no starts with
+  the demos.
+- **`subsets_50kr/` (rotation, draw seed 0).** Episodes / steps / mean length (1M mean): Allegro 109 / 49,899 /
+  457.8 (458.1); LEAP 102 / 49,877 / 489.0 (486.3); Shadow 112 / 50,003 / 446.5 (438.4); Sharpa 108 /
+  49,933 / 462.3 (464.2); Wuji 102 / 49,864 / 488.9 (478.2). Drawn across the whole 1M store; 3-5 episodes
+  shared with the old prefix. Seed-0 32-env eval starts found in the training data: old prefix 30-32/32,
+  random draw 1-2/32. Padded `_K50kr` pools built and checked (table above). Grasp `50kr` not built.
 
 ## Older sections (as recorded at the time)
 

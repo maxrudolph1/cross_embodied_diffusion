@@ -10,6 +10,43 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
 
 ---
 
+## 2026-10-05 — random-draw 50k target subsets; ambient sigma plots
+
+### 71. `scripts/plot_ambient_sigma.py` (NEW)
+
+- Target-hand score vs ambient sigma for one family (`--family`, default InHand-Rotation). Writes
+  `<out>/ambient_sigma_<family>.png` (successes before drop: one panel per target hand + mean over targets;
+  sweep runs from `--runs`, default `$SCRATCH/.../outputs/diffusion/ambient_ta_r`, as a line; `--ref` runs,
+  default the old `ambient_ta` sigma 0/100 seeds 0/1, as diamonds, re-scored points only), for rotation also
+  `ambient_sigma_rotation_metrics.png` (one panel per eval metric: successes before drop, success rate on
+  >= 1 target, per-target success rate, survival time, drop rate, final rotation distance; one line per hand
+  + dashed mean), and `ambient_sigma_<family>_summary.csv` with every scalar metric.
+- Score = `best_val` checkpoint from `final_eval.jsonl` (100 envs x 1500 steps, seed 1234). Until that exists:
+  PROVISIONAL = in-training eval at the lowest val loss so far (hollow markers); provisional `--ref` points
+  are never drawn (seed-0 evals of the old subsets start from training states, experiment log E17).
+- Colours: dataviz reference categorical slots 1-5 in fixed hand order + a distinct marker per hand
+  (the palette validator needs node, which Vista lacks). Defaults to `outputs/plots/`; copy finals to
+  `docs/plots/`.
+
+### 70. `scripts/subsample_dataset.py` `--random-seed`; `padded_grid.py` `scarce<Hand>_K50kr`; `build_ambient_manifest.py` `--size`
+
+Why: every `subsets_50k/` store is the first ~100 episodes of its 1M store, i.e. the collection seed's (0)
+first reset wave -- the same starts as a seed-0 eval -- and, for rotation, the earliest-ending episodes
+(experiment log E17, COLLECTIONS.md).
+
+- `subsample_dataset.py`: new `--random-seed N`. Episodes are permuted with
+  `np.random.default_rng(N).permutation`, the unchanged greedy step-target selector runs over that order,
+  and the selection is written back sorted by source position. Store attrs record `random_seed` (null
+  without the flag). Without the flag the output is unchanged: verified bitwise against the existing
+  `subsets_50k/InHand-Rotation-Wuji_expert_50k.zarr`.
+- `padded_grid.py`: `configs()` also lists `scarce<Hand>_K50kr`; the size token `50kr` resolves through the
+  existing `demo_path` to `subsets_50kr/<Family>-<Hand>_expert_50kr.zarr`, so the store is
+  `padded_ta/<Family>_pad5_scarce<Hand>_K50kr.zarr`. Existing configs unchanged.
+- `build_ambient_manifest.py`: `--size` (default `50k`, unchanged behaviour) selects the target subset
+  (`scarce<Hand>_K<size>`).
+
+---
+
 ## 2026-10-04 — repo moved; docs restructured into `docs/`
 
 ### 69. Docs layout: `docs/` with agent and experiment log books (no code behaviour change)

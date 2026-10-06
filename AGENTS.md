@@ -243,7 +243,9 @@ were wrong in different ways.
   the data-first sampler and was retracted in Bundle (MIGRATION.md section 7). With
   noise-first Bundle reports, for a starved 50k rotation target, a peak at sigma 2-3 (0.655
   at 0 -> 1.137 at 2, 0.767 at 100; Sharpa best at 25), sign reversal at 1M, and grasp
-  hurt monotonically. Not yet reproduced in this repo (only sigma 0/100 run on term-aligned stores, E14). Robust in both: an embodiment trained
+  hurt monotonically. Reproduced qualitatively here for rotation (E18, 1 seed, random-draw 50k
+  targets, sigma step 10): mean successes 0.43 at sigma 0, 0.85 at 10, 0.64 at 100; Sharpa again
+  the exception (best at 50). Grasp not yet swept. Robust in both: an embodiment trained
   only on the coarse end of the schedule is completely non-functional (0.000; Vista
   2026-10-01: LEAP 1.8 at sigma 0 -> 0.00 at sigma 10).
 - Adversarial invariance training does not work on the Allegro/LEAP pair:
@@ -253,3 +255,8 @@ were wrong in different ways.
   data, never the adversary's own training accuracy.
 - Sequential transfer works: co-train then fine-tune on the target (E15) is the best
   target policy found so far in both families (see the first bullet).
+- **Never evaluate at env seed 0.** The 1M demo stores were collected at seed 0, so a seed-0 eval
+  replays training start states, and the old `subsets_50k/` are the first ~100 episodes of the 1M
+  stores (100% overlap). Report at seed 1234. Target-only 50k grasp policies memorize (0.92-0.95
+  on training starts vs 0.32-0.39 on new ones); E17. New 50k subsets should be random draws
+  (`subsample_dataset.py --random-seed`, CHANGES 70).

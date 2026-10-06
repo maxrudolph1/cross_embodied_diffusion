@@ -30,32 +30,37 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 ## Current state
 
-*Last updated 2026-10-04 (A38).*
+*Last updated 2026-10-06 (A39).*
 
 - **Repo location:** `/work/09312/rudolph/documents/cross_embodied_diffusion` (`~/documents/cross_embodied_diffusion`),
   branch `bundle-migration`. `~/cross_embodied_diffusion` is a compatibility symlink to it on Vista.
-  The repo moved there on 2026-10-04 (A38). Its old location was `/work/09312/rudolph/code/cross_embodied_diffusion`.
-- **Nothing of this project is running.** The latest jobs, `1043385` (co-train vs target-only) and `1045839`
-  (fine-tunes), have finished, been re-scored and been cross-evaluated. Results are in
-  [E14](experiment_log_book.md#e14), [E15](experiment_log_book.md#e15) and [E16](experiment_log_book.md#e16).
-- **Headline result:** co-training on all five hands and then fine-tuning on the 50k target beats both
-  co-training alone and target-only training, in both task families. With lr 1e-4, fine-tuning forgets
-  the other hands completely. With lr 1e-5, it keeps most of grasp but little of rotation.
+  The `/work` checkout is now level with `origin/bundle-migration` (A39 pulled the A38 docs restructure; `/work`
+  was writable again on 2026-10-05).
+- **Nothing of this project is running.** The latest job, `1049683` (rotation ambient σ sweep, 55 runs), has
+  finished and been re-scored: [E18](experiment_log_book.md#e18). Earlier: `1043385` / `1045839`
+  ([E14](experiment_log_book.md#e14)–[E16](experiment_log_book.md#e16)).
+- **Headline results:**
+  - Co-training on all five hands, then fine-tuning on the 50k target, beats both co-training alone and
+    target-only training in both families ([E15](experiment_log_book.md#e15)).
+  - Rotation, ambient gating: σ 10–20 is best (mean 0.85 successes before drop vs 0.64 target-only, 0.43 full
+    co-training; one seed) ([E18](experiment_log_book.md#e18)).
+  - **Never evaluate at env seed 0:** the 1M demos were collected at seed 0, and the old `subsets_50k/` are the
+    first ~100 episodes of the 1M stores. Target-only 50k grasp memorizes its ~100 starts
+    ([E17](experiment_log_book.md#e17)). Reporting evals use seed 1234.
 - **Next steps / open items**
-  1. **Promote the kept runs before `$SCRATCH` purges them.** Run
-     `scripts/promote_outputs.sh diffusion/ambient_ta` and `scripts/promote_outputs.sh diffusion/ambient_ta_ft`
-     (80 runs, about 0.8 GB+ each, so check `/work` quota first). On 2026-10-04 `/work`'s MDT0 was at 100%
-     inode use filesystem-wide, so no new files could be created under `/work/09312/rudolph`. Retry once
-     TACC has fixed that.
-  2. The `/work` checkout is behind `origin/bundle-migration`. The docs restructure (A38) was committed
-     and pushed from a clone at `$SCRATCH/ced_docs` because `/work` could not create files. Once `/work` is
-     writable, run `git -C ~/documents/cross_embodied_diffusion pull`, then delete `$SCRATCH/ced_docs`.
-  3. Open discrepancy: under our frozen min/max, the normalized action std is 0.24/0.26, against Bundle's
+  1. **Promote kept runs before `$SCRATCH` purges them:** `scripts/promote_outputs.sh diffusion/ambient_ta`,
+     `diffusion/ambient_ta_ft`, `diffusion/ambient_ta_r` (135 runs, ~0.8 GB+ each; `/work` was at 707 GB of
+     1 TB on 2026-10-04).
+  2. Follow-ups suggested by E18, not yet decided by the user: more seeds (σ 0, 10, 20, 100), a finer σ grid
+     in 1–20, a grasp sweep on random-draw subsets (grasp `50kr` subsets/pools not built yet), and fine-tuning
+     from the σ 10–20 runs.
+  3. Runs on the old `subsets_50k/` / `_K50k` stores have inflated first in-training evals and `best_rollout`
+     (E17). Use `best_val` / `last0` for them, and `_K50kr` stores for new rotation work.
+  4. Open discrepancy: under our frozen min/max, the normalized action std is 0.24/0.26, against Bundle's
      quoted 0.077 (CHANGES item 63). σ values may not map 1:1 onto Bundle's.
-  4. Possible follow-ups the user has not decided on: an lr/epochs sweep for fine-tuning to trade target
-     score against forgetting, and ambient σ values other than 0/100 (on hold per the user).
-  5. Branch `vista-ambient-rotation` has been merged into `bundle-migration`. `main` was fast-forwarded to
-     `bundle-migration` on 2026-10-04 (`8f43037`), so the two are identical.
+  5. `$SCRATCH/ced_docs` (the A38 clone used while `/work` was read-only) can be deleted.
+  6. `main` was fast-forwarded to `bundle-migration` on 2026-10-04 (`8f43037`); A39's commits are on
+     `bundle-migration` only.
 
 ## Environment & install (living reference)
 
@@ -85,6 +90,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A39](#a39) | 2026-10-04 → 10-06 | Found that the demos were collected at seed 0 and the 50k subsets are prefixes (target-only grasp memorizes), rebuilt random-draw rotation subsets, ran and plotted the rotation σ 0–100 sweep (`1049683`). |
 | [A38](#a38) | 2026-10-04 | Moved the repo to `~/documents/`, fixed the venv paths, and restructured all docs into `docs/` (agent and experiment log books, RUNS, plots). |
 | [A37](#a37) | 2026-10-04 | Re-scored the 40 fine-tunes and cross-evaluated every generalist on all 5 hands: co-train then fine-tune wins on the target, and lr 1e-4 forgets the other hands. |
 | [A36](#a36) | 2026-10-03 | Fresh-seed re-score of co-train vs target-only (`1043385`): grasp +0.38..+0.44, rotation −0.04..−0.15; fine-tunes `1045839` queued. |
@@ -127,6 +133,55 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a39"></a>
+### A39 — 2026-10-04 → 10-06 — Eval-seed/memorization check, random-draw 50k rotation subsets, rotation σ sweep
+
+**Request.**
+1. Review the repo and plan new experiments now that co-training and fine-tuning are in.
+2. Plan ambient σ runs at 10, 20, …, 90 for every target hand, 1 seed, `best_val` checkpoint.
+3. The user wants general policies: find out whether the 50k policies memorize, find the collection seed
+   (HF repo) or re-collect.
+4. Rebuild the datasets, rerun σ 0 and 100 as well to confirm, rotation only.
+5. When the jobs finish, plot performance per hand across σ for every metric, push, and update the log books.
+
+**Done.**
+- **Review finding:** the target-only grasp runs' first in-training eval (epoch 5) scored 0.56–0.84 and
+  every later one ~0.3–0.4; the re-scored `best_rollout` (that epoch-5 checkpoint) was ~0.35. Re-evaluating
+  it: seed 0 → 0.91, seed 1234 → 0.38, seed 7 → 0.46. In `evaluate.py` the first in-training eval builds a
+  fresh env seeded with the train seed and later evals reuse it (`_ENV_CACHE`) without reseeding.
+- **Collection seed:** not in the store attrs, the HF mirror (store tarballs + RL `params/*.yaml` only) or the
+  sbatch files (`collect_1M*.sbatch` pass no `--seed`, so the default 0). Confirmed from the data
+  (start-state nearest-neighbour matching, scratch script `start_overlap.py`, not tracked): seed 0 = 100%
+  exact matches, seeds 1234/7 = 0%. `subsets_50k/` = the first ~100 episodes of each 1M store (bitwise).
+  Rotation prefixes are biased to short episodes. Memorization evals (12 policies, seed 0 vs 1234):
+  [E17](experiment_log_book.md#e17). Re-collection judged unnecessary (seed known, reporting seed disjoint).
+- **Random-draw subsets (CHANGES 70):** `subsample_dataset.py --random-seed`, the `50kr` config in
+  `padded_grid.py`, `--size` in `build_ambient_manifest.py`. Built the 5 rotation `subsets_50kr/` stores and 5
+  `padded_ta/InHand-Rotation_pad5_scarce<Hand>_K50kr.zarr` pools ([COLLECTIONS](COLLECTIONS.md)).
+- **Sweep:** manifest `slurm_jobs/ambient_rot_rand_manifest.json` (55 runs; differs from `1043385`'s recipe only
+  in dataset and output dir), submitted by the user as `1049683` ([RUNS](RUNS.md)). The first 90-run plan
+  (`slurm_jobs/ambient_sweep10_manifest.json`: σ 10–90, both families, old `_K50k` stores) was superseded by
+  this and never submitted.
+- **Scoring/plots:** a background waiter on idev c634-142 re-scored best_val for all 55 runs once every
+  `selection.json` existed (4 shards, 01:43–03:06), then ran the new `scripts/plot_ambient_sigma.py`
+  (CHANGES 71). Figures and CSV copied to `docs/plots/ambient_sigma_rotation{,_metrics}.png`,
+  `ambient_sigma_rotation_summary.csv`. Results: [E18](experiment_log_book.md#e18).
+- **Docs:** this session first wrote the old-layout logbook (`agent_logbook/`, `ANALYSIS.md`); the push was
+  rejected because A38 had restructured the docs. That commit is kept on branch
+  `backup/sigma-sweep-9b86259`, and its content was redone in the `docs/` layout (CHANGES renumbered
+  69/70 → 70/71 because A38 took 69).
+
+**Verified / not verified.**
+- Verified: default `subsample_dataset.py` output is bitwise unchanged; `check_padded_dataset.py --rows 1000`
+  OK on all five `_K50kr` pools; dry-run of manifest slots 0 and 54; 11/11 jobs COMPLETED, 55/55
+  `selection.json`, 55 best_val rows, no tracebacks.
+- Not verified: the categorical palette with the dataviz validator (node is not installed on Vista); seed
+  variance of the E18 sweep (one seed); grasp on random-draw subsets.
+
+**Pointers.** RUNS: `1049683`, idev rescore row · CHANGES 70, 71 · COLLECTIONS: 2026-10-05 section,
+`subsets_50kr/`, `_K50kr` pools · Experiments: [E17](experiment_log_book.md#e17),
+[E18](experiment_log_book.md#e18), update note on [E14](experiment_log_book.md#e14).
 
 <a id="a38"></a>
 ### A38 — 2026-10-04 — Repo moved to `~/documents/`; docs restructured into `docs/`

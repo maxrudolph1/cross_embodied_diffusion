@@ -7,7 +7,14 @@ partial trailing episode would generate windows running off the end. The
 greedy selector stops at whichever episode boundary lands closest to the
 target step count.
 
-See CHANGES.md item 6e.
+By default episodes are taken from the front of the source (its first
+episodes, in collection order). `--random-seed N` instead draws them in a
+seeded random order and writes the selection back in source order: the
+front of a collection is the first reset wave of the collection seed (= the
+eval-seed-0 starts) and, for rotation, the episodes that ended earliest
+(docs/experiment_log_book.md E17).
+
+See CHANGES.md items 6e, 70.
 """
 
 from __future__ import annotations
@@ -29,6 +36,8 @@ def main() -> None:
     ap.add_argument("--target-steps", type=int, required=True)
     ap.add_argument("--success-only", action="store_true")
     ap.add_argument("--overwrite", action="store_true")
+    ap.add_argument("--random-seed", type=int, default=None,
+                    help="draw episodes in a seeded random order instead of from the front")
     args = ap.parse_args()
 
     if args.output.exists():
@@ -40,6 +49,9 @@ def main() -> None:
     episodes = src.episode_slices(success_only=args.success_only)
     if not episodes:
         raise SystemExit(f"No episodes found in {args.source}")
+    if args.random_seed is not None:
+        order = np.random.default_rng(args.random_seed).permutation(len(episodes))
+        episodes = [episodes[i] for i in order]
 
     # Greedy: add whole episodes, stopping at whichever episode boundary
     # (before or after the crossing episode) lands closer to target_steps.
@@ -57,6 +69,7 @@ def main() -> None:
 
     if not selected:
         raise SystemExit("No episodes selected -- source dataset too small or empty")
+    selected.sort(key=lambda e: e[0])  # source order (no-op without --random-seed)
 
     obs = np.asarray(src.data["obs"][:], dtype=np.float32)
     action = np.asarray(src.data["action"][:], dtype=np.float32)
@@ -74,6 +87,7 @@ def main() -> None:
             "target_steps": args.target_steps,
             "source_n_steps": summary["n_steps"],
             "source_n_episodes": summary["n_episodes"],
+            "random_seed": args.random_seed,
         },
     )
     for start, end, succ in selected:

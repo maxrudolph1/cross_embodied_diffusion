@@ -41,10 +41,10 @@ from padded_grid import (  # noqa: E402
 SHORT = {"Grasp": "grasp", "InHand-Rotation": "rotation"}
 
 
-def run(family: str, hand: str, sigma: int, seed: int, root: str, epochs: int) -> dict:
+def run(family: str, hand: str, sigma: int, seed: int, root: str, epochs: int, size: str = "50k") -> dict:
     task = f"{family}-{hand}"
     return {
-        "dataset": str(store_path(family, f"scarce{hand}_K50k")),
+        "dataset": str(store_path(family, f"scarce{hand}_K{size}")),
         "output-dir": f"{root}/{task}_sigma{sigma}_seed{seed}",
         "num-epochs": epochs,
         "batch-size": 256,
@@ -77,16 +77,18 @@ def main() -> None:
     ap.add_argument("--sigmas", type=int, nargs="+", required=True)
     ap.add_argument("--seeds", type=int, nargs="+", required=True)
     ap.add_argument("--root", default="outputs/diffusion/ambient_ta")
+    ap.add_argument("--size", default="50k",
+                    help="target-hand subset: 50k (front of the 1M store) or 50kr (random draw, item 70)")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
     tasks = []
     for fam in args.families:
         for hand in args.hands:
-            cfg = f"scarce{hand}_K50k"
+            cfg = f"scarce{hand}_K{args.size}"
             p = store_path(fam, cfg)
             w = n_windows(p) if p.exists() else sum(n_windows(s) for s in sources(fam, cfg))
             ep = epochs_for(w)
-            tasks += [[run(fam, hand, s, k, args.root, ep)] for s in args.sigmas for k in args.seeds]
+            tasks += [[run(fam, hand, s, k, args.root, ep, args.size)] for s in args.sigmas for k in args.seeds]
     args.out.write_text(json.dumps(tasks, indent=1) + "\n")
     print(f"[INFO] wrote {len(tasks)} runs -> {args.out}")
 

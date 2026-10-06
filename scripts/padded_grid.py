@@ -5,6 +5,8 @@ ambient t_min vectors, and epoch counts for the ~784k-step budget
 
 Configs per family (sources always concatenated in HANDS order):
   scarce<Hand>_K50k / _K10k   target hand at 50k / 10k, the other four at 1M
+  scarce<Hand>_K50kr          target hand at 50k drawn at random from its 1M store
+                              (subsets_50kr/, CHANGES.md item 70), the others at 1M
   all_1M / all_50k / all_10k   every hand at that size
 
 Paths follow this repo's data layout (deviation from Bundle's flat
@@ -42,7 +44,7 @@ def demo_path(family: str, hand: str, size: str) -> Path:
 
 def configs(family: str) -> list[str]:
     del family
-    return [f"scarce{h}_K{k}" for k in ("50k", "10k") for h in HANDS] + [f"all_{s}" for s in SIZES]
+    return [f"scarce{h}_K{k}" for k in ("50k", "10k", "50kr") for h in HANDS] + [f"all_{s}" for s in SIZES]
 
 
 def sources(family: str, config: str) -> list[Path]:
