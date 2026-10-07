@@ -60,12 +60,14 @@ SIGMA_RE = re.compile(r"(Grasp|InHand-Rotation)-(\w+?)_sigma(\d+)_seed(\d+)$")
 FT_RE = re.compile(r"(Grasp|InHand-Rotation)-(\w+?)_ft_\w+?_lr([0-9.e-]+)_seed(\d+)$")
 
 
-def final_metrics(run: Path, which: str) -> dict | None:
+def final_metrics(run: Path, which: str, task: str, eval_seed: int = 1234) -> dict | None:
+    """The run's own-task row; other-hand (--other-hands) and other-seed rows are ignored (CHANGES.md item 74)."""
     fe = run / "final_eval.jsonl"
     if not fe.exists():
         return None
     rows = [json.loads(x) for x in fe.read_text().splitlines() if x.strip()]
-    rows = [r for r in rows if r["which"] == which and r["envs"] == 100 and r["steps"] == 1500]
+    rows = [r for r in rows if r["which"] == which and r["envs"] == 100 and r["steps"] == 1500
+            and r["task"] == task and r["eval_seed"] == eval_seed]
     return rows[-1]["metrics"] if rows else None
 
 
@@ -73,7 +75,7 @@ def collect(runs: Path, ft_runs: Path, family: str, which: str) -> list[dict]:
     recs = []
     for run in sorted(runs.glob(f"{family}-*_sigma*_seed*")):
         m = SIGMA_RE.search(run.name)
-        met = final_metrics(run, which) if m and m.group(1) == family else None
+        met = final_metrics(run, which, f"{family}-{m.group(2)}") if m and m.group(1) == family else None
         if met is None:
             continue
         s = int(m.group(3))
@@ -82,7 +84,7 @@ def collect(runs: Path, ft_runs: Path, family: str, which: str) -> list[dict]:
                      "run": run.name, "metrics": met})
     for run in sorted(ft_runs.glob(f"{family}-*_ft_*")):
         m = FT_RE.search(run.name)
-        met = final_metrics(run, which) if m and m.group(1) == family else None
+        met = final_metrics(run, which, f"{family}-{m.group(2)}") if m and m.group(1) == family else None
         if met is None:
             continue
         recs.append({"target": m.group(2), "group": "ft", "sigma": "", "seed": int(m.group(4)), "lr": m.group(3),

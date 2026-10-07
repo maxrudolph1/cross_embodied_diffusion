@@ -37,6 +37,7 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 | # | Date | Finding |
 |---|---|---|
+| [E21](#e21) | 2026-10-07 | *Planned:* fine-tune from the best ambient runs (σ 15) vs from co-training (σ 0) and target-only (σ 100), scored on a fresh test seed 4321, with forgetting on the other hands. |
 | [E20](#e20) | 2026-10-07 | Per target and metric, co-train-then-fine-tune is best (mean 1.23 successes before drop vs 0.75 pooled ambient, 0.63 target-only, 0.42 full co-training; 3 seeds); full co-training is worst for 4 of 5 hands. |
 | [E19](#e19) | 2026-10-07 | With 3 seeds, rotation ambient gating peaks on a plateau at σ 9–20 (mean 0.80–0.85 vs 0.63 target-only, 0.42 co-training, consistent across seeds); the best σ is hand-specific (Allegro/LEAP/Shadow 2–6, Sharpa/Wuji ≥ 9–15), and σ 15 is the only setting at or above target-only for every hand. |
 | [E18](#e18) | 2026-10-06 | Rotation ambient σ sweep (random-draw 50k targets): σ 10–20 is best (mean 0.85 successes before drop vs 0.64 target-only and 0.43 full co-training), and above σ≈30 it is flat at the target-only level. |
@@ -78,6 +79,38 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 ---
 
 ## Entries
+
+<a id="e21"></a>
+### E21 — 2026-10-07 — Fine-tuning from ambient-gated runs (planned)
+
+**Question.** Does starting the target-only fine-tune from the best ambient run (σ 15) beat starting from full
+co-training (σ 0, the E15 recipe) or from target-only training (σ 100, i.e. 10 more target epochs)? Does the gain hold
+on start states not used to choose σ or checkpoints, and how much do the other hands forget?
+**Status.** set up, not submitted (RUNS "E21" row).
+
+**Data.** Target 50k random draw (`padded_ta/InHand-Rotation_pad5_scarce<Hand>_K50kr.zarr`, [E18](#e18)); sources are
+[E19](#e19)'s runs on the same stores.
+
+**Policy inputs/outputs.** As [E14](#e14).
+
+**Protocol.**
+- Sources: E19 `ambient_ta_r/InHand-Rotation-<Hand>_sigma{0,15,100}_seed{0,1,2}/policy_best_val.pt`. σ 15 was chosen
+  as the one σ at or above target-only for every hand in E19 (seed 1234), shared by all hands, instead of each hand's
+  own best σ.
+- Fine-tune: `--init-checkpoint` (weights + normalizer, fresh optimizer), target-only gating (`ambient-tmin` 0 for the
+  target, 100 for the others), lr 1e-5, 10 epochs, eval every epoch (32 envs × 1500 steps, env seed = training seed),
+  same seed as the source. 5 targets × 3 σ × 3 seeds = 45 runs (`ambient_ta_r_ft/`).
+- Reporting: 100 envs × 1500 steps, first episode per env. **Test seed 4321** (new: not used for any selection) for
+  the fine-tunes (best_rollout, best_val, last0) and for all 150 E19 runs (best_val), so the fine-tunes and their
+  starting points are compared on the same held-out starts; seed 1234 too for the fine-tunes, to compare with E20.
+  Forgetting: fine-tunes (best_val, last0) and their sources (best_val) on the four other hands at seed 4321
+  (`cross_eval.jsonl`).
+
+**Results.** Pending.
+
+**Links.** RUNS: E21 row · Agent log: [A43](agent_log_book.md#a43) · CHANGES: item 74
+
+---
 
 <a id="e20"></a>
 ### E20 — 2026-10-06 — Rotation regimes per target: co-training, ambient gating, target-only, fine-tuning

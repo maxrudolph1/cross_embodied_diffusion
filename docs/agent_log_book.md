@@ -30,7 +30,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 ## Current state
 
-*Last updated 2026-10-07 (A42).*
+*Last updated 2026-10-07 (A43).*
 
 - **Repo location:** `/work/09312/rudolph/documents/cross_embodied_diffusion` (`~/documents/cross_embodied_diffusion`),
   branch `bundle-migration`. `~/cross_embodied_diffusion` is a compatibility symlink to it on Vista.
@@ -38,8 +38,9 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
   was writable again on 2026-10-05).
 - **Nothing of this project is running.** The fine-grid sweep `1052839` finished and is scored:
   [E19](experiment_log_book.md#e19) (σ 9–20 plateau, 3 seeds), [E20](experiment_log_book.md#e20) (regime box plots).
-- **Next, being discussed with the user:** fine-tuning from the best ambient runs (design and open questions in
-  [A42](#a42)).
+- **Ready to submit (user, login node):** E21 fine-tunes from the E19 σ 0/15/100 runs plus test-seed (4321) and
+  forgetting evals: `bash slurm_jobs/submit_e21_finetune.sh` ([A43](#a43), RUNS "E21" row). Afterwards, extend
+  `plot_condition_boxes.py` for the `<Task>_sigma<S>_ft_*` names and the seed-4321 rows.
 - Earlier finished jobs: `1049683` (rotation ambient σ sweep, 55 runs), has
   finished and been re-scored: [E18](experiment_log_book.md#e18). Earlier: `1043385` / `1045839`
   ([E14](experiment_log_book.md#e14)–[E16](experiment_log_book.md#e16)).
@@ -93,6 +94,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A43](#a43) | 2026-10-07 | Set up E21: fine-tunes from the E19 σ 0/15/100 runs (45 runs), test-seed 4321 and forgetting evals, one submit script. |
 | [A42](#a42) | 2026-10-07 | Scored and plotted the 150-run fine-grid sweep (σ 9–20 plateau, 3 seeds), audited how data/eval seeds are chosen, and discussed fine-tuning from the best ambient runs. |
 | [A41](#a41) | 2026-10-06 | Box-and-whisker plots of σ=0 / 0<σ<100 / σ=100 / fine-tuned per rotation target, one figure per metric (E20). |
 | [A40](#a40) | 2026-10-06 | Fast-forwarded `main`, benchmarked run packing on the current code (PACK=2 is fastest overall), and set up the 150-run rotation σ fine-grid × 3-seed sweep (+ σ 0/100 seeds 1–2). |
@@ -139,6 +141,35 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a43"></a>
+### A43 — 2026-10-07 — E21 fine-tunes from ambient runs set up
+
+**Request.** Take the recommendations for fine-tuning from the best ambient runs and make the run scripts. The
+recommendations (A42, accepted): σ 15 shared by all hands as the ambient source; σ 0 and σ 100 sources as controls;
+lr 1e-5 only; 3 seeds; report on a fresh test seed (4321) for fine-tunes and baselines; cross-embodiment forgetting eval.
+
+**Done.**
+- CHANGES 74: `build_finetune_manifest.py --src-sigmas/--size` (default output byte-identical);
+  `vista_eval_checkpoints.sbatch` `EVAL_SEED` and `CROSS=1` (reuses `eval_cross_embodiment.py`, item 68; a duplicate
+  `--other-hands` option in `rescore_selected.py` was written and reverted); plotters filter `final_eval.jsonl` to the
+  run's own task and seed 1234; `slurm_jobs/submit_e21_finetune.sh`.
+- Manifest `slurm_jobs/finetune_r_manifest.json` (45 runs, gitignored): every init checkpoint and store exists; dry
+  run of `vista_train_manifest.sbatch` for array 0 and 8, node 0 and 4, maps the right runs (first
+  `Allegro_sigma0_seed0`, last `Wuji_sigma100_seed2`); no files left in `$SCRATCH`.
+- Smoke test on c634-142: `vista_eval_checkpoints.sbatch` with `CROSS=1 EVAL_SEED=4321` on a copy of
+  `Allegro_sigma15_seed0` writes `cross_eval.jsonl` rows at seed 4321.
+- Job shape: `queue_wait_stats.sh gh 7 2:30:00` at 13:31 shows median waits of ~10–13 h in every node bin, so PACK=1
+  (shortest run, ~1h35 as `1045839`), 9 × 5-node jobs, limit 2:30. Evals: ~5.5 min each at 4 per GH200 (from the
+  idev rescore logs), arrays sized for ~70–95 min per element.
+
+**Verified / not verified.** Verified: manifest paths, slot mapping, the eval sbatch cross mode, plot outputs
+unchanged. Not verified: Slurm `--export` with a space-separated `RUNS` value (the `ev-basex` job; check its log for
+"3 patterns" / 45 run dirs), and `--test-only` projections (need a login node).
+
+**Pointers.** RUNS: E21 row · CHANGES 74 · Experiments: [E21](experiment_log_book.md#e21)
+
+---
 
 <a id="a42"></a>
 ### A42 — 2026-10-07 — Fine-grid sweep scored and plotted; seed audit; fine-tune design discussed

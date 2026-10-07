@@ -16,6 +16,9 @@
 #             $SCRATCH/cross_embodied_diffusion/outputs), quoted
 #   PARALLEL  re-score processes sharing the node's GPU (default 4)
 #   WHICH     checkpoints (default "best_rollout best_val last0")
+#   EVAL_SEED env seed of the eval (default 1234)
+#   CROSS=1   score every hand of the family with scripts/eval_cross_embodiment.py
+#             --skip-target -> <run>/cross_eval.jsonl (forgetting; items 68, 74)
 #
 # Each array element takes its share of the runs: process p of element a is
 # shard (a * PARALLEL + p) of (n_elements * PARALLEL). Rows already in
@@ -36,6 +39,9 @@ export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
 OUT_ROOT="${OUT_ROOT:-${SCRATCH:?}/cross_embodied_diffusion/outputs}"
 PARALLEL="${PARALLEL:-4}"
 read -ra WHICH_ARGS <<< "${WHICH:-best_rollout best_val last0}"
+EVAL_SEED="${EVAL_SEED:-1234}"
+SCRIPT=scripts/rescore_selected.py EXTRA=()
+[[ "${CROSS:-0}" == 1 ]] && SCRIPT=scripts/eval_cross_embodiment.py EXTRA=(--skip-target)
 
 export MUJOCO_GL=egl PYOPENGL_PLATFORM=egl
 JOBTMP="/tmp/${USER}/${SLURM_JOB_ID}_eval"
@@ -56,9 +62,9 @@ echo "[INFO] $(hostname) ${#DIRS[@]} run dirs, element $ELEM/$N_ELEM, $PARALLEL 
 pids=()
 for (( p = 0; p < PARALLEL; p++ )); do
   shard=$(( ELEM * PARALLEL + p ))
-  WARP_CACHE_PATH="$JOBTMP/warp/p$p" python3 scripts/rescore_selected.py \
-    --shard "$shard/$TOTAL" --which "${WHICH_ARGS[@]}" --envs 100 --steps 1500 --eval-seed 1234 \
-    --run "${DIRS[@]}" &
+  WARP_CACHE_PATH="$JOBTMP/warp/p$p" python3 "$SCRIPT" \
+    --shard "$shard/$TOTAL" --which "${WHICH_ARGS[@]}" --envs 100 --steps 1500 --eval-seed "$EVAL_SEED" \
+    "${EXTRA[@]}" --run "${DIRS[@]}" &
   pids+=($!)
 done
 fail=0

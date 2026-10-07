@@ -10,6 +10,25 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
 
 ---
 
+## 2026-10-07 — fine-tunes from ambient runs (E21)
+
+### 74. `build_finetune_manifest.py` source σ / store size; eval sbatch seed + cross mode; plotters filter task/seed; `submit_e21_finetune.sh` (NEW)
+
+- `scripts/build_finetune_manifest.py`: `--src-sigmas S [S ...]` (source runs `<Task>_sigma<S>_seed<k>`; when given,
+  the output name is `<Task>_sigma<S>_ft_<init>_lr<lr>_seed<k>`) and `--size` (target store `scarce<Hand>_K<size>`,
+  default `50k`). Defaults unchanged: regenerating `slurm_jobs/finetune_manifest.json` is byte-identical (checked).
+- `slurm_jobs/vista_eval_checkpoints.sbatch`: `EVAL_SEED` (default 1234) and `CROSS=1` (runs
+  `scripts/eval_cross_embodiment.py --skip-target` -> `<run>/cross_eval.jsonl` instead of `rescore_selected.py`).
+  Defaults unchanged. Smoke-tested on an idev GH200 with `CROSS=1 EVAL_SEED=4321`.
+- `scripts/plot_ambient_sigma.py` (`score`) and `scripts/plot_condition_boxes.py` (`final_metrics`) keep only
+  `final_eval.jsonl` rows for the run's own task at eval seed 1234, so seed-4321 rows cannot replace the seed-1234
+  numbers. Output on the existing runs unchanged (summary CSVs identical). Not yet handled: `FT_RE` in
+  `plot_condition_boxes.py` would read `Allegro_sigma0` as the hand for the new `<Task>_sigma<S>_ft_*` names.
+- `slurm_jobs/submit_e21_finetune.sh` (NEW): submits E21's training job and five dependent eval arrays from a
+  login node (`DRY=1` prints the sbatch lines).
+
+---
+
 ## 2026-10-07 — multi-seed σ plots
 
 ### 73. `scripts/plot_ambient_sigma.py`: multiple training seeds, square-root σ axis; `plot_condition_boxes.py` labels

@@ -63,16 +63,18 @@ RUN_RE = re.compile(r"(Grasp|InHand-Rotation)-(\w+)_sigma(\d+)_seed(\d+)$")
 SCRATCH_OUT = "$SCRATCH/cross_embodied_diffusion/outputs/diffusion"
 
 
-def score(run: Path) -> tuple[dict, str] | None:
-    """(metrics, source) for the run's best_val checkpoint; None if nothing to score yet."""
+def score(run: Path, task: str, eval_seed: int = 1234) -> tuple[dict, str] | None:
+    """(metrics, source) for the run's best_val checkpoint on its own task at eval_seed; None if nothing
+    to score yet. Rows for other hands (--other-hands) or other seeds are ignored (CHANGES.md item 74)."""
     fe = run / "final_eval.jsonl"
     if fe.exists():
         rows = [json.loads(x) for x in fe.read_text().splitlines() if x.strip()]
         for r in rows:
-            if r["which"] == "best_val" and r["envs"] == 100 and r["steps"] == 1500:
+            if (r["which"] == "best_val" and r["envs"] == 100 and r["steps"] == 1500
+                    and r.get("task", task) == task and r.get("eval_seed", 1234) == eval_seed):
                 return r["metrics"], "rescore"
     em = run / "eval_metrics.jsonl"
-    if not em.exists():
+    if eval_seed != 1234 or not em.exists():
         return None
     rows = [json.loads(x) for x in em.read_text().splitlines() if x.strip()]
     rows = [r for r in rows if r.get("val") and np.isfinite(r["val"]["score"])]
@@ -88,7 +90,7 @@ def collect(root: Path, family: str, metric: str, provisional_ok: bool) -> list[
         m = RUN_RE.search(run.name)
         if not m or m.group(1) != family:
             continue
-        s = score(run)
+        s = score(run, f"{family}-{m.group(2)}")
         if s is None or (s[1] == "provisional" and not provisional_ok):
             continue
         recs.append({"target": m.group(2), "sigma": int(m.group(3)), "seed": int(m.group(4)),
