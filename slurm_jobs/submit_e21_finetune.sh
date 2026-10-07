@@ -21,7 +21,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 A=(-A ASC26008 -p gh)
 R=diffusion/ambient_ta_r
-SRC="$R/*_sigma0_seed* $R/*_sigma15_seed* $R/*_sigma100_seed*"
+SRC="$R/*_sigma0_seed*:$R/*_sigma15_seed*:$R/*_sigma100_seed*"  # ":"-separated (item 75)
 FT="diffusion/ambient_ta_r_ft/*"
 EVAL=slurm_jobs/vista_eval_checkpoints.sbatch
 
@@ -43,5 +43,5 @@ FT1=$(sub ft1234 "${A[@]}" --array=0-1 -t 02:30:00 --job-name=ev-ft1234 --depend
 FT2=$(sub ft4321 "${A[@]}" --array=0-1 -t 02:30:00 --job-name=ev-ft4321 --dependency=afterany:$TRAIN \
   --export=ALL,RUNS="$FT",EVAL_SEED=4321 $EVAL)
 FTX=$(sub ftx "${A[@]}" --array=0-5 -t 02:00:00 --job-name=ev-ftx --dependency=afterany:$FT2 \
-  --export=ALL,RUNS="$FT",WHICH="best_val last0",EVAL_SEED=4321,CROSS=1 $EVAL)
+  --export=ALL,RUNS="$FT",WHICH=best_val:last0,EVAL_SEED=4321,CROSS=1 $EVAL)
 echo "train=$TRAIN base=$BASE basex=$BASEX ft1234=$FT1 ft4321=$FT2 ftx=$FTX"

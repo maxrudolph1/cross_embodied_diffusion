@@ -38,8 +38,8 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
   was writable again on 2026-10-05).
 - **Nothing of this project is running.** The fine-grid sweep `1052839` finished and is scored:
   [E19](experiment_log_book.md#e19) (σ 9–20 plateau, 3 seeds), [E20](experiment_log_book.md#e20) (regime box plots).
-- **Ready to submit (user, login node):** E21 fine-tunes from the E19 σ 0/15/100 runs plus test-seed (4321) and
-  forgetting evals: `bash slurm_jobs/submit_e21_finetune.sh` ([A43](#a43), RUNS "E21" row). Afterwards, extend
+- **Queued 2026-10-07 14:56:** E21 fine-tunes `1056188` (45 runs) and `ev-base4321` `1056189`; the other 4 evals go
+  in with `bash slurm_jobs/submit_e21_evals_rest.sh` (login node) ([A43](#a43), RUNS E21 row). Afterwards, extend
   `plot_condition_boxes.py` for the `<Task>_sigma<S>_ft_*` names and the seed-4321 rows.
 - Earlier finished jobs: `1049683` (rotation ambient σ sweep, 55 runs), has
   finished and been re-scored: [E18](experiment_log_book.md#e18). Earlier: `1043385` / `1045839`
@@ -167,7 +167,10 @@ lr 1e-5 only; 3 seeds; report on a fresh test seed (4321) for fine-tunes and bas
 unchanged. Not verified: Slurm `--export` with a space-separated `RUNS` value (the `ev-basex` job; check its log for
 "3 patterns" / 45 run dirs), and `--test-only` projections (need a login node).
 
-**Pointers.** RUNS: E21 row · CHANGES 74 · Experiments: [E21](experiment_log_book.md#e21)
+Submitted by the user 14:56: `1056188`, `1056189`; the script then failed on `ev-basex` (space in `--export`), fixed
+in CHANGES 75, remainder in `slurm_jobs/submit_e21_evals_rest.sh`.
+
+**Pointers.** RUNS: E21 row · CHANGES 74, 75 · Experiments: [E21](experiment_log_book.md#e21)
 
 ---
 

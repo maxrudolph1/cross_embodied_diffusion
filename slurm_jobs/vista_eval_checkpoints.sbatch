@@ -16,6 +16,8 @@
 #             $SCRATCH/cross_embodied_diffusion/outputs), quoted
 #   PARALLEL  re-score processes sharing the node's GPU (default 4)
 #   WHICH     checkpoints (default "best_rollout best_val last0")
+#   (RUNS and WHICH may separate items with ":" instead of spaces: sbatch --export
+#    rejects values with spaces. CHANGES.md item 75)
 #   EVAL_SEED env seed of the eval (default 1234)
 #   CROSS=1   score every hand of the family with scripts/eval_cross_embodiment.py
 #             --skip-target -> <run>/cross_eval.jsonl (forgetting; items 68, 74)
@@ -38,7 +40,7 @@ export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
 : "${RUNS:?set RUNS='glob relative to the outputs root' via --export}"
 OUT_ROOT="${OUT_ROOT:-${SCRATCH:?}/cross_embodied_diffusion/outputs}"
 PARALLEL="${PARALLEL:-4}"
-read -ra WHICH_ARGS <<< "${WHICH:-best_rollout best_val last0}"
+read -ra WHICH_ARGS <<< "${WHICH:-best_rollout best_val last0}"; WHICH_ARGS=(${WHICH_ARGS[@]//:/ })
 EVAL_SEED="${EVAL_SEED:-1234}"
 SCRIPT=scripts/rescore_selected.py EXTRA=()
 [[ "${CROSS:-0}" == 1 ]] && SCRIPT=scripts/eval_cross_embodiment.py EXTRA=(--skip-target)
@@ -50,7 +52,7 @@ mkdir -p "$TMPDIR" "$WARP_CACHE_PATH"
 trap 'rm -rf "$JOBTMP"' EXIT
 
 shopt -s nullglob
-read -ra PATTERNS <<< "$RUNS"
+read -ra PATTERNS <<< "${RUNS//:/ }"
 DIRS=()
 for p in "${PATTERNS[@]}"; do DIRS+=("$OUT_ROOT"/$p); done
 (( ${#DIRS[@]} )) || { echo "[ERROR] no run dirs match $RUNS under $OUT_ROOT" >&2; exit 1; }

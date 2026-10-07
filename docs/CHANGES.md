@@ -12,6 +12,13 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
 
 ## 2026-10-07 — fine-tunes from ambient runs (E21)
 
+### 75. `vista_eval_checkpoints.sbatch`: ":" separates items in `RUNS` and `WHICH`
+
+- `sbatch --export=...,RUNS="a b c"` failed (stopped `submit_e21_finetune.sh` after 2 of 6 jobs). The sbatch now
+  turns ":" into spaces in both (`${RUNS//:/ }`, `WHICH_ARGS=(${WHICH_ARGS[@]//:/ })`); space-separated values still
+  work when set another way. `submit_e21_finetune.sh` uses ":"; `slurm_jobs/submit_e21_evals_rest.sh` (NEW) submits
+  the 4 evals that failed, chained onto `1056188`/`1056189`. Parsing checked on the real run dirs (3 patterns -> 45).
+
 ### 74. `build_finetune_manifest.py` source σ / store size; eval sbatch seed + cross mode; plotters filter task/seed; `submit_e21_finetune.sh` (NEW)
 
 - `scripts/build_finetune_manifest.py`: `--src-sigmas S [S ...]` (source runs `<Task>_sigma<S>_seed<k>`; when given,
