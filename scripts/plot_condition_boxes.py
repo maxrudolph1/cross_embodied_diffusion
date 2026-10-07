@@ -49,8 +49,8 @@ METRICS = {
     ],
     "Grasp": [("success_rate", "Success rate", "success rate", "higher")],
 }
-GROUPS = [("s0", "σ = 0 (co-training)"), ("mid", "0 < σ < 100 (ambient gating)"),
-          ("s100", "σ = 100 (target-only)"), ("ft", "co-trained + fine-tuned")]
+GROUPS = [("s0", "co-training (σ = 0)"), ("mid", "ambient (0 < σ < 100)"),
+          ("s100", "none: target-only (σ = 100)"), ("ft", "fine-tuning (co-trained, then target)")]
 # dataviz reference categorical slots 1-4, fixed order (validator needs node, absent on Vista;
 # groups are also told apart by their fixed position in each cluster and the legend)
 COLOR = dict(zip([g for g, _ in GROUPS], ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]))

@@ -10,6 +10,21 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
 
 ---
 
+## 2026-10-07 — multi-seed σ plots
+
+### 73. `scripts/plot_ambient_sigma.py`: multiple training seeds, square-root σ axis; `plot_condition_boxes.py` labels
+
+- `plot_ambient_sigma.py` previously kept one value per (hand, σ) (the last run read), so with several seeds it
+  silently dropped all but one. Now per hand: line = mean over seeds, light dots = individual seeds; the "mean over
+  targets" panel averages each hand's seed mean (σ values every hand has) with per-seed means over hands as dots; the
+  metrics figure uses seed means. `--ref` points are hollow diamonds at their σ.
+- σ axis: signed square root (`set_xscale("function")`), ticks 0, 1, 2, 3, 6, 10, 20, 30, 50, 70, 100, so the dense
+  1–20 grid is readable. The title states which σ have several seeds (`seed_note`), on a second line.
+- `plot_condition_boxes.py`: group labels renamed to co-training (σ = 0), ambient (0 < σ < 100), none: target-only
+  (σ = 100), fine-tuning (co-trained, then target).
+
+---
+
 ## 2026-10-06 — regime box plots
 
 ### 72. `scripts/plot_condition_boxes.py` (NEW)

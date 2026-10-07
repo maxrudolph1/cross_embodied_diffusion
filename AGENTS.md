@@ -244,9 +244,10 @@ were wrong in different ways.
   the data-first sampler and was retracted in Bundle (MIGRATION.md section 7). With
   noise-first Bundle reports, for a starved 50k rotation target, a peak at sigma 2-3 (0.655
   at 0 -> 1.137 at 2, 0.767 at 100; Sharpa best at 25), sign reversal at 1M, and grasp
-  hurt monotonically. Reproduced qualitatively here for rotation (E18, 1 seed, random-draw 50k
-  targets, sigma step 10): mean successes 0.43 at sigma 0, 0.85 at 10, 0.64 at 100; Sharpa again
-  the exception (best at 50). Grasp not yet swept. Robust in both: an embodiment trained
+  hurt monotonically. Reproduced here for rotation (E18/E19, 3 training seeds on one
+  random-draw 50k target set): mean successes 0.42 at sigma 0, a plateau of 0.80-0.85 at sigma 9-20,
+  0.63 at 100, consistent across seeds. Best sigma is hand-specific (Allegro/LEAP/Shadow 2-6, Sharpa
+  >= 15, Wuji >= 9); sigma 15 is the only setting >= target-only for every hand. Grasp not yet swept. Robust in both: an embodiment trained
   only on the coarse end of the schedule is completely non-functional (0.000; Vista
   2026-10-01: LEAP 1.8 at sigma 0 -> 0.00 at sigma 10).
 - Adversarial invariance training does not work on the Allegro/LEAP pair:

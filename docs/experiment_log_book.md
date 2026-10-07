@@ -37,8 +37,8 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 | # | Date | Finding |
 |---|---|---|
-| [E20](#e20) | 2026-10-06 | Per target and metric, co-train-then-fine-tune is best (mean 1.23 successes before drop vs 0.71 pooled ambient σ, 0.64 target-only, 0.43 full co-training); full co-training is worst for 4 of 5 hands. |
-| [E19](#e19) | 2026-10-06 | (running) Rotation ambient σ fine grid 1–20 × 3 seeds (+ σ 0/100 seeds 1–2) on random-draw 50k targets, to locate the low-σ peak of E18 and measure seed variance. |
+| [E20](#e20) | 2026-10-07 | Per target and metric, co-train-then-fine-tune is best (mean 1.23 successes before drop vs 0.75 pooled ambient, 0.63 target-only, 0.42 full co-training; 3 seeds); full co-training is worst for 4 of 5 hands. |
+| [E19](#e19) | 2026-10-07 | With 3 seeds, rotation ambient gating peaks on a plateau at σ 9–20 (mean 0.80–0.85 vs 0.63 target-only, 0.42 co-training, consistent across seeds); the best σ is hand-specific (Allegro/LEAP/Shadow 2–6, Sharpa/Wuji ≥ 9–15), and σ 15 is the only setting at or above target-only for every hand. |
 | [E18](#e18) | 2026-10-06 | Rotation ambient σ sweep (random-draw 50k targets): σ 10–20 is best (mean 0.85 successes before drop vs 0.64 target-only and 0.43 full co-training), and above σ≈30 it is flat at the target-only level. |
 | [E17](#e17) | 2026-10-04 | The demos were collected at env seed 0, so seed-0 evals replay training starts. Target-only 50k grasp policies memorize (0.92–0.95 on training starts vs 0.32–0.39 on new ones), while co-trained and fine-tuned policies generalize. |
 | [E16](#e16) | 2026-10-04 | Fine-tuning at lr 1e-4 forgets every non-target hand (0.00). lr 1e-5 keeps most of grasp (0.82) but not rotation (0.25). Co-trained grasp generalists score 0.94–1.00 on the four hands they saw at 1M. |
@@ -84,7 +84,7 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 **Question.** Per target hand and per metric, how do the training regimes compare: full co-training (σ=0),
 ambient gating (0<σ<100, pooled), target-only (σ=100), and co-training followed by fine-tuning?
-**Status.** done (re-plot of existing runs; will be re-run when [E19](#e19) is scored).
+**Status.** done (figures re-rendered 2026-10-07 with E19's runs).
 
 **Data.** σ runs: [E18](#e18) (`_K50kr`, target 50k random draw + four hands at 1M), σ 0..100 step 10, seed 0.
 Fine-tuned: [E15](#e15)'s rotation fine-tunes, which used the **older first-episodes** 50k subsets (`_K50k`)
@@ -93,21 +93,22 @@ and started from the co-trained σ0 runs on those subsets; lr 1e-4 and 1e-5 × 2
 **Policy inputs/outputs.** As [E14](#e14).
 
 **Protocol.** Checkpoint `best_val` for every run, re-scored at 100 envs × 1500 steps, eval seed 1234.
-Runs per target: σ0 1, 0<σ<100 9, σ100 1, fine-tuned 4. `scripts/plot_condition_boxes.py` (CHANGES 72).
+Runs per target (updated 2026-10-07 with [E19](#e19)): σ0 3, 0<σ<100 35 (σ 1–20 × 3 seeds + σ 10, 30–90 × 1 seed),
+σ100 3, fine-tuned 4. `scripts/plot_condition_boxes.py` (CHANGES 72).
 
-**Results.** Mean over runs and targets (σ0 / 0<σ<100 / σ100 / fine-tuned):
+**Results.** Mean over runs and targets (co-training σ0 / ambient 0<σ<100 / none σ100 / fine-tuned):
 
-| Metric | σ = 0 | 0 < σ < 100 | σ = 100 | fine-tuned |
+| Metric | co-training | ambient | none (target-only) | fine-tuned |
 |---|---|---|---|---|
-| successes before drop | 0.43 | 0.71 | 0.64 | **1.23** |
-| episodes reaching ≥ 1 target | 0.35 | 0.52 | 0.48 | **0.74** |
-| per-target success rate | 0.27 | 0.35 | 0.32 | **0.54** |
-| survival time before drop (s) | 7.1 | 11.7 | 11.4 | **13.8** |
-| final rotation distance (rad, lower better) | 0.80 | 0.60 | 0.60 | **0.54** |
+| successes before drop | 0.42 | 0.75 | 0.63 | **1.23** |
+| episodes reaching ≥ 1 target | 0.31 | 0.53 | 0.47 | **0.74** |
+| per-target success rate | 0.26 | 0.38 | 0.31 | **0.54** |
+| survival time before drop (s) | 6.6 | 10.5 | 11.6 | **13.8** |
+| final rotation distance (rad, lower better) | 0.83 | 0.62 | 0.60 | **0.54** |
 
-Successes before drop, mean per target (σ0 / 0<σ<100 / σ100 / fine-tuned): Allegro 0.72 / 0.96 / 0.97 / 1.74;
-LEAP 0.54 / 0.47 / 0.35 / 1.28; Shadow 0.32 / 0.46 / 0.48 / 0.74; Sharpa 0.19 / 0.71 / 0.66 / 0.98;
-Wuji 0.40 / 0.96 / 0.75 / 1.38. Fine-tuned by lr: 1e-4 1.26, 1e-5 1.20.
+Successes before drop, mean per target (co-training / ambient / none / fine-tuned): Allegro 0.71 / 1.16 / 0.86 / 1.74;
+LEAP 0.71 / 0.69 / 0.42 / 1.28; Shadow 0.17 / 0.54 / 0.34 / 0.74; Sharpa 0.20 / 0.51 / 0.73 / 0.98;
+Wuji 0.31 / 0.84 / 0.81 / 1.38. Fine-tuned by lr: 1e-4 1.26, 1e-5 1.20.
 
 ![Successes before drop per target and regime](plots/rotation_conditions_box_avg_successes_before_drop.png)
 ![Episodes reaching at least one target](plots/rotation_conditions_box_success_rate_any.png)
@@ -119,40 +120,73 @@ Wuji 0.40 / 0.96 / 0.75 / 1.38. Fine-tuned by lr: 1e-4 1.26, 1e-5 1.20.
 Raw values: [`plots/rotation_conditions_box_summary.csv`](plots/rotation_conditions_box_summary.csv).
 
 **Takeaways.**
-- **Fine-tuning has the highest mean for every target and every informative metric**, about 2× target-only
-  on successes before drop (1.23 vs 0.64). Shadow is the closest case: its fine-tuned runs (0.61–0.97) overlap
-  the best gated run (0.64).
-- **Pooled across σ, ambient gating is only slightly above target-only** (0.71 vs 0.64): σ above ~30 sits at
-  the target-only level, and the gain is concentrated at σ 10–20 ([E18](#e18)).
-- **Full co-training is the worst regime for 4 of 5 targets** on every metric; LEAP is the exception.
-- Caveat: the fine-tuned box is on the older first-episodes subsets, the σ boxes on the random draws. On the
-  old subsets σ0/σ100 scored higher (0.58/0.73, E18) than on the random draws (0.43/0.64), so part of the
-  fine-tuning margin could come from the data draw, though not most of it (fine-tuned 1.23 vs 0.73).
-  Fine-tuning the E18/E19 runs on `_K50kr` (e.g. from σ 0 and σ 10–20) would remove this confound.
-- σ0 and σ100 are single runs per target until [E19](#e19) lands (it adds seeds 1–2 and σ 1–18).
+- **Fine-tuning has the highest mean for every target and every informative metric**, about 2× target-only on
+  successes before drop (1.23 vs 0.63). Its survival time is also highest, while pooled ambient survives slightly
+  less long than target-only (10.5 vs 11.6 s) because low σ hurts Sharpa and Wuji.
+- **Pooled ambient is above target-only on successes** (0.75 vs 0.63), but the box hides the σ structure: σ 9–20 is
+  much better than σ 1–6 ([E19](#e19)). Per hand, pooled ambient is below target-only for Sharpa (0.51 vs 0.73).
+- **Full co-training is the worst regime for 4 of 5 targets**; LEAP is the exception (0.71 vs 0.42 target-only).
+- Caveat: the fine-tuned box is on the older first-episodes subsets, the others on the random draw. On the old subsets
+  σ0/σ100 scored higher (0.58/0.73, E18), so part of the fine-tuning margin could come from the data draw, though not
+  most of it (1.23 vs 0.73). Fine-tunes from the E19 runs on `_K50kr` are being planned to remove this.
 
-**Links.** RUNS: `1049683`, `1045839` · Agent log: [A41](agent_log_book.md#a41) · CHANGES 72.
+**Links.** RUNS: `1049683`, `1052839`, `1045839` · Agent log: [A41](agent_log_book.md#a41), [A42](agent_log_book.md#a42) · CHANGES 72.
 
 <a id="e19"></a>
-### E19 — 2026-10-06 — Ambient σ fine grid (1–20) × 3 seeds, rotation
+### E19 — 2026-10-07 — Ambient σ fine grid (1–20) × 3 seeds, rotation
 
 **Question.** [E18](#e18) found the best σ at 10–20 on a step-10 grid with one seed. Where exactly is the
-peak in σ 1–20, and how large is seed-to-seed variance?  **Status.** running: job `1052839`, submitted
-2026-10-06 10:27, pending in the queue.
+peak in σ 1–20, and how large is seed-to-seed variance?  **Status.** done.
 
-**Data.** As [E18](#e18): `padded_ta/InHand-Rotation_pad5_scarce<Hand>_K50kr.zarr` (target 50k random draw +
-other four at 1M).
+**Data.** As [E18](#e18): `padded_ta/InHand-Rotation_pad5_scarce<Hand>_K50kr.zarr` (target 50k random draw, draw
+seed 0, + the other four hands at 1M). Every training seed uses the same draw.
 
 **Policy inputs/outputs.** As [E14](#e14)/[E18](#e18).
 
-**Protocol.** σ ∈ {1, 2, 3, 6, 9, 12, 15, 18, 20} × 5 targets × seeds {0, 1, 2}, plus the baselines σ 0 and 100
-× seeds {1, 2}; σ 0/20/100 seed 0 reused from E18, so 150 new runs and 3 seeds at σ 0, 1–20 and 100. Recipe
-identical to E18 except σ and seed. Report `best_val`, re-scored at 100 envs × 1500 steps, seed 1234. σ 10–90
-(except 20) stay single-seed (E18).
+**Protocol.** σ ∈ {1, 2, 3, 6, 9, 12, 15, 18, 20} × 5 targets × training seeds {0, 1, 2}, plus σ 0 and 100 × seeds
+{1, 2}; σ 0/20/100 seed 0 reused from E18, so 150 new runs and 3 seeds at σ 0, 1–20 (except 10) and 100 (σ 10 and
+30–90 stay single-seed from E18). Recipe identical to E18 except σ and seed. Job `1052839`: 2 runs per node, 15 × 5
+nodes, 8h32–9h03 per job. Reporting: `best_val`, re-scored at 100 envs × 1500 steps, eval seed 1234 (only each env's
+first episode is scored; the same 100 start states for every run of a hand).
 
-**Results.** Pending.
+**Results.** Successes before drop, mean of 3 training seeds:
 
-**Links.** RUNS: `1052839` · Agent log: [A40](agent_log_book.md#a40).
+| σ | 0 | 1 | 2 | 3 | 6 | 9 | 12 | 15 | 18 | 20 | 100 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Allegro | 0.71 | 1.18 | 1.19 | 1.31 | **1.33** | 1.30 | 1.21 | 1.24 | 1.20 | 1.09 | 0.86 |
+| LEAP | 0.71 | 0.84 | 0.86 | **0.89** | 0.78 | 0.86 | 0.79 | 0.65 | 0.57 | 0.54 | 0.42 |
+| Shadow | 0.17 | 0.52 | **0.62** | 0.43 | 0.60 | 0.60 | 0.61 | **0.62** | 0.56 | 0.55 | 0.34 |
+| Sharpa | 0.20 | 0.38 | 0.17 | 0.16 | 0.14 | 0.46 | 0.49 | 0.73 | **0.74** | 0.71 | 0.73 |
+| Wuji | 0.31 | 0.55 | 0.62 | 0.60 | 0.57 | 1.04 | 1.00 | 0.95 | 0.92 | **1.09** | 0.81 |
+| **mean** | 0.42 | 0.69 | 0.69 | 0.68 | 0.68 | **0.85** | 0.82 | 0.84 | 0.80 | 0.80 | 0.63 |
+
+Mean over hands minus σ 100, per training seed (0 / 1 / 2): σ 0 −0.21 / −0.30 / −0.13; σ 1–6 +0.00 to +0.11
+(mean +0.05); σ 9 +0.20 / +0.21 / +0.25; σ 12 +0.16 / +0.16 / +0.26; σ 15 +0.25 / +0.15 / +0.21; σ 18 +0.10 /
++0.16 / +0.24; σ 20 +0.20 / +0.11 / +0.18. Seed-to-seed SD of the mean over hands is 0.02–0.05; per hand × σ cell
+the median SD is 0.08.
+
+![Successes before drop vs σ per target hand: line = mean of seeds, light dots = single seeds, diamonds = old first-episodes subsets](plots/ambient_sigma_rotation.png)
+![Every eval metric vs σ per target hand (mean of seeds); dashed = mean over hands](plots/ambient_sigma_rotation_metrics.png)
+
+Raw values: [`plots/ambient_sigma_rotation_summary.csv`](plots/ambient_sigma_rotation_summary.csv).
+
+**Takeaways.**
+- **Pooled over hands, the best region is a plateau at σ 9–20** (0.80–0.85 successes vs 0.63 target-only and 0.42
+  full co-training). It beats target-only in every training seed by +0.10 to +0.26. σ 1–6 gives only about +0.05.
+- **Full co-training (σ 0) is below target-only in every seed** (−0.13 to −0.30), confirming E18.
+- **The best σ depends on the hand.** Allegro, LEAP and Shadow already peak at σ 2–6. Sharpa and Wuji are hurt by low
+  σ: Sharpa at σ 1–6 (0.14–0.38) is far below its target-only 0.73, and only matches it from σ 15. Wuji needs σ ≥ 9.
+  So the pooled jump at σ 9 is the point where Sharpa and Wuji stop being hurt.
+- **σ 15 is the most robust single setting:** it is at or above target-only for every hand (1.24, 0.65, 0.62, 0.73,
+  0.95 vs 0.86, 0.42, 0.34, 0.73, 0.81), with a pooled 0.84. σ 9 has the highest pooled mean (0.85) but leaves Sharpa
+  at 0.46, below its target-only 0.73.
+- Compared with Bundle (peak at σ* = 2–3, Sharpa the exception), the per-hand peaks for Allegro, LEAP and Shadow are in
+  the same low range, and Sharpa is again the exception. The pooled plateau sits higher here because of Sharpa and Wuji.
+- Variance: 3 training seeds on **one** 50k data draw, and every number uses the same 100 eval start states per hand
+  (seed 1234), which is also the set any σ would be chosen on. See the seed discussion in [A42](agent_log_book.md#a42).
+
+**Links.** RUNS: `1052839` + idev rescore rows · Agent log: [A40](agent_log_book.md#a40), [A42](agent_log_book.md#a42) ·
+CHANGES 70, 71, 73.
 
 <a id="e18"></a>
 ### E18 — 2026-10-06 — Ambient σ sweep, rotation, random-draw 50k targets
@@ -276,8 +310,10 @@ the policies of [E14](#e14) and [E15](#e15).
 | Rotation-Wuji | co-trained | 0.60 | 0.52 | +0.08 |
 | Rotation-Wuji | co-trained + FT 1e-5 | 1.47 | 1.80 | −0.33 |
 
-Grasp: success rate. Rotation: successes before drop. Only the first episode per env replays a training
-start (later auto-resets do not), so the seed-0 column understates pure memorization.
+Grasp: success rate. Rotation: successes before drop. Both evaluators score only each env's first episode
+(`eval/grasp.py`, `eval/rotation.py`), so at seed 0 with 100 envs every scored episode starts from a training
+start. (Corrected 2026-10-07: an earlier version said later auto-reset episodes dilute the seed-0 column; they
+are not scored.)
 
 **Takeaways.**
 - **Target-only grasp policies memorize.** They succeed on 92–95% of their ~100 training starts and on 32–39%

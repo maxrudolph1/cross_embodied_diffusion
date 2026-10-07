@@ -135,61 +135,51 @@ def main() -> None:
                 row.update({k: r["metrics"].get(k) for k in mkeys})
                 w.writerow({"set": name, **row})
 
-    sigmas = sorted({r["sigma"] for r in sweep})
     n_prov = sum(r["source"] == "provisional" for r in sweep)
     n_done = sum(r["done"] for r in sweep)
     groups = HANDS + ["mean over targets"]
     fig, axes = plt.subplots(2, 3, figsize=(13, 7.2), facecolor=SURFACE, sharex=True)
-    ymax = max(r["value"] for r in sweep + ref) * 1.15 + 0.05
+    ymax = max(r["value"] for r in sweep + ref) * 1.12 + 0.05
     for ax, g in zip(axes.flat, groups):
         style(ax)
         if g in HANDS:
-            pts = {r["sigma"]: r["value"] for r in sweep if r["target"] == g}
-            prov = {r["sigma"] for r in sweep if r["target"] == g and r["source"] == "provisional"}
+            means, seeds = seed_means(sweep, g, None)
             refs = [r for r in ref if r["target"] == g]
-        else:  # mean over targets, only at sigmas every target has
-            by = defaultdict(list)
-            for r in sweep:
-                by[r["sigma"]].append(r["value"])
-            pts = {s: float(np.mean(v)) for s, v in by.items() if len(v) == len(HANDS)}
-            prov = {r["sigma"] for r in sweep if r["source"] == "provisional"}
+        else:
+            means, seeds = target_means(sweep, None)
             rb = defaultdict(list)
             for r in ref:
                 rb[(r["sigma"], r["seed"])].append(r["value"])
-            refs = [{"sigma": s, "seed": k, "value": float(np.mean(v))}
-                    for (s, k), v in rb.items() if len(v) == len(HANDS)]
-        xs = sorted(pts)
+            refs = [{"sigma": s_, "seed": k, "value": float(np.mean(v))}
+                    for (s_, k), v in rb.items() if len(v) == len(HANDS)]
+        xs = sorted(means)
         if xs:
-            ax.plot(xs, [pts[x] for x in xs], "-", color=SWEEP, linewidth=2, zorder=3, label=args.label)
-            solid = [x for x in xs if x not in prov]
-            hollow = [x for x in xs if x in prov]
-            ax.scatter(solid, [pts[x] for x in solid], s=36, color=SWEEP, edgecolors=SURFACE, linewidths=2, zorder=4)
-            ax.scatter(hollow, [pts[x] for x in hollow], s=36, facecolors=SURFACE, edgecolors=SWEEP,
-                       linewidths=1.6, zorder=4)
+            sx = [x for x in xs for _ in seeds[x]]
+            sy = [v for x in xs for v in seeds[x]]
+            ax.scatter(sx, sy, s=12, color=SWEEP, alpha=0.35, linewidths=0, zorder=2,
+                       label="single seed" if g == groups[-1] else None)
+            ax.plot(xs, [means[x] for x in xs], "-", color=SWEEP, linewidth=2, zorder=3,
+                    label=f"{args.label}, mean of seeds")
+            ax.scatter(xs, [means[x] for x in xs], s=30, color=SWEEP, edgecolors=SURFACE, linewidths=1.5, zorder=4)
         if refs:
-            ax.scatter([r["sigma"] + (-2.0 if r["seed"] == 0 else 2.0) for r in refs], [r["value"] for r in refs],
-                       s=30, marker="D", color=REF, edgecolors=SURFACE, linewidths=1.5, zorder=5,
+            ax.scatter([r["sigma"] for r in refs], [r["value"] for r in refs], s=34, marker="D",
+                       facecolors="none", edgecolors=REF, linewidths=1.5, zorder=5,
                        label=f"{args.ref_label}, seeds 0/1")
         ax.set_title(g, color=INK, fontsize=10, loc="left")
         ax.set_ylim(0, ymax)
-        ax.set_xticks(sigmas if len(sigmas) <= 11 else sigmas[::2])
-    fig.supxlabel("σ: the other four hands train only at diffusion steps t ≥ σ  (0 = full co-training, "
-                  "100 = target-only); target 50k, others 1M", color=INK2, fontsize=9)
+        sigma_axis(ax)
+    fig.supxlabel("σ (square-root spacing): the other four hands train only at diffusion steps t ≥ σ  "
+                  "(0 = full co-training, 100 = target-only); target 50k, others 1M", color=INK2, fontsize=9)
     for ax in axes[:, 0]:
         ax.set_ylabel(ylabel, color=INK2, fontsize=9)
     h, lab = axes.flat[-1].get_legend_handles_labels()
-    if not h:
-        h, lab = axes.flat[0].get_legend_handles_labels()
-    if n_prov:
-        h.append(plt.Line2D([], [], marker="o", linestyle="", markerfacecolor=SURFACE, markeredgecolor=SWEEP))
-        lab.append("provisional (in-training eval, 32 envs)")
-    fig.legend(h, lab, loc="upper left", bbox_to_anchor=(0.005, 0.955), ncol=len(h), frameon=False,
+    fig.legend(h, lab, loc="upper left", bbox_to_anchor=(0.005, 0.925), ncol=len(h), frameon=False,
                fontsize=8.5, labelcolor=INK2)
     status = (f"{n_done}/{len(sweep)} runs finished, {n_prov} points provisional" if n_prov
-              else "re-scored: 100 episodes, eval seed 1234")
+              else f"re-scored: 100 episodes, eval seed 1234\n{seed_note(sweep)}")
     fig.suptitle(f"{args.family}: target-hand score vs ambient σ, checkpoint = best val loss  [{status}]",
-                 x=0.01, ha="left", color=INK, fontsize=11)
-    fig.tight_layout(rect=(0, 0, 1, 0.91))
+                 x=0.01, ha="left", color=INK, fontsize=10.5)
+    fig.tight_layout(rect=(0, 0, 1, 0.885))
     out = args.out / f"ambient_sigma_{short}.png"
     fig.savefig(out, dpi=150)
     plt.close(fig)
@@ -198,42 +188,99 @@ def main() -> None:
         metrics_figure(sweep, args.family, args.out / f"ambient_sigma_{short}_metrics.png", status)
 
 
+def _val(r: dict, key: str | None) -> float | None:
+    if key is None:
+        return r["value"]
+    v = r["metrics"].get(key)
+    return None if v is None else float(v)
+
+
+def seed_means(recs: list[dict], target: str, key: str | None) -> tuple[dict, dict]:
+    """Per sigma for one target: (mean over seeds, list of seed values)."""
+    seeds = defaultdict(list)
+    for r in recs:
+        v = _val(r, key)
+        if r["target"] == target and v is not None:
+            seeds[r["sigma"]].append(v)
+    return {s_: float(np.mean(v)) for s_, v in seeds.items()}, dict(seeds)
+
+
+def target_means(recs: list[dict], key: str | None) -> tuple[dict, dict]:
+    """Per sigma: mean over targets of each target's seed mean (only sigmas every target has), and per seed
+    the mean over targets (only seeds every target has at that sigma)."""
+    per = {h: seed_means(recs, h, key)[0] for h in HANDS}
+    common = set.intersection(*(set(m) for m in per.values())) if per else set()
+    means = {s_: float(np.mean([per[h][s_] for h in HANDS])) for s_ in common}
+    by = defaultdict(list)
+    for r in recs:
+        v = _val(r, key)
+        if v is not None:
+            by[(r["sigma"], r["seed"])].append(v)
+    seeds = defaultdict(list)
+    for (s_, k), v in by.items():
+        if s_ in common and len(v) == len(HANDS):
+            seeds[s_].append(float(np.mean(v)))
+    return means, dict(seeds)
+
+
+SIGMA_TICKS = [0, 1, 2, 3, 6, 10, 20, 30, 50, 70, 100]
+
+
+def sigma_axis(ax) -> None:
+    """Square-root sigma axis, so the dense low-sigma grid (1-20) is readable next to 30-100."""
+    ax.set_xscale("function", functions=(lambda x: np.sign(x) * np.sqrt(np.abs(x)),
+                                         lambda x: np.sign(x) * np.square(x)))
+    ax.set_xlim(-0.5, 108)
+    ax.set_xticks(SIGMA_TICKS)
+    ax.set_xticklabels([str(t) for t in SIGMA_TICKS], fontsize=7.5)
+
+
+def seed_note(recs: list[dict]) -> str:
+    n = defaultdict(set)
+    for r in recs:
+        n[r["sigma"]].add(r["seed"])
+    multi = sorted(s_ for s_, k in n.items() if len(k) > 1)
+    single = sorted(s_ for s_, k in n.items() if len(k) == 1)
+    if not multi:
+        return "1 seed"
+    k = max(len(v) for v in n.values())
+    return f"{k} seeds at σ {', '.join(map(str, multi))}; 1 seed at σ {', '.join(map(str, single))}" if single \
+        else f"{k} seeds"
+
+
 def metrics_figure(sweep: list[dict], family: str, out: Path, status: str) -> None:
-    """One panel per rotation metric: value vs sigma, one line per target hand + mean."""
-    sigmas = sorted({r["sigma"] for r in sweep})
+    """One panel per rotation metric: value vs sigma (mean over seeds), one line per target hand + mean."""
     fig, axes = plt.subplots(2, 3, figsize=(14.5, 8), facecolor=SURFACE, sharex=True)
     for ax, (key, title, better) in zip(axes.flat, ROT_METRICS):
         style(ax)
         for h in HANDS:
-            pts = {r["sigma"]: float(r["metrics"][key]) for r in sweep if r["target"] == h and key in r["metrics"]}
-            xs = sorted(pts)
+            means, _ = seed_means(sweep, h, key)
+            xs = sorted(means)
             if not xs:
                 continue
-            ys = [pts[x] for x in xs]
-            ax.plot(xs, ys, "-", color=HAND_COLOR[h], linewidth=1.6, zorder=3)
-            ax.scatter(xs, ys, s=26, marker=HAND_MARKER[h], color=HAND_COLOR[h], edgecolors=SURFACE,
-                       linewidths=1.2, zorder=4, label=h)
-        by = defaultdict(list)
-        for r in sweep:
-            if key in r["metrics"]:
-                by[r["sigma"]].append(float(r["metrics"][key]))
-        mx = [x for x in sigmas if len(by[x]) == len(HANDS)]
+            ys = [means[x] for x in xs]
+            ax.plot(xs, ys, "-", color=HAND_COLOR[h], linewidth=1.5, zorder=3)
+            ax.scatter(xs, ys, s=22, marker=HAND_MARKER[h], color=HAND_COLOR[h], edgecolors=SURFACE,
+                       linewidths=1.0, zorder=4, label=h)
+        means, _ = target_means(sweep, key)
+        mx = sorted(means)
         if mx:
-            ax.plot(mx, [np.mean(by[x]) for x in mx], "--", color=INK, linewidth=2, zorder=5, label="mean over hands")
+            ax.plot(mx, [means[x] for x in mx], "--", color=INK, linewidth=2, zorder=5, label="mean over hands")
         ax.set_title(f"{title}  ({better} is better)", color=INK, fontsize=9.5, loc="left")
-        ax.set_xticks(sigmas)
+        sigma_axis(ax)
         if key in ("success_rate_any", "per_target_success_rate", "drop_rate"):
             ax.set_ylim(0, 1.05)
         else:
             ax.set_ylim(bottom=0)
-    fig.supxlabel("σ: the other four hands train only at diffusion steps t ≥ σ  (0 = full co-training, "
-                  "100 = target-only); target 50k (random draw), others 1M", color=INK2, fontsize=9)
+    fig.supxlabel("σ (square-root spacing): the other four hands train only at diffusion steps t ≥ σ  "
+                  "(0 = full co-training, 100 = target-only); target 50k (random draw), others 1M",
+                  color=INK2, fontsize=9)
     h, lab = axes.flat[0].get_legend_handles_labels()
-    fig.legend(h, lab, loc="upper left", bbox_to_anchor=(0.005, 0.955), ncol=len(h), frameon=False,
+    fig.legend(h, lab, loc="upper left", bbox_to_anchor=(0.005, 0.925), ncol=len(h), frameon=False,
                fontsize=8.5, labelcolor=INK2)
-    fig.suptitle(f"{family}: every eval metric vs ambient σ per target hand, checkpoint = best val loss, "
-                 f"1 seed  [{status}]", x=0.01, ha="left", color=INK, fontsize=11)
-    fig.tight_layout(rect=(0, 0, 1, 0.91))
+    fig.suptitle(f"{family}: every eval metric vs ambient σ per target hand (mean of seeds), checkpoint = "
+                 f"best val loss  [{status}]", x=0.01, ha="left", color=INK, fontsize=10)
+    fig.tight_layout(rect=(0, 0, 1, 0.885))
     fig.savefig(out, dpi=150)
     plt.close(fig)
     print(f"[INFO] -> {out}")

@@ -30,18 +30,17 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 ## Current state
 
-*Last updated 2026-10-06 (A41).*
+*Last updated 2026-10-07 (A42).*
 
 - **Repo location:** `/work/09312/rudolph/documents/cross_embodied_diffusion` (`~/documents/cross_embodied_diffusion`),
   branch `bundle-migration`. `~/cross_embodied_diffusion` is a compatibility symlink to it on Vista.
   The `/work` checkout is now level with `origin/bundle-migration` (A39 pulled the A38 docs restructure; `/work`
   was writable again on 2026-10-05).
-- **Queued:** job `1052839` (submitted 2026-10-06 10:27), the rotation σ fine-grid × 3-seed sweep, 150 runs incl. σ 0/100 seeds 1–2
-  ([E19](experiment_log_book.md#e19); exact command in the [RUNS](RUNS.md) row; ~8.7 h per run after the queue wait).
-  When it finishes: `sbatch -A ASC26008 --array=0-14 --export=ALL,RUNS='diffusion/ambient_ta_r/*',WHICH=best_val
-  slurm_jobs/vista_eval_checkpoints.sbatch` (already-scored runs are skipped), then `scripts/plot_ambient_sigma.py`
-  and `scripts/plot_condition_boxes.py --out docs/plots` (E20's figures).
-- **Nothing else of this project is running.** The latest finished job, `1049683` (rotation ambient σ sweep, 55 runs), has
+- **Nothing of this project is running.** The fine-grid sweep `1052839` finished and is scored:
+  [E19](experiment_log_book.md#e19) (σ 9–20 plateau, 3 seeds), [E20](experiment_log_book.md#e20) (regime box plots).
+- **Next, being discussed with the user:** fine-tuning from the best ambient runs (design and open questions in
+  [A42](#a42)).
+- Earlier finished jobs: `1049683` (rotation ambient σ sweep, 55 runs), has
   finished and been re-scored: [E18](experiment_log_book.md#e18). Earlier: `1043385` / `1045839`
   ([E14](experiment_log_book.md#e14)–[E16](experiment_log_book.md#e16)).
 - **Headline results:**
@@ -94,6 +93,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A42](#a42) | 2026-10-07 | Scored and plotted the 150-run fine-grid sweep (σ 9–20 plateau, 3 seeds), audited how data/eval seeds are chosen, and discussed fine-tuning from the best ambient runs. |
 | [A41](#a41) | 2026-10-06 | Box-and-whisker plots of σ=0 / 0<σ<100 / σ=100 / fine-tuned per rotation target, one figure per metric (E20). |
 | [A40](#a40) | 2026-10-06 | Fast-forwarded `main`, benchmarked run packing on the current code (PACK=2 is fastest overall), and set up the 150-run rotation σ fine-grid × 3-seed sweep (+ σ 0/100 seeds 1–2). |
 | [A39](#a39) | 2026-10-04 → 10-06 | Found that the demos were collected at seed 0 and the 50k subsets are prefixes (target-only grasp memorizes), rebuilt random-draw rotation subsets, ran and plotted the rotation σ 0–100 sweep (`1049683`). |
@@ -139,6 +139,41 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a42"></a>
+### A42 — 2026-10-07 — Fine-grid sweep scored and plotted; seed audit; fine-tune design discussed
+
+**Request.** The jobs are done: push the plots and new experiments to GitHub; a line plot per hand of performance vs σ
+and the box-and-whisker plot of the methods (co-training, fine-tuning, ambient, none). Explain how eval and data seeds
+are chosen. Discuss fine-tuning from the best ambient runs (questions open, below).
+
+**Done.**
+- `1052839`: 15/15 COMPLETED, 150/150 runs. Re-scored best_val on two idev GH200s (c634-142, c611-102), 8 shards,
+  10:31–12:33, 205/205 rows, no errors (RUNS idev row; wrapper
+  `slurm_jobs/vista_train_manifest/logs/rescore_ambient_ta_r/run_shards.sh`, gitignored).
+- `plot_ambient_sigma.py` made multi-seed (CHANGES 73), then both plot scripts rendered into `docs/plots/`
+  (`ambient_sigma_rotation{,_metrics}.png`, `rotation_conditions_box_*.png`, summary CSVs). Results: E19 written,
+  E20 refreshed.
+- **Seed audit (from the code):** demos = env seed 0 (collection default); old `subsets_50k` = first ~100 episodes;
+  `subsets_50kr` = random draw seed 0, the same for every training seed; val store = env seed 1000, validator scores a
+  fixed 2,048 windows with fixed noise (seed 0). Training `--seed` sets init, batch order, ambient sampler and diffusion
+  noise only. In-training eval: env seed = training seed, 32 envs, env reused without reseeding after the first eval.
+  Reporting (`rescore_selected.py`, `eval_cross_embodiment.py`): env seed 1234, 100 envs, sampling noise seeded 1234,
+  only each env's first episode scored (`eval/grasp.py`, `eval/rotation.py`), so every run of a hand sees the same 100
+  starts. Consequences: no held-out test set separate from the episodes used to choose checkpoints or σ; the 3 seeds
+  measure training variance on one data draw.
+- Corrected E17: the claim that later auto-reset episodes dilute the seed-0 column was wrong (they are not scored).
+- **Fine-tune design (open, not built):** fine-tune from the E19 runs on `_K50kr`; starting σ ∈ {0, σ*, 100} (σ 100 =
+  training-time-matched control), 3 seeds, 10 epochs from `best_val`; open questions: one shared σ* (candidates σ 15,
+  the only σ at or above target-only for every hand, or σ 9, best pooled) vs per-hand best σ scored on a fresh eval seed;
+  lr 1e-5 only or also 1e-4; cross-embodiment forgetting eval. Needs `build_finetune_manifest.py` options for source σ,
+  `50kr` stores, source/output roots.
+
+**Verified / not verified.** Verified: job states, 205 scored rows, figures inspected. Not verified: seed 1234 sharing
+no starts with the demos for hands other than Grasp-Allegro.
+
+**Pointers.** RUNS: `1052839`, idev rescore rows · CHANGES 73 · Experiments: [E19](experiment_log_book.md#e19),
+[E20](experiment_log_book.md#e20), [E17](experiment_log_book.md#e17) (corrected).
 
 <a id="a41"></a>
 ### A41 — 2026-10-06 — Box plots of every rotation regime per target, per metric
