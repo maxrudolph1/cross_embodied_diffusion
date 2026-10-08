@@ -43,7 +43,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 - **Resume E21 here (next session):**
   1. `sacct -u $USER -S 2026-10-07T14:50 -X -o JobID%16,JobName%14,State,Elapsed`: `1056188` (ft-amb-r),
      `1056189` (ev-base4321), `1056925` (ev-basex), `1056926` (ev-ft1234), `1056927` (ev-ft4321) should be COMPLETED;
-     `ev-ftx` was not queued on 2026-10-07 (RUNS E21 row has the standalone line), so check whether it ran. If `ev-basex`/`ev-ft1234`/`ev-ft4321`/`ev-ftx` are absent, the
+     and `1056932` (ev-ftx, resubmitted on its own after the script missed it). If `ev-basex`/`ev-ft1234`/`ev-ft4321`/`ev-ftx` are absent, the
      user never ran `submit_e21_evals_rest.sh`: drop its `--dependency` flags for finished jobs and have them submit.
      Record all IDs in the RUNS E21 row.
   2. Check `ls $SCRATCH/cross_embodied_diffusion/outputs/diffusion/ambient_ta_r_ft/*/selection.json | wc -l` = 45;
