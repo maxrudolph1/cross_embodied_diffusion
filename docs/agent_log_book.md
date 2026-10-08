@@ -33,9 +33,9 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 *Last updated 2026-10-07 (A43).*
 
 - **Repo location:** `/work/09312/rudolph/documents/cross_embodied_diffusion` (`~/documents/cross_embodied_diffusion`),
-  branch `bundle-migration`. `~/cross_embodied_diffusion` is a compatibility symlink to it on Vista.
-  The `/work` checkout is now level with `origin/bundle-migration` (A39 pulled the A38 docs restructure; `/work`
-  was writable again on 2026-10-05).
+  branch **`main`** (since 2026-10-08, at the user's request: work on `main` and push there).
+  `~/cross_embodied_diffusion` is a compatibility symlink to it on Vista. `bundle-migration` is the same commit as
+  `main` at the switch (`84e9956`) and is no longer updated.
 - **Nothing of this project is running.** The fine-grid sweep `1052839` finished and is scored:
   [E19](experiment_log_book.md#e19) (σ 9–20 plateau, 3 seeds), [E20](experiment_log_book.md#e20) (regime box plots).
 - **Queued 2026-10-07 14:56:** E21 fine-tunes `1056188` (45 runs) and `ev-base4321` `1056189`; the other 4 evals go
@@ -80,7 +80,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
   4. Open discrepancy: under our frozen min/max, the normalized action std is 0.24/0.26, against Bundle's
      quoted 0.077 (CHANGES item 63). σ values may not map 1:1 onto Bundle's.
   5. `$SCRATCH/ced_docs` (the A38 clone used while `/work` was read-only) can be deleted.
-  6. `main` was fast-forwarded to `bundle-migration` (`a72da5a`) on 2026-10-06 (A40).
+  6. Work happens on `main` (2026-10-08); `bundle-migration` stopped at `84e9956`.
 
 ## Environment & install (living reference)
 
