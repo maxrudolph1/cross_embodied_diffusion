@@ -39,7 +39,19 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 - **Nothing of this project is running.** The fine-grid sweep `1052839` finished and is scored:
   [E19](experiment_log_book.md#e19) (σ 9–20 plateau, 3 seeds), [E20](experiment_log_book.md#e20) (regime box plots).
 - **Queued 2026-10-07 14:56:** E21 fine-tunes `1056188` (45 runs) and `ev-base4321` `1056189`; the other 4 evals go
-  in with `bash slurm_jobs/submit_e21_evals_rest.sh` (login node) ([A43](#a43), RUNS E21 row). Afterwards, extend
+  in with `bash slurm_jobs/submit_e21_evals_rest.sh` (login node) ([A43](#a43), RUNS E21 row).
+- **Resume E21 here (next session):**
+  1. `sacct -u $USER -S 2026-10-07T14:50 -X -o JobID%16,JobName%14,State,Elapsed`: `1056188` (ft-amb-r) and
+     `1056189` (ev-base4321) should be COMPLETED. If `ev-basex`/`ev-ft1234`/`ev-ft4321`/`ev-ftx` are absent, the
+     user never ran `submit_e21_evals_rest.sh`: drop its `--dependency` flags for finished jobs and have them submit.
+     Record all IDs in the RUNS E21 row.
+  2. Check `ls $SCRATCH/cross_embodied_diffusion/outputs/diffusion/ambient_ta_r_ft/*/selection.json | wc -l` = 45;
+     timed-out evals are resumable (resubmit the same line).
+  3. Plots: `plot_condition_boxes.py` needs `FT_RE` to accept `<Task>_sigma<S>_ft_*` (hand = group 2 without
+     `_sigma<S>`), a source-σ grouping (fine-tuned from σ 0 / 15 / 100), and `--eval-seed` (seed 4321 is the
+     reported test seed; the plotters filter to 1234 since CHANGES 74). Add a seed-4321 version of the σ curve
+     (`plot_ambient_sigma.py`, all 150 E19 runs) and a forgetting figure from `cross_eval.jsonl` (other 4 hands).
+  4. Write E21 results, update E20/AGENTS standing findings, RUNS statuses, A-entry; push and fast-forward `main`. Afterwards, extend
   `plot_condition_boxes.py` for the `<Task>_sigma<S>_ft_*` names and the seed-4321 rows.
 - Earlier finished jobs: `1049683` (rotation ambient σ sweep, 55 runs), has
   finished and been re-scored: [E18](experiment_log_book.md#e18). Earlier: `1043385` / `1045839`
