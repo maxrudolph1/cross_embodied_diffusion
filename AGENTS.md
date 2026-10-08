@@ -257,6 +257,9 @@ were wrong in different ways.
   data, never the adversary's own training accuracy.
 - Sequential transfer works: co-train then fine-tune on the target (E15) is the best
   target policy found so far in both families (see the first bullet).
+- Fine-tune from full co-training (σ 0), not from ambient-gated runs (E21, rotation, held-out seed 4321, 3 seeds):
+  fine-tuned from σ 0 1.17 vs σ 15 0.90 vs σ 100 0.71 successes before drop, for every hand. Ambient σ 15 is the best
+  policy *without* fine-tuning (0.86) but gains only +0.04 from it.
 - **Never evaluate at env seed 0.** The 1M demo stores were collected at seed 0, so a seed-0 eval
   replays training start states, and the old `subsets_50k/` are the first ~100 episodes of the 1M
   stores (100% overlap). Report at seed 1234. Target-only 50k grasp policies memorize (0.92-0.95

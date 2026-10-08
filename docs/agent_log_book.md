@@ -43,6 +43,10 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 - **2026-10-08 status:** training `1056188` and `ev-base4321` `1056189` done (45/45 fine-tunes; 205/205 E18+E19 runs
   scored at seed 4321). Seed-4321 σ curve (mean over hands of 3-seed means) matches seed 1234: σ0 0.44, σ1–6
   0.70–0.73, σ9 0.82, σ12 0.86, σ15 0.86, σ18 0.81, σ20 0.80, σ100 0.62. The 4 remaining evals are still queued.
+- **E21 target results are in** (2026-10-08, seed 4321): fine-tuned from σ 0 1.17, σ 15 0.90, σ 100 0.71
+  ([E21](experiment_log_book.md#e21)). Remaining evals run on idev c639-092 (`rescore_e21/p*.log`); when they finish,
+  add seed-1234 numbers and the forgetting figure (`plot_finetune_sources.py --what others`, and `--what others
+  --ft-which best_val`), then fill E21's pending bullet.
 - **Resume E21 here (next session):**
   1. `sacct -u $USER -S 2026-10-07T14:50 -X -o JobID%16,JobName%14,State,Elapsed`: `1056188` (ft-amb-r),
      `1056189` (ev-base4321), `1056925` (ev-basex), `1056926` (ev-ft1234), `1056927` (ev-ft4321) should be COMPLETED;
@@ -110,6 +114,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A44](#a44) | 2026-10-08 | Switched to working on `main`; ran the E21 evals on idev c639-092; E21 target results: fine-tuning from σ 0 beats σ 15. |
 | [A43](#a43) | 2026-10-07 | Set up E21: fine-tunes from the E19 σ 0/15/100 runs (45 runs), test-seed 4321 and forgetting evals, one submit script. |
 | [A42](#a42) | 2026-10-07 | Scored and plotted the 150-run fine-grid sweep (σ 9–20 plateau, 3 seeds), audited how data/eval seeds are chosen, and discussed fine-tuning from the best ambient runs. |
 | [A41](#a41) | 2026-10-06 | Box-and-whisker plots of σ=0 / 0<σ<100 / σ=100 / fine-tuned per rotation target, one figure per metric (E20). |
@@ -157,6 +162,28 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a44"></a>
+### A44 — 2026-10-08 — E21 evals on the idev; first E21 results
+
+**Request.** Status of the finished jobs; work on `main` and push there; start the evals on the idev instead of
+waiting for the queued eval jobs.
+
+**Done.**
+- Training `1056188` (45/45) and `ev-base4321` `1056189` (205/205 rows; 1h42-1h44 of a 1:45 limit) done. The
+  other evals (`1056925`-`1056932`) stayed pending, so the same work runs on idev c639-092: `run.sh p 8` x 8
+  processes from 10:08 (RUNS idev row). Throughput: 8 processes on one GH200 average 690 s per eval
+  (≈0.70 evals/min), about the same as 4 processes (348 s, ≈0.69/min); the first 8 evals (442 s) overstated it.
+- Seed-4321 fine-tune stage complete at 14:07 (135/135 rows). New `plot_finetune_sources.py` (CHANGES 76); figure in
+  `docs/plots/`; E21 results written.
+- Branch: now `main` (Current state).
+
+**Verified / not verified.** Verified: every fine-tune has best_rollout/best_val/last0 rows at seed 4321; figure
+inspected. Not yet: seed-1234 rows and the forgetting evals (still running; ~05:30 on 10-09 at the measured rate).
+
+**Pointers.** RUNS: E21 row, idev c639-092 row · CHANGES 76 · Experiments: [E21](experiment_log_book.md#e21)
+
+---
 
 <a id="a43"></a>
 ### A43 — 2026-10-07 — E21 fine-tunes from ambient runs set up

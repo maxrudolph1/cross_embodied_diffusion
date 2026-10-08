@@ -37,7 +37,7 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 | # | Date | Finding |
 |---|---|---|
-| [E21](#e21) | 2026-10-07 | *Planned:* fine-tune from the best ambient runs (σ 15) vs from co-training (σ 0) and target-only (σ 100), scored on a fresh test seed 4321, with forgetting on the other hands. |
+| [E21](#e21) | 2026-10-08 | Fine-tuning from full co-training (σ 0) beats fine-tuning from the best ambient runs (σ 15): 1.17 vs 0.90 successes before drop at held-out seed 4321 (target-only start: 0.71). Ambient gating gives the best policy *before* fine-tuning (0.86) but gains almost nothing from it. The σ curve replicates at seed 4321. |
 | [E20](#e20) | 2026-10-07 | Per target and metric, co-train-then-fine-tune is best (mean 1.23 successes before drop vs 0.75 pooled ambient, 0.63 target-only, 0.42 full co-training; 3 seeds); full co-training is worst for 4 of 5 hands. |
 | [E19](#e19) | 2026-10-07 | With 3 seeds, rotation ambient gating peaks on a plateau at σ 9–20 (mean 0.80–0.85 vs 0.63 target-only, 0.42 co-training, consistent across seeds); the best σ is hand-specific (Allegro/LEAP/Shadow 2–6, Sharpa/Wuji ≥ 9–15), and σ 15 is the only setting at or above target-only for every hand. |
 | [E18](#e18) | 2026-10-06 | Rotation ambient σ sweep (random-draw 50k targets): σ 10–20 is best (mean 0.85 successes before drop vs 0.64 target-only and 0.43 full co-training), and above σ≈30 it is flat at the target-only level. |
@@ -81,12 +81,13 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 ## Entries
 
 <a id="e21"></a>
-### E21 — 2026-10-07 — Fine-tuning from ambient-gated runs (planned)
+### E21 — 2026-10-08 — Fine-tuning from ambient-gated runs
 
 **Question.** Does starting the target-only fine-tune from the best ambient run (σ 15) beat starting from full
 co-training (σ 0, the E15 recipe) or from target-only training (σ 100, i.e. 10 more target epochs)? Does the gain hold
 on start states not used to choose σ or checkpoints, and how much do the other hands forget?
-**Status.** set up, not submitted (RUNS "E21" row).
+**Status.** target results at seed 4321 done (2026-10-08 14:07). Seed-1234 rows and the forgetting evals
+(other hands) are still running on idev c639-092 (RUNS).
 
 **Data.** Target 50k random draw (`padded_ta/InHand-Rotation_pad5_scarce<Hand>_K50kr.zarr`, [E18](#e18)); sources are
 [E19](#e19)'s runs on the same stores.
@@ -106,9 +107,42 @@ on start states not used to choose σ or checkpoints, and how much do the other 
   Forgetting: fine-tunes (best_val, last0) and their sources (best_val) on the four other hands at seed 4321
   (`cross_eval.jsonl`).
 
-**Results.** Pending.
+**Results (target hand, held-out seed 4321).** Successes before drop, 3-seed means; start = source best_val,
+fine-tuned = `last0` (the reporting checkpoint, MIGRATION section 7):
 
-**Links.** RUNS: E21 row · Agent log: [A43](agent_log_book.md#a43) · CHANGES: item 74
+| Target | σ 0: start → fine-tuned | σ 15: start → fine-tuned | σ 100: start → fine-tuned |
+|---|---|---|---|
+| Allegro | 0.80 → **1.45** | 1.21 → 1.18 | 0.86 → 1.00 |
+| LEAP | 0.73 → **1.37** | 0.76 → 0.74 | 0.47 → 0.52 |
+| Shadow | 0.20 → **0.85** | 0.60 → 0.66 | 0.35 → 0.55 |
+| Sharpa | 0.28 → **0.92** | 0.69 → 0.83 | 0.66 → 0.74 |
+| Wuji | 0.20 → **1.25** | 1.02 → 1.07 | 0.78 → 0.73 |
+| **Mean** | 0.44 → **1.17** | 0.86 → 0.90 | 0.62 → 0.71 |
+
+- Per training seed, fine-tuned mean over hands: σ0 1.19 / 1.14 / 1.17, σ15 0.94 / 0.89 / 0.86, σ100 0.63 / 0.71 / 0.79.
+  σ 0 is best for every seed and every hand.
+- Same ranking with the other fine-tune checkpoints (mean): best_val σ0 1.04 / σ15 0.90 / σ100 0.68; best_rollout
+  1.17 / 0.87 / 0.70.
+- Matches E15/E20 on the old `_K50k` subsets (fine-tuned from σ 0: 1.23-1.34 at seed 1234), now on random-draw data
+  and a held-out seed.
+- Starting policies at seed 4321, all 205 `ambient_ta_r` runs (best_val; mean over hands of 3-seed means): σ0 0.44,
+  σ1-6 0.70-0.73, σ9 0.82, σ12 0.86, σ15 0.86, σ18 0.81, σ20 0.80, σ100 0.62 (seed 1234: 0.42, 0.68-0.69, 0.85, 0.82,
+  0.84, 0.80, 0.80, 0.63). Choosing σ 15 on seed 1234 did not overfit those starts.
+
+![E21: fine-tuning from sigma 0 / 15 / 100 starting policies, per hand, seed 4321](plots/finetune_sources_rotation_target_avg_successes_before_drop.png)
+
+**Takeaways.**
+- **For a fine-tuned target, start from full co-training, not from ambient gating.** Ambient gating (σ 15) is the
+  best *non-fine-tuned* policy, but fine-tuning adds only +0.04 to it, against +0.73 from σ 0. Ten more target-only
+  epochs from σ 100 add +0.09, so σ 0's gain is not just extra training.
+- A reading, not tested: co-training at all noise levels makes the network learn the shared rotation skill at the
+  low-noise end, where the target is weak, and fine-tuning then adapts it to the target. Gating the other hands to
+  t ≥ 15 keeps the low-noise end target-only, so there is less to transfer.
+- Pending: seed-1234 fine-tune rows (comparison with E20) and forgetting on the other four hands
+  (`cross_eval.jsonl`, fine-tunes and their sources, seed 4321).
+
+**Links.** RUNS: E21 row, idev c639-092 row · Agent log: [A43](agent_log_book.md#a43), [A44](agent_log_book.md#a44)
+· CHANGES: items 74-76
 
 ---
 

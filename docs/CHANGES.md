@@ -10,6 +10,18 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
 
 ---
 
+## 2026-10-08 — E21 figure
+
+### 76. `scripts/plot_finetune_sources.py` (NEW)
+
+- Per target hand (plus a mean-over-hands panel), x = source σ (default 0, 15, 100): the starting policy (E19 run,
+  best_val) and the same policy after target-only fine-tuning (`--ft-which`, default last0), seeds as dots, seed means
+  joined. `--what target` reads `final_eval.jsonl` (own hand); `--what others` reads `cross_eval.jsonl` and averages
+  the four other hands (forgetting; needs all four). `--eval-seed` default 4321, `--metric` any rotation metric.
+  Writes `<prefix>_<what>_<metric>.png` + `<prefix>_<what>_summary.csv`. Colours: reference categorical slots 1-2.
+
+---
+
 ## 2026-10-07 — fine-tunes from ambient runs (E21)
 
 ### 75. `vista_eval_checkpoints.sbatch`: ":" separates items in `RUNS` and `WHICH`
