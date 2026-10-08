@@ -40,6 +40,9 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
   [E19](experiment_log_book.md#e19) (σ 9–20 plateau, 3 seeds), [E20](experiment_log_book.md#e20) (regime box plots).
 - **Queued 2026-10-07 14:56:** E21 fine-tunes `1056188` (45 runs) and `ev-base4321` `1056189`; the other 4 evals go
   in with `bash slurm_jobs/submit_e21_evals_rest.sh` (login node) ([A43](#a43), RUNS E21 row).
+- **2026-10-08 status:** training `1056188` and `ev-base4321` `1056189` done (45/45 fine-tunes; 205/205 E18+E19 runs
+  scored at seed 4321). Seed-4321 σ curve (mean over hands of 3-seed means) matches seed 1234: σ0 0.44, σ1–6
+  0.70–0.73, σ9 0.82, σ12 0.86, σ15 0.86, σ18 0.81, σ20 0.80, σ100 0.62. The 4 remaining evals are still queued.
 - **Resume E21 here (next session):**
   1. `sacct -u $USER -S 2026-10-07T14:50 -X -o JobID%16,JobName%14,State,Elapsed`: `1056188` (ft-amb-r),
      `1056189` (ev-base4321), `1056925` (ev-basex), `1056926` (ev-ft1234), `1056927` (ev-ft4321) should be COMPLETED;
