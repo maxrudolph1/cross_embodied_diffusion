@@ -10,6 +10,7 @@
 #       --seeds 0 1 2 --lrs 1e-5 --size 50kr --src-root outputs/diffusion/loo_r --root outputs/diffusion/loo_r_ft \
 #       --out slurm_jobs/loo_finetune_manifest.json
 #   bash slurm_jobs/submit_e22_loo.sh            # DRY=1 prints the sbatch lines only
+#   PRE_ID=1060945 bash slurm_jobs/submit_e22_loo.sh   # pre-train already queued (2026-10-09): submit the rest
 #
 # Jobs (12 queue slots, peak 15 nodes). Evals ~5.8 min each at 4 per GH200 (ev-base4321, 2026-10-08):
 #   pre      15 pre-trains, PACK=1, 3 x 5-node jobs, ~6.7-7.0 h (as 1049683), limit 9:00
@@ -31,14 +32,23 @@ FT=diffusion/loo_r_ft/*
 sub() {  # sub <name> <sbatch args...>; echoes the job id
   if [[ -n "${DRY:-}" ]]; then echo "sbatch --parsable ${*:2}" >&2; echo "DRY_$1"; return; fi
   shift
-  sbatch --parsable "$@"
+  # TACC's sbatch wrapper prints a banner (lines of dashes, project info) on stdout as well, so keep only the
+  # numeric job-id line; fail loudly if there is none (CHANGES.md item 78).
+  local out id
+  out=$(sbatch --parsable "$@") || { echo "$out" >&2; return 1; }
+  id=$(grep -oE '^[0-9]+' <<< "$out" | tail -1)
+  [[ -n "$id" ]] || { echo "no job id in sbatch output:" >&2; echo "$out" >&2; return 1; }
+  echo "$id"
 }
 
 for m in loo_pretrain loo_finetune; do
   [[ -f slurm_jobs/${m}_manifest.json ]] || { echo "build slurm_jobs/${m}_manifest.json first (see header)" >&2; exit 1; }
 done
+# PRE_ID=<job id> reuses an already-queued pre-train job instead of submitting it again.
+if [[ -n "${PRE_ID:-}" ]]; then P=$PRE_ID; else
 P=$(sub pre "${A[@]}" -N 5 --array=0-2 -t 09:00:00 --job-name=loo-pre \
   --export=ALL,MANIFEST=slurm_jobs/loo_pretrain_manifest.json,PACK=1 slurm_jobs/vista_train_manifest.sbatch)
+fi
 F=$(sub ft "${A[@]}" -N 5 --array=0-2 -t 02:30:00 --job-name=loo-ft --dependency=afterany:$P \
   --export=ALL,MANIFEST=slurm_jobs/loo_finetune_manifest.json,PACK=1 slurm_jobs/vista_train_manifest.sbatch)
 E1=$(sub evpre "${A[@]}" --array=0 -t 01:00:00 --job-name=ev-loopre --dependency=afterany:$P \

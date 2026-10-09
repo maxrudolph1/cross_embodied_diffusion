@@ -28,7 +28,11 @@ EVAL=slurm_jobs/vista_eval_checkpoints.sbatch
 sub() {  # sub <name> <sbatch args...>; echoes the job id
   if [[ -n "${DRY:-}" ]]; then echo "sbatch --parsable $*" >&2; echo "DRY_$1"; return; fi
   shift
-  sbatch --parsable "$@"
+  local out id  # TACC's sbatch also prints a banner on stdout: keep the job-id line (CHANGES.md item 78)
+  out=$(sbatch --parsable "$@") || { echo "$out" >&2; return 1; }
+  id=$(grep -oE '^[0-9]+' <<< "$out" | tail -1)
+  [[ -n "$id" ]] || { echo "no job id in sbatch output:" >&2; echo "$out" >&2; return 1; }
+  echo "$id"
 }
 
 [[ -f slurm_jobs/finetune_r_manifest.json ]] || { echo "build the manifest first (see header)" >&2; exit 1; }

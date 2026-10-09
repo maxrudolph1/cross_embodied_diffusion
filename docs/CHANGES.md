@@ -12,6 +12,17 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
 
 ## 2026-10-09 — leave-one-out pre-training (E22)
 
+### 78. Submit scripts: parse the job id out of TACC's sbatch banner
+
+- On Vista login nodes `sbatch --parsable` also prints a banner (lines of dashes) on stdout, so `X=$(sbatch
+  --parsable ...)` captured the banner and the next `--dependency=afterany:$X` failed with `sbatch: unrecognized
+  option '-----...'`. `sub()` in `slurm_jobs/submit_e22_loo.sh` and `submit_e21_finetune.sh` now keeps the last line
+  that starts with digits and fails loudly if there is none. `submit_e22_loo.sh` takes `PRE_ID=<id>` to reuse a
+  queued pre-train job.
+- **Correction to item 75:** the E21 failures (`ev-basex` in the first script, `ev-ftx` in `submit_e21_evals_rest.sh`)
+  were this banner, not spaces in `--export`: each was the first line using a captured id. Item 75's ":" separator is
+  harmless and stays.
+
 ### 77. `build_ambient_manifest.py --leave-one-out`; `build_finetune_manifest.py --src-tag`; `submit_e22_loo.sh` (NEW)
 
 - `scripts/build_ambient_manifest.py`: `--leave-one-out` gives `--ambient-tmin` 100 for the target and 0 for the
