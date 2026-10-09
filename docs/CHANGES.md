@@ -10,6 +10,18 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
 
 ---
 
+## 2026-10-09 — grasp ambient sweep (E23)
+
+### 80. `build_chain_manifest.py` without `--ft`; `submit_e23_grasp_sweep.sh` (NEW)
+
+- `scripts/build_chain_manifest.py`: `--ft` is optional. Without it each run becomes a chain train → (`--which`,
+  default best_val, on its own task at `--seed-select` 1234 ‖ `--seed-test` 4321). With `--ft` the output is
+  unchanged (E22 chain manifest regenerates byte-identically).
+- `slurm_jobs/submit_e23_grasp_sweep.sh` (NEW): the 75-run grasp sweep as 5 x 15-node jobs. No change to the
+  data tools: `subsample_dataset.py` and `padded_grid.py` already handle Grasp `50kr`.
+
+---
+
 ## 2026-10-09 — leave-one-out pre-training (E22)
 
 ### 79. Chained manifest tasks: `run_manifest_task.py` chains, `build_chain_manifest.py` (NEW), staging walk

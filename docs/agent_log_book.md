@@ -46,6 +46,8 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 - **E21 done** (2026-10-09): fine-tuned from σ 0 1.17 vs σ 15 0.90 vs σ 100 0.71 at held-out seed 4321 (1234
   agrees); σ 0's fine-tune forgets the other hands (1.37 → 0.26 at last0, 0.87 at best_val). Why σ 15 gains little
   (target sample share) and three proposed follow-ups are in [E21](experiment_log_book.md#e21).
+- **E23 ready (user, login node):** grasp σ sweep, `bash slurm_jobs/submit_e23_grasp_sweep.sh` (75 runs, 5 x 15
+  nodes, 9:00) ([A46](#a46), RUNS E23 row).
 - **E22 queued 2026-10-09:** `1060968` (loo-chain, 3 x 5 nodes, 12:00), each node pre-train → fine-tune → evals
   (~9.5 h once started). `1060945` cancelled. When done: check `task_1060968_*.err` for chain failures, count
   `selection.json` in `loo_r/` and `loo_r_ft/` (15 each) and the eval rows, then write E22 (compare with E21 σ 0)
@@ -104,6 +106,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A46](#a46) | 2026-10-09 | Built random-draw grasp 50k targets and pools, checked them against the frozen grasp normalizer, set up the E23 grasp σ sweep (75 runs). |
 | [A45](#a45) | 2026-10-09 | Finished E21 (forgetting, seed 1234, why σ 15 fine-tunes gain little); set up E22 leave-one-out pre-train + fine-tune (15 + 15 runs). |
 | [A44](#a44) | 2026-10-08 | Switched to working on `main`; ran the E21 evals on idev c639-092; E21 target results: fine-tuning from σ 0 beats σ 15. |
 | [A43](#a43) | 2026-10-07 | Set up E21: fine-tunes from the E19 σ 0/15/100 runs (45 runs), test-seed 4321 and forgetting evals, one submit script. |
@@ -153,6 +156,31 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a46"></a>
+### A46 — 2026-10-09 — Grasp 50kr data and the E23 sweep set up
+
+**Request.** Reproduce the ambient sweeps for grasp: full pools (4M sources + 50k target), σ 0–100 step 10, with
+normalization identical to rotation; discuss the plan first. Agreed: random-draw `50kr` targets, 1 seed, σ 0/100
+with 3 seeds (75 runs; I first miscounted this as 65).
+
+**Done.**
+- Built `subsets_50kr/Grasp-*` (draw seed 0) and `padded_ta/Grasp_pad5_scarce*_K50kr` on idev c639-092
+  (logs `slurm_jobs/vista_train_manifest/logs/build_grasp_50kr/`). Checks: random draw (3/100 episodes from the source's
+  first 100), `check_padded_dataset.py --rows 1000` OK ×5, target 1.23%, full pass of every pool inside the frozen
+  `norm_grasp_minmax.json` range (0 violations), the normalizer built like rotation's (same script, five 1M stores)
+  with 0 in every range.
+- CHANGES 80 (evals-only chains), manifests `slurm_jobs/grasp_sweep{,_s0,_s12,_chain}_manifest.json` (75 runs;
+  recipe identical to E19 apart from family-specific keys), `slurm_jobs/submit_e23_grasp_sweep.sh`, dry run of the
+  last slot.
+- A background wait on the pool builds matched its own command line (`pgrep -f`) and never returned; stopped it.
+
+**Verified / not verified.** Verified as above. Not verified: a chained job running on compute nodes (E22 will
+show it first).
+
+**Pointers.** RUNS: E23 row · CHANGES 80 · COLLECTIONS grasp `50kr` · Experiments: [E23](experiment_log_book.md#e23)
+
+---
 
 <a id="a45"></a>
 ### A45 — 2026-10-09 — E22 leave-one-out set up

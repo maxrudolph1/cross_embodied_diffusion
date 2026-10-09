@@ -37,6 +37,7 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 | # | Date | Finding |
 |---|---|---|
+| [E23](#e23) | 2026-10-09 | *Planned:* grasp ambient σ sweep (0–100 step 10) on random-draw 50k targets, to compare with rotation E18/E19. |
 | [E22](#e22) | 2026-10-09 | *Planned:* leave-one-out pre-training (other 4 hands only, no target data), then fine-tuning on each target, 3 seeds. |
 | [E21](#e21) | 2026-10-08 | Fine-tuning from full co-training (σ 0) beats fine-tuning from the best ambient runs (σ 15): 1.17 vs 0.90 successes before drop at held-out seed 4321 (target-only start: 0.71). Ambient gating gives the best policy *before* fine-tuning (0.86) but gains almost nothing from it. The σ curve replicates at seed 4321. |
 | [E20](#e20) | 2026-10-07 | Per target and metric, co-train-then-fine-tune is best (mean 1.23 successes before drop vs 0.75 pooled ambient, 0.63 target-only, 0.42 full co-training; 3 seeds); full co-training is worst for 4 of 5 hands. |
@@ -80,6 +81,34 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 ---
 
 ## Entries
+
+<a id="e23"></a>
+### E23 — 2026-10-09 — Grasp ambient σ sweep, random-draw targets (planned)
+
+**Question.** Does ambient gating help a scarce (50k) grasp target the way it helps rotation (E18/E19: plateau at σ
+9–20)? Bundle reported grasp hurt monotonically by gating; the term-aligned co-training result for grasp (E14) was
++0.38..+0.44 over target-only on the old first-episode subsets, which E17 showed memorize.
+**Status.** set up, not submitted (RUNS "E23" row).
+
+**Data.** New random-draw grasp targets (`subsets_50kr/Grasp-<Hand>_expert_50kr.zarr`, draw seed 0, 100 episodes,
+49.8–50.0k steps) pooled with the other four hands at 1M (`padded_ta/Grasp_pad5_scarce<Hand>_K50kr.zarr`, 4.05M
+windows, target 1.23%). COLLECTIONS. **Normalization:** identical procedure to rotation: one frozen family min/max
+(`configs/norm_grasp_minmax.json`, `build_family_normalizer.py` over the five 1M stores, term-aligned obs 191 /
+action 28), 0 inside every range; a full pass over all five pools found no value outside it. Four `keypoint_pos_rel`
+columns are constant (≈ −3e-7) in every hand; the normalizer widens them by 1e-6 as for any zero-width column (as in
+E14). Val: `val/grasp_val_20k.zarr` (env seed 1000).
+
+**Policy inputs/outputs.** Term-aligned padded grasp obs (191) → action chunk (28 wide, horizon 8), obs horizon 2.
+
+**Protocol.** E19 recipe (lr 1e-4, 49–50 epochs ≈ 784k steps, noise-first, target gate 0, others σ): σ 0, 10, …, 100 ×
+seed 0, plus σ 0 and 100 × seeds 1, 2 (75 runs, `ambient_ta_gr/`). Each run's best_val scored at 100 envs × 1500
+steps, eval seeds 1234 and 4321 (first episode per env; grasp success rate), in the same job.
+
+**Results.** Pending.
+
+**Links.** RUNS: E23 row · Agent log: [A46](agent_log_book.md#a46) · CHANGES: item 80 · COLLECTIONS: grasp `50kr`
+
+---
 
 <a id="e22"></a>
 ### E22 — 2026-10-09 — Leave-one-out pre-training, then target fine-tuning (planned)

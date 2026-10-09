@@ -11,10 +11,17 @@ it, with the reporting evals, as one manifest task (a `{"chain": [...]}` item, r
      last0), and on the other hands at --seed-test (best_val, last0; one process each)
 
 All evals are 100 envs x 1500 steps (rescore_selected.py / eval_cross_embodiment.py, resumable). One task per
-node (PACK=1). E22:
+node (PACK=1).
+
+Without --ft (item 80): each run is chained with its own evals only: train, then --which (default best_val)
+on its own task at --seed-select and --seed-test in parallel. E23 (grasp sweep).
+
+E22:
 
   python scripts/build_chain_manifest.py --pre slurm_jobs/loo_pretrain_manifest.json \\
       --ft slurm_jobs/loo_finetune_manifest.json --out slurm_jobs/loo_chain_manifest.json
+  python scripts/build_chain_manifest.py --pre slurm_jobs/grasp_sweep_manifest.json \\
+      --out slurm_jobs/grasp_sweep_chain_manifest.json
 """
 
 from __future__ import annotations
@@ -37,13 +44,21 @@ def cross(run: str, which: list[str], seed: int) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--pre", type=Path, required=True)
-    ap.add_argument("--ft", type=Path, required=True)
+    ap.add_argument("--ft", type=Path, default=None, help="fine-tune manifest; omit to chain evals only")
+    ap.add_argument("--which", nargs="+", default=["best_val"], help="checkpoints scored when --ft is omitted")
     ap.add_argument("--seed-test", type=int, default=4321)
     ap.add_argument("--seed-select", type=int, default=1234)
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
 
     pre = [r for task in json.loads(args.pre.read_text()) for r in task]
+    if args.ft is None:
+        tasks = [[{"chain": [p, {"parallel": [rescore(p["output-dir"], args.which, args.seed_select),
+                                              rescore(p["output-dir"], args.which, args.seed_test)]}]}]
+                 for p in pre]
+        args.out.write_text(json.dumps(tasks, indent=1) + "\n")
+        print(f"[INFO] wrote {len(tasks)} train+eval chains -> {args.out}")
+        return
     ft = {str(Path(r["init-checkpoint"]).parent): r for task in json.loads(args.ft.read_text()) for r in task}
     tasks = []
     for p in pre:
