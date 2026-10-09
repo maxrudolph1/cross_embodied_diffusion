@@ -143,7 +143,7 @@ fine-tuned = `last0` (the reporting checkpoint, MIGRATION section 7):
   t, then a window uniformly among the windows admitted at t, so each hand's share follows its size: the target is
   1.26% of the ~3.95M-window pool. Target share of training samples: σ 0 1.3% at every t (2.5M target draws over
   the 786k-step run); σ 15 100% at t < 15 and 1.3% above (32.4M); σ 100 100% (201M). The fine-tune (154k steps, all
-  target) adds 39.5M: 15.5× what the σ 0 run had saw, 1.2× for σ 15, 0.2× for σ 100. The σ 15 run's low-noise steps
+  target) adds 39.5M: 15.5× what the σ 0 run saw, 1.2× for σ 15, 0.2× for σ 100. The σ 15 run's low-noise steps
   were already trained on the target only (~650 passes over 50k), so the fine-tune mostly repeats them. σ 0 is
   pre-trained on 4M windows at every t and then adapted. Proposed tests: target-weighted co-training (25-50% of each
   batch), fine-tuning σ 15 at t ≥ 15 only, gating at σ 1-3 before fine-tuning.
