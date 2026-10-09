@@ -43,23 +43,9 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 - **2026-10-08 status:** training `1056188` and `ev-base4321` `1056189` done (45/45 fine-tunes; 205/205 E18+E19 runs
   scored at seed 4321). Seed-4321 σ curve (mean over hands of 3-seed means) matches seed 1234: σ0 0.44, σ1–6
   0.70–0.73, σ9 0.82, σ12 0.86, σ15 0.86, σ18 0.81, σ20 0.80, σ100 0.62. The 4 remaining evals are still queued.
-- **E21 target results are in** (2026-10-08, seed 4321): fine-tuned from σ 0 1.17, σ 15 0.90, σ 100 0.71
-  ([E21](experiment_log_book.md#e21)). Remaining evals run on idev c639-092 (`rescore_e21/p*.log`); when they finish,
-  add seed-1234 numbers and the forgetting figure (`plot_finetune_sources.py --what others`, and `--what others
-  --ft-which best_val`), then fill E21's pending bullet.
-- **Resume E21 here (next session):**
-  1. `sacct -u $USER -S 2026-10-07T14:50 -X -o JobID%16,JobName%14,State,Elapsed`: `1056188` (ft-amb-r),
-     `1056189` (ev-base4321), `1056925` (ev-basex), `1056926` (ev-ft1234), `1056927` (ev-ft4321) should be COMPLETED;
-     and `1056932` (ev-ftx, resubmitted on its own after the script missed it). If `ev-basex`/`ev-ft1234`/`ev-ft4321`/`ev-ftx` are absent, the
-     user never ran `submit_e21_evals_rest.sh`: drop its `--dependency` flags for finished jobs and have them submit.
-     Record all IDs in the RUNS E21 row.
-  2. Check `ls $SCRATCH/cross_embodied_diffusion/outputs/diffusion/ambient_ta_r_ft/*/selection.json | wc -l` = 45;
-     timed-out evals are resumable (resubmit the same line).
-  3. Plots: `plot_condition_boxes.py` needs `FT_RE` to accept `<Task>_sigma<S>_ft_*` (hand = group 2 without
-     `_sigma<S>`), a source-σ grouping (fine-tuned from σ 0 / 15 / 100), and `--eval-seed` (seed 4321 is the
-     reported test seed; the plotters filter to 1234 since CHANGES 74). Add a seed-4321 version of the σ curve
-     (`plot_ambient_sigma.py`, all 150 E19 runs) and a forgetting figure from `cross_eval.jsonl` (other 4 hands).
-  4. Write E21 results, update E20/AGENTS standing findings, RUNS statuses, A-entry; push and fast-forward `main`. Afterwards, extend
+- **E21 done** (2026-10-09): fine-tuned from σ 0 1.17 vs σ 15 0.90 vs σ 100 0.71 at held-out seed 4321 (1234
+  agrees); σ 0's fine-tune forgets the other hands (1.37 → 0.26 at last0, 0.87 at best_val). Why σ 15 gains little
+  (target sample share) and three proposed follow-ups are in [E21](experiment_log_book.md#e21). Nothing running.
   `plot_condition_boxes.py` for the `<Task>_sigma<S>_ft_*` names and the seed-4321 rows.
 - Earlier finished jobs: `1049683` (rotation ambient σ sweep, 55 runs), has
   finished and been re-scored: [E18](experiment_log_book.md#e18). Earlier: `1043385` / `1045839`
@@ -178,8 +164,16 @@ waiting for the queued eval jobs.
   `docs/plots/`; E21 results written.
 - Branch: now `main` (Current state).
 
-**Verified / not verified.** Verified: every fine-tune has best_rollout/best_val/last0 rows at seed 4321; figure
-inspected. Not yet: seed-1234 rows and the forgetting evals (still running; ~05:30 on 10-09 at the measured rate).
+- The user asked why fine-tuning the better (σ 15) models does not help. Checked: fine-tune configs identical across σ
+  (same store, gate [target 0, others 100], lr 1e-5, 10 epochs, init = source `policy_best_val.pt`, weights +
+  normalizer copied, fresh AdamW, no EMA in the code). Explanation from the sampler (`AmbientNoiseFirstBatchSampler`):
+  target share of samples 1.3% (σ 0) / 16.1% (σ 15, all of it at t < 15) / 100% (σ 100), so the fine-tune is 15.5×
+  new target data for σ 0 but 1.2× for σ 15 (E21).
+- All evals finished 2026-10-09 00:18 (idev + the batch jobs that started overnight); forgetting figure and seed-1234
+  numbers added to E21.
+
+**Verified / not verified.** Verified: every expected row present (0 missing across 4 eval kinds); figures
+inspected. Not verified: the sample-share explanation (no ablation run).
 
 **Pointers.** RUNS: E21 row, idev c639-092 row · CHANGES 76 · Experiments: [E21](experiment_log_book.md#e21)
 

@@ -86,8 +86,9 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 **Question.** Does starting the target-only fine-tune from the best ambient run (σ 15) beat starting from full
 co-training (σ 0, the E15 recipe) or from target-only training (σ 100, i.e. 10 more target epochs)? Does the gain hold
 on start states not used to choose σ or checkpoints, and how much do the other hands forget?
-**Status.** target results at seed 4321 done (2026-10-08 14:07). Seed-1234 rows and the forgetting evals
-(other hands) are still running on idev c639-092 (RUNS).
+**Status.** done (2026-10-09 00:18): every fine-tune scored on its own hand at seeds 4321 and 1234
+(best_rollout, best_val, last0) and on the four other hands at 4321 (best_val, last0); sources on the other hands at
+4321 (best_val).
 
 **Data.** Target 50k random draw (`padded_ta/InHand-Rotation_pad5_scarce<Hand>_K50kr.zarr`, [E18](#e18)); sources are
 [E19](#e19)'s runs on the same stores.
@@ -138,8 +139,38 @@ fine-tuned = `last0` (the reporting checkpoint, MIGRATION section 7):
 - A reading, not tested: co-training at all noise levels makes the network learn the shared rotation skill at the
   low-noise end, where the target is weak, and fine-tuning then adapts it to the target. Gating the other hands to
   t ≥ 15 keeps the low-noise end target-only, so there is less to transfer.
-- Pending: seed-1234 fine-tune rows (comparison with E20) and forgetting on the other four hands
-  (`cross_eval.jsonl`, fine-tunes and their sources, seed 4321).
+- **Why σ 15 gains so little (sample count, from the sampler code; not an ablation).** The noise-first sampler draws
+  t, then a window uniformly among the windows admitted at t, so each hand's share follows its size: the target is
+  1.26% of the ~3.95M-window pool. Target share of training samples: σ 0 1.3% at every t (2.5M target draws over
+  the 786k-step run); σ 15 100% at t < 15 and 1.3% above (32.4M); σ 100 100% (201M). The fine-tune (154k steps, all
+  target) adds 39.5M: 15.5× what the σ 0 run had saw, 1.2× for σ 15, 0.2× for σ 100. The σ 15 run's low-noise steps
+  were already trained on the target only (~650 passes over 50k), so the fine-tune mostly repeats them. σ 0 is
+  pre-trained on 4M windows at every t and then adapted. Proposed tests: target-weighted co-training (25-50% of each
+  batch), fine-tuning σ 15 at t ≥ 15 only, gating at σ 1-3 before fine-tuning.
+
+**Results (seed 1234, own hand, last0; comparable with E20).** Mean start → fine-tuned: σ 0 0.42 → 1.16, σ 15
+0.84 → 0.93, σ 100 0.63 → 0.69; per hand σ 0 fine-tuned is best for every hand (Allegro 1.45, LEAP 1.33, Shadow 0.73,
+Sharpa 1.01, Wuji 1.29). Same picture as seed 4321.
+
+**Results (forgetting: mean over the four other hands, seed 4321).**
+
+| Target | σ 0: start → last0 (best_val) | σ 15: start → last0 | σ 100: start → last0 |
+|---|---|---|---|
+| Allegro | 1.26 → 0.06 (0.61) | 0.05 → 0.00 | 0.00 → 0.00 |
+| LEAP | 1.30 → 0.29 (1.10) | 0.08 → 0.01 | 0.00 → 0.00 |
+| Shadow | 1.48 → 0.17 (1.12) | 0.36 → 0.06 | 0.00 → 0.00 |
+| Sharpa | 1.46 → 0.67 (0.98) | 0.07 → 0.05 | 0.00 → 0.00 |
+| Wuji | 1.36 → 0.09 (0.52) | 0.09 → 0.00 | 0.00 → 0.00 |
+| **Mean** | 1.37 → **0.26** (0.87) | 0.13 → 0.02 | 0.00 → 0.00 |
+
+![E21: forgetting on the four other hands, seed 4321](plots/finetune_sources_rotation_others_avg_successes_before_drop.png)
+
+- Only the σ 0 policy is a generalist to start with (1.37 on the other hands, more than on its own 50k target).
+  σ 15 sources already fail the other hands (0.13): a hand trained only at t ≥ 15 does not work, as in E12.
+- 10 epochs of target-only fine-tuning at lr 1e-5 remove most of it (`last0` 0.26). The fine-tune's `best_val`
+  checkpoint, picked at epochs 1-5 (σ 0 fine-tunes: 1,1,1,2,2,2,3,4,4,4,5,5,5,5,8), keeps 0.87 on the other hands
+  with 1.04 on the target (vs 1.17 at last0): a shorter fine-tune is a target/generality trade-off point.
+  E16 saw the same on the old subsets (rotation 0.25 at lr 1e-5).
 
 **Links.** RUNS: E21 row, idev c639-092 row · Agent log: [A43](agent_log_book.md#a43), [A44](agent_log_book.md#a44)
 · CHANGES: items 74-76
