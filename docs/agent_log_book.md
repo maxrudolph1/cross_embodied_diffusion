@@ -46,8 +46,10 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 - **E21 done** (2026-10-09): fine-tuned from σ 0 1.17 vs σ 15 0.90 vs σ 100 0.71 at held-out seed 4321 (1234
   agrees); σ 0's fine-tune forgets the other hands (1.37 → 0.26 at last0, 0.87 at best_val). Why σ 15 gains little
   (target sample share) and three proposed follow-ups are in [E21](experiment_log_book.md#e21).
-- **E22 ready (user, login node):** `scancel 1060945; bash slurm_jobs/submit_e22_loo.sh`: one chained job, each
-  node pre-train → fine-tune → evals ([A45](#a45), RUNS E22 row, CHANGES 79).
+- **E22 queued 2026-10-09:** `1060968` (loo-chain, 3 x 5 nodes, 12:00), each node pre-train → fine-tune → evals
+  (~9.5 h once started). `1060945` cancelled. When done: check `task_1060968_*.err` for chain failures, count
+  `selection.json` in `loo_r/` and `loo_r_ft/` (15 each) and the eval rows, then write E22 (compare with E21 σ 0)
+  ([A45](#a45), RUNS E22 row, CHANGES 79).
   `plot_condition_boxes.py` for the `<Task>_sigma<S>_ft_*` names and the seed-4321 rows.
 - Earlier finished jobs: `1049683` (rotation ambient σ sweep, 55 runs), has
   finished and been re-scored: [E18](experiment_log_book.md#e18). Earlier: `1043385` / `1045839`
