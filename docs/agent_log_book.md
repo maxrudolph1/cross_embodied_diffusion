@@ -45,7 +45,9 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
   0.70–0.73, σ9 0.82, σ12 0.86, σ15 0.86, σ18 0.81, σ20 0.80, σ100 0.62. The 4 remaining evals are still queued.
 - **E21 done** (2026-10-09): fine-tuned from σ 0 1.17 vs σ 15 0.90 vs σ 100 0.71 at held-out seed 4321 (1234
   agrees); σ 0's fine-tune forgets the other hands (1.37 → 0.26 at last0, 0.87 at best_val). Why σ 15 gains little
-  (target sample share) and three proposed follow-ups are in [E21](experiment_log_book.md#e21). Nothing running.
+  (target sample share) and three proposed follow-ups are in [E21](experiment_log_book.md#e21).
+- **E22 ready to submit (user, login node):** leave-one-out pre-train + fine-tune, `bash slurm_jobs/submit_e22_loo.sh`
+  ([A45](#a45), RUNS E22 row).
   `plot_condition_boxes.py` for the `<Task>_sigma<S>_ft_*` names and the seed-4321 rows.
 - Earlier finished jobs: `1049683` (rotation ambient σ sweep, 55 runs), has
   finished and been re-scored: [E18](experiment_log_book.md#e18). Earlier: `1043385` / `1045839`
@@ -100,6 +102,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A45](#a45) | 2026-10-09 | Finished E21 (forgetting, seed 1234, why σ 15 fine-tunes gain little); set up E22 leave-one-out pre-train + fine-tune (15 + 15 runs). |
 | [A44](#a44) | 2026-10-08 | Switched to working on `main`; ran the E21 evals on idev c639-092; E21 target results: fine-tuning from σ 0 beats σ 15. |
 | [A43](#a43) | 2026-10-07 | Set up E21: fine-tunes from the E19 σ 0/15/100 runs (45 runs), test-seed 4321 and forgetting evals, one submit script. |
 | [A42](#a42) | 2026-10-07 | Scored and plotted the 150-run fine-grid sweep (σ 9–20 plateau, 3 seeds), audited how data/eval seeds are chosen, and discussed fine-tuning from the best ambient runs. |
@@ -148,6 +151,28 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a45"></a>
+### A45 — 2026-10-09 — E22 leave-one-out set up
+
+**Request.** Co-train WITHOUT the target embodiment's data, then fine-tune on each hand, 3 seeds. The user chose
+leave-one-out (a separate pre-train per target: 15 pre-trains, 15 fine-tunes) over a pre-train shared by all targets.
+
+**Done.**
+- CHANGES 77: `build_ambient_manifest.py --leave-one-out` (target gated at 100 on the existing `_K50kr` stores, no new
+  data), `build_finetune_manifest.py --src-tag`, `slurm_jobs/submit_e22_loo.sh`. Old manifests regenerate identically
+  (E15, E21 byte-identical; E19 130/130 runs).
+- Fine-tune init `policy_latest.pt` (final epoch): `best_val` would select the pre-train checkpoint with target val
+  data.
+- Manifests `slurm_jobs/loo_{pretrain,finetune}_manifest.json` (15 each); pre-train slots dry-run; sampler unit check
+  (tmin-100 source never drawn).
+
+**Verified / not verified.** Verified as above. Not verified: a pre-train actually training (first job log), and
+that the fine-tune finds `policy_latest.pt` (written at the final epoch, as in E19 runs).
+
+**Pointers.** RUNS: E22 row · CHANGES 77 · Experiments: [E22](experiment_log_book.md#e22)
+
+---
 
 <a id="a44"></a>
 ### A44 — 2026-10-08 — E21 evals on the idev; first E21 results

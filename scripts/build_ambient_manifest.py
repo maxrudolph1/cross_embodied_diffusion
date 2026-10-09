@@ -18,6 +18,15 @@ target per job).
 
   python scripts/build_ambient_manifest.py --families Grasp InHand-Rotation \\
       --sigmas 0 100 --seeds 0 1 --out slurm_jobs/cotrain_vs_target_manifest.json
+
+--leave-one-out (CHANGES.md item 77): pre-train WITHOUT the target, i.e. --ambient-tmin 100 for the target and
+0 for the other four hands, so the noise-first sampler never draws a target window (same store, same step
+budget). Output <Task>_loo_seed<k>; --sigmas is ignored. The run still validates and evals on the target
+(zero-shot monitoring); fine-tune from policy_latest.pt (the final epoch), not best_val, so no target data
+picks the pre-train checkpoint. E22:
+
+  python scripts/build_ambient_manifest.py --families InHand-Rotation --leave-one-out --seeds 0 1 2 \\
+      --size 50kr --root outputs/diffusion/loo_r --out slurm_jobs/loo_pretrain_manifest.json
 """
 
 from __future__ import annotations
@@ -41,11 +50,13 @@ from padded_grid import (  # noqa: E402
 SHORT = {"Grasp": "grasp", "InHand-Rotation": "rotation"}
 
 
-def run(family: str, hand: str, sigma: int, seed: int, root: str, epochs: int, size: str = "50k") -> dict:
+def run(family: str, hand: str, sigma: int, seed: int, root: str, epochs: int, size: str = "50k",
+        loo: bool = False) -> dict:
     task = f"{family}-{hand}"
+    tmin = [100 if h == hand else 0 for h in HANDS] if loo else target_ambient_tmin(hand, sigma)
     return {
         "dataset": str(store_path(family, f"scarce{hand}_K{size}")),
-        "output-dir": f"{root}/{task}_sigma{sigma}_seed{seed}",
+        "output-dir": f"{root}/{task}_loo_seed{seed}" if loo else f"{root}/{task}_sigma{sigma}_seed{seed}",
         "num-epochs": epochs,
         "batch-size": 256,
         "lr": 1e-4,
@@ -53,7 +64,7 @@ def run(family: str, hand: str, sigma: int, seed: int, root: str, epochs: int, s
         "action-horizon": 8,
         "num-workers": 0,
         "seed": seed,
-        "ambient-tmin": target_ambient_tmin(hand, sigma),
+        "ambient-tmin": tmin,
         "ambient-sampler": "noise-first",
         "norm-mode": "frozen",
         "norm-artifact": f"configs/norm_{SHORT[family]}_minmax.json",
@@ -74,7 +85,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--families", nargs="+", default=["Grasp", "InHand-Rotation"])
     ap.add_argument("--hands", nargs="+", default=HANDS)
-    ap.add_argument("--sigmas", type=int, nargs="+", required=True)
+    ap.add_argument("--sigmas", type=int, nargs="+", default=[0])
+    ap.add_argument("--leave-one-out", action="store_true", help="exclude the target (tmin 100), others at 0")
     ap.add_argument("--seeds", type=int, nargs="+", required=True)
     ap.add_argument("--root", default="outputs/diffusion/ambient_ta")
     ap.add_argument("--size", default="50k",
@@ -88,7 +100,9 @@ def main() -> None:
             p = store_path(fam, cfg)
             w = n_windows(p) if p.exists() else sum(n_windows(s) for s in sources(fam, cfg))
             ep = epochs_for(w)
-            tasks += [[run(fam, hand, s, k, args.root, ep, args.size)] for s in args.sigmas for k in args.seeds]
+            sigmas = [0] if args.leave_one_out else args.sigmas
+            tasks += [[run(fam, hand, s, k, args.root, ep, args.size, args.leave_one_out)]
+                      for s in sigmas for k in args.seeds]
     args.out.write_text(json.dumps(tasks, indent=1) + "\n")
     print(f"[INFO] wrote {len(tasks)} runs -> {args.out}")
 

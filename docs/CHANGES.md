@@ -10,6 +10,21 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
 
 ---
 
+## 2026-10-09 — leave-one-out pre-training (E22)
+
+### 77. `build_ambient_manifest.py --leave-one-out`; `build_finetune_manifest.py --src-tag`; `submit_e22_loo.sh` (NEW)
+
+- `scripts/build_ambient_manifest.py`: `--leave-one-out` gives `--ambient-tmin` 100 for the target and 0 for the
+  other four hands on the target's pooled store (so the noise-first sampler never draws a target window; checked
+  with a unit draw of `AmbientNoiseFirstBatchSampler`: 0 of 7,936 draws), output `<Task>_loo_seed<k>`. `run()`
+  gained a `loo` argument; `--sigmas` now defaults to `[0]` and is ignored with `--leave-one-out`. Unchanged
+  otherwise: the E19 manifest regenerates identically (130/130 runs compared).
+- `scripts/build_finetune_manifest.py`: `--src-tag T` uses source runs `<Task>_<T>_seed<k>` and names the output
+  `<Task>_<T>_ft_<init>_lr<lr>_seed<k>`. The E15 and E21 manifests regenerate byte-identically.
+- `slurm_jobs/submit_e22_loo.sh` (NEW): pre-train, fine-tune and 5 eval arrays, chained with `afterany`.
+
+---
+
 ## 2026-10-08 — E21 figure
 
 ### 76. `scripts/plot_finetune_sources.py` (NEW)

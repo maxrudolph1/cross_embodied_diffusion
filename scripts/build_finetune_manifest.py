@@ -26,6 +26,13 @@ target store scarce<Hand>_K<size> the sources were trained on. E21:
       --src-sigmas 0 15 100 --seeds 0 1 2 --lrs 1e-5 --size 50kr \\
       --src-root outputs/diffusion/ambient_ta_r --root outputs/diffusion/ambient_ta_r_ft \\
       --out slurm_jobs/finetune_r_manifest.json
+
+--src-tag T (item 77) takes the source runs <Task>_<T>_seed<k> (e.g. loo: the leave-one-out pre-trains) and names
+the output <Task>_<T>_ft_<init>_lr<lr>_seed<k>; it replaces --src-sigmas. E22:
+
+  python scripts/build_finetune_manifest.py --families InHand-Rotation --src-tag loo --init policy_latest.pt \\
+      --seeds 0 1 2 --lrs 1e-5 --size 50kr --src-root outputs/diffusion/loo_r --root outputs/diffusion/loo_r_ft \\
+      --out slurm_jobs/loo_finetune_manifest.json
 """
 
 from __future__ import annotations
@@ -52,6 +59,7 @@ def main() -> None:
     ap.add_argument("--init", default="policy_best_val.pt", help="checkpoint file in each co-train run dir")
     ap.add_argument("--src-sigmas", type=int, nargs="+", default=None,
                     help="source runs' sigma (default 0, old output names); given -> sigma in the output name")
+    ap.add_argument("--src-tag", default=None, help="source runs <Task>_<tag>_seed<k> (e.g. loo); overrides --src-sigmas")
     ap.add_argument("--size", default="50k", help="target store scarce<Hand>_K<size> (50kr: random draw)")
     ap.add_argument("--src-root", default="outputs/diffusion/ambient_ta")
     ap.add_argument("--root", default="outputs/diffusion/ambient_ta_ft")
@@ -64,12 +72,16 @@ def main() -> None:
         for hand in args.hands:
             task = f"{fam}-{hand}"
             for seed in args.seeds:
-                for sigma in args.src_sigmas or [0]:
+                for sigma in [None] if args.src_tag else args.src_sigmas or [0]:
                     for lr in args.lrs:
-                        tag = f"_sigma{sigma}" if args.src_sigmas else ""
+                        if args.src_tag:
+                            tag, src = f"_{args.src_tag}", f"{task}_{args.src_tag}_seed{seed}"
+                        else:
+                            tag = f"_sigma{sigma}" if args.src_sigmas else ""
+                            src = f"{task}_sigma{sigma}_seed{seed}"
                         tasks.append([{
                             "dataset": str(store_path(fam, f"scarce{hand}_K{args.size}")),
-                            "init-checkpoint": f"{args.src_root}/{task}_sigma{sigma}_seed{seed}/{args.init}",
+                            "init-checkpoint": f"{args.src_root}/{src}/{args.init}",
                             "output-dir": f"{args.root}/{task}{tag}_ft_{init}_lr{lr:g}_seed{seed}",
                             "num-epochs": args.epochs,
                             "batch-size": 256,

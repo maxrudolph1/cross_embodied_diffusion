@@ -37,6 +37,7 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 | # | Date | Finding |
 |---|---|---|
+| [E22](#e22) | 2026-10-09 | *Planned:* leave-one-out pre-training (other 4 hands only, no target data), then fine-tuning on each target, 3 seeds. |
 | [E21](#e21) | 2026-10-08 | Fine-tuning from full co-training (σ 0) beats fine-tuning from the best ambient runs (σ 15): 1.17 vs 0.90 successes before drop at held-out seed 4321 (target-only start: 0.71). Ambient gating gives the best policy *before* fine-tuning (0.86) but gains almost nothing from it. The σ curve replicates at seed 4321. |
 | [E20](#e20) | 2026-10-07 | Per target and metric, co-train-then-fine-tune is best (mean 1.23 successes before drop vs 0.75 pooled ambient, 0.63 target-only, 0.42 full co-training; 3 seeds); full co-training is worst for 4 of 5 hands. |
 | [E19](#e19) | 2026-10-07 | With 3 seeds, rotation ambient gating peaks on a plateau at σ 9–20 (mean 0.80–0.85 vs 0.63 target-only, 0.42 co-training, consistent across seeds); the best σ is hand-specific (Allegro/LEAP/Shadow 2–6, Sharpa/Wuji ≥ 9–15), and σ 15 is the only setting at or above target-only for every hand. |
@@ -79,6 +80,36 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 ---
 
 ## Entries
+
+<a id="e22"></a>
+### E22 — 2026-10-09 — Leave-one-out pre-training, then target fine-tuning (planned)
+
+**Question.** How good is a policy pre-trained with no target-embodiment data at all, zero-shot on the target and
+after fine-tuning on the target's 50k? How does it compare with E21's σ 0 start (target 50k mixed in at 1.3%)?
+**Status.** set up, not submitted (RUNS "E22" row).
+
+**Data.** Each target's `_K50kr` pooled store ([E18](#e18)), with the target gated out (`--ambient-tmin` 100 for the
+target, 0 for the others): the pre-train sees the other four hands at 1M and no target window. Fine-tune: the
+target's 50k random draw only.
+
+**Policy inputs/outputs.** As [E14](#e14).
+
+**Protocol.**
+- Pre-train: E19 recipe (lr 1e-4, 50-51 epochs ≈ 784k steps, noise-first, frozen min/max), seeds 0-2: 15 runs
+  (`loo_r/<Task>_loo_seed<k>`). In-training val and eval are on the target (zero-shot monitoring only).
+- Fine-tune from the pre-train's final epoch (`policy_latest.pt` = last0), not best_val, so no target data
+  chooses the pre-train checkpoint. Target-only, lr 1e-5, 10 epochs, seed = pre-train seed: 15 runs
+  (`loo_r_ft/<Task>_loo_ft_latest_lr1e-05_seed<k>`). Same fine-tune recipe as [E21](#e21).
+- Reporting: 100 envs × 1500 steps. Pre-trains (last0): target zero-shot and the four training hands at seed 4321.
+  Fine-tunes: own hand at 4321 (reported) and 1234 (best_rollout, best_val, last0); the four other hands at 4321
+  (best_val, last0).
+- Comparison: E21's σ 0 fine-tunes (same targets, seeds, fine-tune recipe and eval).
+
+**Results.** Pending.
+
+**Links.** RUNS: E22 row · Agent log: [A45](agent_log_book.md#a45) · CHANGES: item 77
+
+---
 
 <a id="e21"></a>
 ### E21 — 2026-10-08 — Fine-tuning from ambient-gated runs
