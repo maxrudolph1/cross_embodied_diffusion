@@ -46,8 +46,8 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 - **E21 done** (2026-10-09): fine-tuned from σ 0 1.17 vs σ 15 0.90 vs σ 100 0.71 at held-out seed 4321 (1234
   agrees); σ 0's fine-tune forgets the other hands (1.37 → 0.26 at last0, 0.87 at best_val). Why σ 15 gains little
   (target sample share) and three proposed follow-ups are in [E21](experiment_log_book.md#e21).
-- **E23 ready (user, login node):** grasp σ sweep, `bash slurm_jobs/submit_e23_grasp_sweep.sh` (75 runs, 5 x 15
-  nodes, 9:00) ([A46](#a46), RUNS E23 row).
+- **E23 queued 2026-10-09:** grasp σ sweep `1061190` (75 runs, 5 x 15 nodes, 9:00; may be resubmitted as 15 x 5
+  nodes) ([A46](#a46), RUNS E23 row).
 - **E22 queued 2026-10-09:** `1060968` (loo-chain, 3 x 5 nodes, 12:00), each node pre-train → fine-tune → evals
   (~9.5 h once started). `1060945` cancelled. When done: check `task_1060968_*.err` for chain failures, count
   `selection.json` in `loo_r/` and `loo_r_ft/` (15 each) and the eval rows, then write E22 (compare with E21 σ 0)
@@ -173,6 +173,8 @@ with 3 seeds (75 runs; I first miscounted this as 65).
 - CHANGES 80 (evals-only chains), manifests `slurm_jobs/grasp_sweep{,_s0,_s12,_chain}_manifest.json` (75 runs;
   recipe identical to E19 apart from family-specific keys), `slurm_jobs/submit_e23_grasp_sweep.sh`, dry run of the
   last slot.
+- Submitted by the user as `1061190` (5 x 15 nodes). My reason for 15-node jobs counted 3 idevs against the `gh`
+  caps, but one is on `gg`, and the caps are per partition: 15 x 5-node jobs also fit (20 running).
 - A background wait on the pool builds matched its own command line (`pgrep -f`) and never returned; stopped it.
 
 **Verified / not verified.** Verified as above. Not verified: a chained job running on compute nodes (E22 will

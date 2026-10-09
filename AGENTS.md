@@ -108,7 +108,8 @@ The block above is for the original shared-node cluster. On Vista:
 **Limits and environment**
 
 - Partition `gh`: 1 GH200 per node, whole-node allocation (no `--gres`/`--mem`), 48 h max.
-  Per user: **40 submitted jobs, 20 running jobs, 96 running nodes, 64 nodes/job**. Every
+  Per user **and per partition** (count only `gh` jobs; idevs on `gg` do not count): **40 submitted jobs, 20
+  running jobs, 96 running nodes, 64 nodes/job**. Every
   array element counts as one job. Pass the project with `sbatch -A ASC26008` (the user writes
   it upper-case; Slurm shows `asc26008`).
 - `sbatch` (including `--test-only`) is disabled on compute nodes, idev included, and ssh to
