@@ -46,8 +46,10 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 - **E21 done** (2026-10-09): fine-tuned from σ 0 1.17 vs σ 15 0.90 vs σ 100 0.71 at held-out seed 4321 (1234
   agrees); σ 0's fine-tune forgets the other hands (1.37 → 0.26 at last0, 0.87 at best_val). Why σ 15 gains little
   (target sample share) and three proposed follow-ups are in [E21](experiment_log_book.md#e21).
-- **E23 queued 2026-10-09:** grasp σ sweep `1061190` (75 runs, 5 x 15 nodes, 9:00; may be resubmitted as 15 x 5
-  nodes) ([A46](#a46), RUNS E23 row).
+- **E23 queued 2026-10-09:** grasp σ sweep `1061197` (75 runs, 15 x 5 nodes, 9:00; `1061190` cancelled). When
+  done: check `task_1061197_*.err`, count `selection.json` in `ambient_ta_gr/` (75) and the best_val rows at seeds
+  1234 and 4321, then plot with `plot_ambient_sigma.py --family Grasp --runs .../ambient_ta_gr` (check it reads
+  Grasp `success_rate`) and write E23 against rotation E18/E19 ([A46](#a46), RUNS E23 row).
 - **E22 queued 2026-10-09:** `1060968` (loo-chain, 3 x 5 nodes, 12:00), each node pre-train → fine-tune → evals
   (~9.5 h once started). `1060945` cancelled. When done: check `task_1060968_*.err` for chain failures, count
   `selection.json` in `loo_r/` and `loo_r_ft/` (15 each) and the eval rows, then write E22 (compare with E21 σ 0)
@@ -174,7 +176,12 @@ with 3 seeds (75 runs; I first miscounted this as 65).
   recipe identical to E19 apart from family-specific keys), `slurm_jobs/submit_e23_grasp_sweep.sh`, dry run of the
   last slot.
 - Submitted by the user as `1061190` (5 x 15 nodes). My reason for 15-node jobs counted 3 idevs against the `gh`
-  caps, but one is on `gg`, and the caps are per partition: 15 x 5-node jobs also fit (20 running).
+  caps, but one is on `gg`, and the caps are per partition: 15 x 5-node jobs also fit (20 running). The user
+  cancelled it and resubmitted as `1061197` (15 x 5 nodes); the submit script now uses that shape.
+- E22 records: the first 7-job script had also queued `1060947` (loo-ft) and `1060948` (ev-loopre) before failing;
+  all cancelled. The banner breaks only captures from single-node jobs (CHANGES 78 corrected).
+- idev c639-092 (`1056187`, used for E21 evals and the grasp builds) ended 2026-10-09; the user queued another gh
+  idev, `1061362` (counts toward the gh caps).
 - A background wait on the pool builds matched its own command line (`pgrep -f`) and never returned; stopped it.
 
 **Verified / not verified.** Verified as above. Not verified: a chained job running on compute nodes (E22 will

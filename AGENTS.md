@@ -248,7 +248,8 @@ were wrong in different ways.
   hurt monotonically. Reproduced here for rotation (E18/E19, 3 training seeds on one
   random-draw 50k target set): mean successes 0.42 at sigma 0, a plateau of 0.80-0.85 at sigma 9-20,
   0.63 at 100, consistent across seeds. Best sigma is hand-specific (Allegro/LEAP/Shadow 2-6, Sharpa
-  >= 15, Wuji >= 9); sigma 15 is the only setting >= target-only for every hand. Grasp not yet swept. Robust in both: an embodiment trained
+  >= 15, Wuji >= 9); sigma 15 is the only setting >= target-only for every hand. Grasp sweep (E23, random-draw
+  targets) queued 2026-10-09, no results yet. Robust in both: an embodiment trained
   only on the coarse end of the schedule is completely non-functional (0.000; Vista
   2026-10-01: LEAP 1.8 at sigma 0 -> 0.00 at sigma 10).
 - Adversarial invariance training does not work on the Allegro/LEAP pair:

@@ -47,8 +47,12 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
   that starts with digits and fails loudly if there is none. `submit_e22_loo.sh` takes `PRE_ID=<id>` to reuse a
   queued pre-train job.
 - **Correction to item 75:** the E21 failures (`ev-basex` in the first script, `ev-ftx` in `submit_e21_evals_rest.sh`)
-  were this banner, not spaces in `--export`: each was the first line using a captured id. Item 75's ":" separator is
-  harmless and stays.
+  were this banner, not spaces in `--export`. The banner is not printed every time: ids captured from 5-node jobs
+  worked (E21 `TRAIN` -> ft1234/ft4321, E22 `loo-pre` -> `loo-ft` `1060947` and `ev-loopre` `1060948`), and every
+  failure followed a capture from a **single-node** job (`ev-base4321` -> ev-basex, `ev-ft4321` -> ev-ftx,
+  `ev-loopre` -> ev-looprex). Item 75's ":" separator is harmless and stays.
+- 2026-10-09: `submit_e23_grasp_sweep.sh` changed from `-N 15 --array=0-4` to `-N 5 --array=0-14` (the shape the user
+  submitted as `1061197`).
 
 ### 77. `build_ambient_manifest.py --leave-one-out`; `build_finetune_manifest.py --src-tag`; `submit_e22_loo.sh` (NEW)
 
