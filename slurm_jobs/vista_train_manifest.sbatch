@@ -141,7 +141,18 @@ mapfile -t DATASETS < <(python3 -c '
 import json, sys
 m = json.load(open(sys.argv[1]))
 keys = ("dataset", "val-dataset")  # the training store and its val store
-print("\n".join(sorted({r[k].rstrip("/") for t in sys.argv[2:] for r in m[int(t)] for k in keys if r.get(k)})))
+
+def walk(x):  # runs, and runs nested in chain/parallel stages (CHANGES.md item 79)
+    if isinstance(x, list):
+        for y in x:
+            yield from walk(y)
+    elif isinstance(x, dict):
+        if "chain" in x or "parallel" in x:
+            yield from walk(x.get("chain", x.get("parallel")))
+        elif "cmd" not in x:
+            yield from (x[k].rstrip("/") for k in keys if x.get(k))
+
+print("\n".join(sorted({d for t in sys.argv[2:] for d in walk(m[int(t)])})))
 ' "$MANIFEST_ABS" "${TASK_IDS[@]}")
 
 if [[ "$DATA_STAGE" != none ]]; then

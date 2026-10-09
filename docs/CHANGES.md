@@ -12,6 +12,21 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
 
 ## 2026-10-09 — leave-one-out pre-training (E22)
 
+### 79. Chained manifest tasks: `run_manifest_task.py` chains, `build_chain_manifest.py` (NEW), staging walk
+
+- `scripts/run_manifest_task.py`: a task item may be `{"chain": [stage, ...]}`. Stages run in order. A stage is a
+  train-diffusion arg dict, `{"cmd": [argv]}`, `{"parallel": [stages]}` or a nested chain. Each chain runs in a
+  thread (alongside the task's other items with `--parallel`); a failed stage stops its chain, the other items
+  continue, the script exits 1. Every process gets its own `WARP_CACHE_PATH` subdir. Plain arg-dict items run as
+  before (dry run of `finetune_r_manifest.json` unchanged). Tested: failure propagation with real commands.
+- `slurm_jobs/vista_train_manifest.sbatch`: the dataset-staging snippet walks chain/parallel stages
+  (dry run on the E22 chain manifest stages the target store + val store).
+- `scripts/build_chain_manifest.py` (NEW): zips a pre-train manifest with the fine-tune manifest whose
+  `init-checkpoint` is in each pre-train's dir: pre-train; then fine-tune ‖ (pre-train last0 own task at 4321 →
+  other hands at 4321); then fine-tune own task at 4321 and 1234 (best_rollout, best_val, last0) ‖ other hands at
+  4321 (best_val ‖ last0).
+- `slurm_jobs/submit_e22_loo.sh` now submits the single chained job (replaces the 7-job version of item 77/78).
+
 ### 78. Submit scripts: parse the job id out of TACC's sbatch banner
 
 - On Vista login nodes `sbatch --parsable` also prints a banner (lines of dashes) on stdout, so `X=$(sbatch
