@@ -14,7 +14,9 @@ All evals are 100 envs x 1500 steps (rescore_selected.py / eval_cross_embodiment
 node (PACK=1).
 
 Without --ft (item 80): each run is chained with its own evals only: train, then --which (default best_val)
-on its own task at --seed-select and --seed-test in parallel. E23 (grasp sweep).
+on its own task at --seed-select and --seed-test in parallel. E23 (grasp sweep). --cross-which W ... (item 81) adds
+one eval_cross_embodiment.py process per checkpoint on the other hands at --seed-test (forgetting), e.g. for a
+manifest of fine-tunes (E24: --which best_rollout best_val last0 --cross-which best_val last0).
 
 E22:
 
@@ -46,6 +48,7 @@ def main() -> None:
     ap.add_argument("--pre", type=Path, required=True)
     ap.add_argument("--ft", type=Path, default=None, help="fine-tune manifest; omit to chain evals only")
     ap.add_argument("--which", nargs="+", default=["best_val"], help="checkpoints scored when --ft is omitted")
+    ap.add_argument("--cross-which", nargs="*", default=[], help="without --ft: also score these on the other hands")
     ap.add_argument("--seed-test", type=int, default=4321)
     ap.add_argument("--seed-select", type=int, default=1234)
     ap.add_argument("--out", type=Path, required=True)
@@ -54,7 +57,8 @@ def main() -> None:
     pre = [r for task in json.loads(args.pre.read_text()) for r in task]
     if args.ft is None:
         tasks = [[{"chain": [p, {"parallel": [rescore(p["output-dir"], args.which, args.seed_select),
-                                              rescore(p["output-dir"], args.which, args.seed_test)]}]}]
+                                              rescore(p["output-dir"], args.which, args.seed_test)]
+                                             + [cross(p["output-dir"], [w], args.seed_test) for w in args.cross_which]}]}]
                  for p in pre]
         args.out.write_text(json.dumps(tasks, indent=1) + "\n")
         print(f"[INFO] wrote {len(tasks)} train+eval chains -> {args.out}")

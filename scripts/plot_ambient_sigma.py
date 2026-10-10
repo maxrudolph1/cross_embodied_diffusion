@@ -58,6 +58,12 @@ ROT_METRICS = [
     ("drop_rate", "drop rate (episodes ending in a drop)", "lower"),
     ("avg_rot_dist", "rotation distance to target at end (rad)", "lower"),
 ]
+# grasp eval metrics (eval/grasp.py), CHANGES.md item 81
+GRASP_METRICS = [
+    ("success_rate", "success rate", "higher"),
+    ("avg_time_to_success_s", "time to success (s)", "lower"),
+    ("avg_final_dist_to_first_goal_m", "final distance to goal (m)", "lower"),
+]
 INK, INK2, GRID, SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 RUN_RE = re.compile(r"(Grasp|InHand-Rotation)-(\w+)_sigma(\d+)_seed(\d+)$")
 SCRATCH_OUT = "$SCRATCH/cross_embodied_diffusion/outputs/diffusion"
@@ -84,13 +90,13 @@ def score(run: Path, task: str, eval_seed: int = 1234) -> tuple[dict, str] | Non
     return best["metrics"], "provisional"
 
 
-def collect(root: Path, family: str, metric: str, provisional_ok: bool) -> list[dict]:
+def collect(root: Path, family: str, metric: str, provisional_ok: bool, eval_seed: int = 1234) -> list[dict]:
     recs = []
     for run in sorted(root.glob(f"{family}-*_sigma*_seed*")):
         m = RUN_RE.search(run.name)
         if not m or m.group(1) != family:
             continue
-        s = score(run, f"{family}-{m.group(2)}")
+        s = score(run, f"{family}-{m.group(2)}", eval_seed)
         if s is None or (s[1] == "provisional" and not provisional_ok):
             continue
         recs.append({"target": m.group(2), "sigma": int(m.group(3)), "seed": int(m.group(4)),
@@ -118,16 +124,19 @@ def main() -> None:
     ap.add_argument("--label", default="random 50k draw", help="legend name of the sweep")
     ap.add_argument("--ref-label", default="first-100-episodes 50k (old)", help="legend name of --ref")
     ap.add_argument("--out", type=Path, default=Path("outputs/plots"))
+    ap.add_argument("--eval-seed", type=int, default=1234, help="4321 = held-out test seed (no provisional points)")
+    ap.add_argument("--suffix", default="", help="appended to output file names, e.g. _seed4321")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     short, metric, ylabel = FAMILIES[args.family]
 
-    sweep = collect(args.runs, args.family, metric, provisional_ok=True)
-    ref = collect(args.ref, args.family, metric, provisional_ok=False) if str(args.ref) not in ("", ".") else []
+    sweep = collect(args.runs, args.family, metric, provisional_ok=args.eval_seed == 1234, eval_seed=args.eval_seed)
+    ref = (collect(args.ref, args.family, metric, provisional_ok=False, eval_seed=args.eval_seed)
+           if str(args.ref) not in ("", ".") else [])
     if not sweep:
         raise SystemExit(f"no {args.family} runs with evals under {args.runs}")
 
-    with open(args.out / f"ambient_sigma_{short}_summary.csv", "w", newline="") as f:
+    with open(args.out / f"ambient_sigma_{short}{args.suffix}_summary.csv", "w", newline="") as f:
         mkeys = sorted({k for r in sweep + ref for k, v in r["metrics"].items() if isinstance(v, (int, float))})
         w = csv.DictWriter(f, fieldnames=["set", "target", "sigma", "seed", "value", "source", "done", "run"] + mkeys)
         w.writeheader()
@@ -178,16 +187,15 @@ def main() -> None:
     fig.legend(h, lab, loc="upper left", bbox_to_anchor=(0.005, 0.925), ncol=len(h), frameon=False,
                fontsize=8.5, labelcolor=INK2)
     status = (f"{n_done}/{len(sweep)} runs finished, {n_prov} points provisional" if n_prov
-              else f"re-scored: 100 episodes, eval seed 1234\n{seed_note(sweep)}")
+              else f"re-scored: 100 episodes, eval seed {args.eval_seed}\n{seed_note(sweep)}")
     fig.suptitle(f"{args.family}: target-hand score vs ambient σ, checkpoint = best val loss  [{status}]",
                  x=0.01, ha="left", color=INK, fontsize=10.5)
     fig.tight_layout(rect=(0, 0, 1, 0.885))
-    out = args.out / f"ambient_sigma_{short}.png"
+    out = args.out / f"ambient_sigma_{short}{args.suffix}.png"
     fig.savefig(out, dpi=150)
     plt.close(fig)
     print(f"[INFO] {len(sweep)} sweep points ({n_prov} provisional, {n_done} runs done), {len(ref)} ref points -> {out}")
-    if args.family == "InHand-Rotation":
-        metrics_figure(sweep, args.family, args.out / f"ambient_sigma_{short}_metrics.png", status)
+    metrics_figure(sweep, args.family, args.out / f"ambient_sigma_{short}{args.suffix}_metrics.png", status)
 
 
 def _val(r: dict, key: str | None) -> float | None:
@@ -251,9 +259,12 @@ def seed_note(recs: list[dict]) -> str:
 
 
 def metrics_figure(sweep: list[dict], family: str, out: Path, status: str) -> None:
-    """One panel per rotation metric: value vs sigma (mean over seeds), one line per target hand + mean."""
-    fig, axes = plt.subplots(2, 3, figsize=(14.5, 8), facecolor=SURFACE, sharex=True)
-    for ax, (key, title, better) in zip(axes.flat, ROT_METRICS):
+    """One panel per eval metric: value vs sigma (mean over seeds), one line per target hand + mean."""
+    metrics = ROT_METRICS if family == "InHand-Rotation" else GRASP_METRICS
+    rows = 2 if len(metrics) > 3 else 1
+    fig, axes = plt.subplots(rows, 3, figsize=(14.5, 4 * rows + (0 if rows == 2 else 0.8)), facecolor=SURFACE,
+                             sharex=True, squeeze=False)
+    for ax, (key, title, better) in zip(axes.flat, metrics):
         style(ax)
         for h in HANDS:
             means, _ = seed_means(sweep, h, key)
@@ -270,7 +281,7 @@ def metrics_figure(sweep: list[dict], family: str, out: Path, status: str) -> No
             ax.plot(mx, [means[x] for x in mx], "--", color=INK, linewidth=2, zorder=5, label="mean over hands")
         ax.set_title(f"{title}  ({better} is better)", color=INK, fontsize=9.5, loc="left")
         sigma_axis(ax)
-        if key in ("success_rate_any", "per_target_success_rate", "drop_rate"):
+        if key in ("success_rate_any", "per_target_success_rate", "drop_rate", "success_rate"):
             ax.set_ylim(0, 1.05)
         else:
             ax.set_ylim(bottom=0)
@@ -282,7 +293,7 @@ def metrics_figure(sweep: list[dict], family: str, out: Path, status: str) -> No
                fontsize=8.5, labelcolor=INK2)
     fig.suptitle(f"{family}: every eval metric vs ambient σ per target hand (mean of seeds), checkpoint = "
                  f"best val loss  [{status}]", x=0.01, ha="left", color=INK, fontsize=10)
-    fig.tight_layout(rect=(0, 0, 1, 0.885))
+    fig.tight_layout(rect=(0, 0, 1, 0.885 if rows == 2 else 0.8))
     fig.savefig(out, dpi=150)
     plt.close(fig)
     print(f"[INFO] -> {out}")

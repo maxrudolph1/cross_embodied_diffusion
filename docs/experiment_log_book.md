@@ -37,7 +37,8 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 | # | Date | Finding |
 |---|---|---|
-| [E23](#e23) | 2026-10-09 | *Planned:* grasp ambient σ sweep (0–100 step 10) on random-draw 50k targets, to compare with rotation E18/E19. |
+| [E24](#e24) | 2026-10-10 | *Planned:* grasp fine-tunes from σ 0 (3 seeds) and each hand's best ambient σ (seed 0). |
+| [E23](#e23) | 2026-10-10 | Grasp is hurt by ambient gating at every σ: success falls from 0.58 (σ 0, full co-training) to 0.31 (σ 10) and ~0.08–0.10 from σ 30 on (seed 4321), unlike rotation's σ 9–20 plateau. Scores on random-draw targets are far below the old first-episode subsets (target-only 0.10 vs 0.38): open question. |
 | [E22](#e22) | 2026-10-10 | Pre-training without any target data, then fine-tuning on the target 50k, matches co-training with the target mixed in, then fine-tuning: 1.16 vs 1.17 successes before drop (held-out seed 4321). The pre-train alone scores 0.00 on its unseen target. |
 | [E21](#e21) | 2026-10-08 | Fine-tuning from full co-training (σ 0) beats fine-tuning from the best ambient runs (σ 15): 1.17 vs 0.90 successes before drop at held-out seed 4321 (target-only start: 0.71). Ambient gating gives the best policy *before* fine-tuning (0.86) but gains almost nothing from it. The σ curve replicates at seed 4321. |
 | [E20](#e20) | 2026-10-07 | Per target and metric, co-train-then-fine-tune is best (mean 1.23 successes before drop vs 0.75 pooled ambient, 0.63 target-only, 0.42 full co-training; 3 seeds); full co-training is worst for 4 of 5 hands. |
@@ -82,13 +83,33 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 ## Entries
 
+<a id="e24"></a>
+### E24 — 2026-10-10 — Grasp fine-tuning from co-trained and best ambient runs (planned)
+
+**Question.** Does fine-tuning on the target help grasp the way it helps rotation (E21), and does starting from the
+best ambient run do better or worse than starting from full co-training?
+**Status.** set up, not submitted (RUNS "E24" row).
+
+**Protocol.** From E23 runs' `policy_best_val.pt`: σ 0 × seeds 0-2, and each hand's best ambient σ among 10-90
+(chosen on seed 1234: Allegro 10, LEAP 20, Shadow 10, Sharpa 10, Wuji 10; seed 0 only, the only seed trained) = 20
+fine-tunes (`ambient_ta_gr_ft/`). E21 recipe: target-only gating, lr 1e-5, 10 epochs. Evals in the same job:
+best_rollout/best_val/last0 on the target at seeds 1234 and 4321, best_val/last0 on the other hands at 4321.
+No σ 100 control (not requested). The ambient arm has 1 seed.
+
+**Results.** Pending.
+
+**Links.** RUNS: E24 row · Agent log: [A48](agent_log_book.md#a48) · CHANGES: item 81
+
+---
+
 <a id="e23"></a>
-### E23 — 2026-10-09 — Grasp ambient σ sweep, random-draw targets (planned)
+### E23 — 2026-10-10 — Grasp ambient σ sweep, random-draw targets
 
 **Question.** Does ambient gating help a scarce (50k) grasp target the way it helps rotation (E18/E19: plateau at σ
 9–20)? Bundle reported grasp hurt monotonically by gating; the term-aligned co-training result for grasp (E14) was
 +0.38..+0.44 over target-only on the old first-episode subsets, which E17 showed memorize.
-**Status.** set up, not submitted (RUNS "E23" row).
+**Status.** results from 74/75 runs (`1061197`; `Grasp-LEAP_sigma0_seed2` still training at 2026-10-10 ~04:20, its
+seed-1234 point is a provisional in-training score and it has no seed-4321 row yet).
 
 **Data.** New random-draw grasp targets (`subsets_50kr/Grasp-<Hand>_expert_50kr.zarr`, draw seed 0, 100 episodes,
 49.8–50.0k steps) pooled with the other four hands at 1M (`padded_ta/Grasp_pad5_scarce<Hand>_K50kr.zarr`, 4.05M
@@ -104,9 +125,36 @@ E14). Val: `val/grasp_val_20k.zarr` (env seed 1000).
 seed 0, plus σ 0 and 100 × seeds 1, 2 (75 runs, `ambient_ta_gr/`). Each run's best_val scored at 100 envs × 1500
 steps, eval seeds 1234 and 4321 (first episode per env; grasp success rate), in the same job.
 
-**Results.** Pending.
+**Results (grasp success rate, best_val, 100 episodes; mean over hands of seed means).**
 
-**Links.** RUNS: E23 row · Agent log: [A46](agent_log_book.md#a46) · CHANGES: item 80 · COLLECTIONS: grasp `50kr`
+| σ | 0 | 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 | 90 | 100 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| seed 1234 | 0.55 | 0.29 | 0.20 | 0.12 | 0.12 | 0.12 | 0.11 | 0.11 | 0.11 | 0.10 | 0.10 |
+| seed 4321 | **0.58** | 0.31 | 0.17 | 0.10 | 0.10 | 0.08 | 0.09 | 0.09 | 0.08 | 0.08 | 0.08 |
+
+- Per hand σ 0 / σ 100 at seed 4321: Allegro 0.88/0.12, LEAP 0.34/0.10, Shadow 0.40/0.10, Sharpa 0.57/0.03, Wuji
+  0.69/0.06. Best ambient σ (10-90, seed 1234): Allegro 10 (0.38), LEAP 20 (0.16), Shadow 10 (0.41, the only hand
+  where an ambient σ beats σ 0, 0.37), Sharpa 10 (0.23), Wuji 10 (0.30).
+- Time to success rises and final distance to goal barely changes with σ (metrics figure).
+- **Open question:** the old first-episode-subset runs (`ambient_ta`, E14, seed 1234) score much higher: σ 0 0.76,
+  σ 100 0.38 (mean), against 0.55 / 0.10 here, although seed 1234 is unseen for both and a random draw should
+  generalize no worse. Not explained yet; worth checking how the two 50k sets differ (episode lengths, start
+  states, success filtering) before reading the grasp numbers as absolute.
+
+![E23: grasp success vs ambient sigma per hand, seed 4321](plots/ambient_sigma_grasp_seed4321.png)
+
+![E23: every grasp metric vs sigma, seed 4321](plots/ambient_sigma_grasp_seed4321_metrics.png)
+
+Seed-1234 versions (with the old-subset σ 0/100 runs as hollow diamonds): `plots/ambient_sigma_grasp.png`,
+`plots/ambient_sigma_grasp_metrics.png`.
+
+**Takeaways.**
+- For grasp, full co-training (σ 0) is best and any gating hurts, roughly monotonically, as Bundle reported. Rotation's
+  σ 9–20 plateau does not carry over. A reading, not tested: grasp needs the other hands at the low-noise end.
+- Target-only grasp from a random 50k draw barely works (0.08 at seed 4321).
+
+**Links.** RUNS: E23 row · Agent log: [A46](agent_log_book.md#a46), [A48](agent_log_book.md#a48) · CHANGES: items 80, 81
+· COLLECTIONS: grasp `50kr`
 
 ---
 
@@ -150,6 +198,10 @@ target's 50k random draw only.
   the σ 0 co-trained policies on their non-target hands (1.37, E21).
 - Forgetting (mean over the four other hands, seed 4321): LOO + fine-tune 0.00 at both last0 and best_val, against
   0.26 (last0) / 0.87 (best_val) for σ 0 + fine-tune (E21).
+
+![E22: fine-tuning after leave-one-out vs sigma-0 pre-training, target hand, seed 4321](plots/finetune_loo_rotation_target_avg_successes_before_drop.png)
+
+![E22: the same policies on the four other hands (forgetting), seed 4321](plots/finetune_loo_rotation_others_avg_successes_before_drop.png)
 
 **Takeaways.**
 - **The target's 50k adds nothing during co-training when a fine-tune follows**: pre-training on the four other hands

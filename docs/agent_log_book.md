@@ -46,10 +46,11 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 - **E21 done** (2026-10-09): fine-tuned from σ 0 1.17 vs σ 15 0.90 vs σ 100 0.71 at held-out seed 4321 (1234
   agrees); σ 0's fine-tune forgets the other hands (1.37 → 0.26 at last0, 0.87 at best_val). Why σ 15 gains little
   (target sample share) and three proposed follow-ups are in [E21](experiment_log_book.md#e21).
-- **E23 queued 2026-10-09:** grasp σ sweep `1061197` (75 runs, 15 x 5 nodes, 9:00; `1061190` cancelled). When
-  done: check `task_1061197_*.err`, count `selection.json` in `ambient_ta_gr/` (75) and the best_val rows at seeds
-  1234 and 4321, then plot with `plot_ambient_sigma.py --family Grasp --runs .../ambient_ta_gr` (check it reads
-  Grasp `success_rate`) and write E23 against rotation E18/E19 ([A46](#a46), RUNS E23 row).
+- **E23 done except one run** (2026-10-10): grasp success falls with σ (0.58 at σ 0 → 0.08 at 100, seed 4321);
+  `Grasp-LEAP_sigma0_seed2` (`1061197_12`) was still training: re-render `plot_ambient_sigma.py --family Grasp` (both
+  seeds) when it lands. Open question: random-draw grasp targets score far below the old subsets ([E23](experiment_log_book.md#e23)).
+- **E24 ready (user, login node):** `bash slurm_jobs/submit_e24_grasp_ft.sh` (20 grasp fine-tunes + evals, waits for
+  `1061197`) ([A48](#a48), RUNS E24 row).
 - **E22 done** (2026-10-10): leave-one-out pre-train + fine-tune 1.16 vs σ 0 + fine-tune 1.17 at seed 4321; zero-shot
   0.00; LOO fine-tunes forget the other hands completely ([E22](experiment_log_book.md#e22)).
 - Earlier finished jobs: `1049683` (rotation ambient σ sweep, 55 runs), has
@@ -105,6 +106,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A48](#a48) | 2026-10-10 | E22 figures; E23 grasp results and figures (σ 0 best, gating hurts); E24 grasp fine-tunes set up. |
 | [A47](#a47) | 2026-10-10 | E22 done and written up (LOO + fine-tune = σ 0 + fine-tune); E23 grasp sweep finishing. |
 | [A46](#a46) | 2026-10-09 | Built random-draw grasp 50k targets and pools, checked them against the frozen grasp normalizer, set up the E23 grasp σ sweep (75 runs). |
 | [A45](#a45) | 2026-10-09 | Finished E21 (forgetting, seed 1234, why σ 15 fine-tunes gain little); set up E22 leave-one-out pre-train + fine-tune (15 + 15 runs). |
@@ -156,6 +158,30 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a48"></a>
+### A48 — 2026-10-10 — E22 plots, E23 grasp results, E24 set up
+
+**Request.** E22: plots of the fine-tuning runs. E23: fine-tuning jobs from the co-trained and best ambient runs
+(only σ other than 0 and 100), and plots of the grasp ambient runs.
+
+**Done.**
+- CHANGES 81: `plot_finetune_sources.py --sources/--family`, `plot_ambient_sigma.py --eval-seed/--suffix` + grasp
+  metrics figure, `build_chain_manifest.py --cross-which`, `slurm_jobs/submit_e24_grasp_ft.sh`. Previous outputs
+  regenerate identically (E21 and rotation σ summary CSVs, E23 chain manifest).
+- Figures: `finetune_loo_rotation_{target,others}_*.png` (E22), `ambient_sigma_grasp{,_metrics}.png` (seed 1234) and
+  `ambient_sigma_grasp_seed4321{,_metrics}.png` (E23). E21 figures re-rendered with the new x labels.
+- Best ambient σ per hand chosen on seed 1234 from σ 10-90; E24 manifests (`slurm_jobs/grasp_ft{,_s0,_chain}_manifest.json`,
+  20 fine-tunes).
+- E23 open question recorded: random-draw grasp targets score far below the old first-episode subsets.
+
+**Verified / not verified.** Verified: init checkpoints, slot mapping, regenerated outputs. Not verified: why grasp
+scores dropped with random-draw targets; E23's last run (LEAP σ 0 seed 2).
+
+**Pointers.** RUNS: E23, E24 rows · CHANGES 81 · Experiments: [E22](experiment_log_book.md#e22),
+[E23](experiment_log_book.md#e23), [E24](experiment_log_book.md#e24)
+
+---
 
 <a id="a47"></a>
 ### A47 — 2026-10-10 — E22 results; E23 status

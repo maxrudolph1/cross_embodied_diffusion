@@ -10,6 +10,22 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
 
 ---
 
+## 2026-10-10 — E22/E23 plots, E24 grasp fine-tunes
+
+### 81. Plot scripts for grasp and leave-one-out; `build_chain_manifest.py --cross-which`; `submit_e24_grasp_ft.sh` (NEW)
+
+- `scripts/plot_finetune_sources.py`: `--sources` (σ values and/or `loo`, replaces `--sigmas`), `--family`,
+  `--loo-runs`, `--loo-ft-runs`, `--title`; x labels name the source (co-train / ambient / target-only / leave-one-out);
+  grasp metrics in `LABEL`. E21 summary CSVs regenerate identically.
+- `scripts/plot_ambient_sigma.py`: `--eval-seed` (seed-4321 rows; no provisional points), `--suffix` for output
+  names, grasp metrics figure (`GRASP_METRICS`: success rate, time to success, final distance; one row of panels).
+  Rotation summary CSV regenerates identically.
+- `scripts/build_chain_manifest.py`: `--cross-which` adds forgetting evals to evals-only chains. E23 chain manifest
+  regenerates identically.
+- `slurm_jobs/submit_e24_grasp_ft.sh` (NEW): 20 grasp fine-tunes + evals, 4 x 5 nodes, 3:00, `afterany:1061197`.
+
+---
+
 ## 2026-10-09 — grasp ambient sweep (E23)
 
 ### 80. `build_chain_manifest.py` without `--ft`; `submit_e23_grasp_sweep.sh` (NEW)

@@ -9,6 +9,10 @@ training seeds, the line joins the seed means.
   --what target   score on the run's own hand, from final_eval.jsonl
   --what others   forgetting: mean over the four OTHER hands, from cross_eval.jsonl (eval_cross_embodiment.py)
 
+--sources (item 81) lists the starting points: a sigma value (co-trained at that sigma; source best_val, fine-tune
+<Task>_sigma<S>_ft_best_val_*) or `loo` (leave-one-out pre-train, E22; source last0 from --loo-runs, fine-tune
+<Task>_loo_ft_latest_* in --loo-ft-runs). --family Grasp for grasp runs.
+
 Rows: 100 envs x 1500 steps at `--eval-seed` (4321 = held-out test seed, never used for selection). Runs without
 the needed rows are skipped. Writes <out>/<prefix>_<what>_<metric>.png and <prefix>_<what>_summary.csv.
 """
@@ -32,13 +36,19 @@ import numpy as np  # noqa: E402
 HANDS = ["Allegro", "LEAP", "Shadow", "Sharpa", "Wuji"]
 LABEL = {"avg_successes_before_drop": "successes before drop", "success_rate_any": "episodes reaching >= 1 target",
          "per_target_success_rate": "per-target success rate", "avg_survival_time_s": "survival time (s)",
-         "avg_rot_dist": "final rotation distance (rad, lower is better)", "drop_rate": "drop rate (lower is better)"}
+         "avg_rot_dist": "final rotation distance (rad, lower is better)", "drop_rate": "drop rate (lower is better)",
+         "success_rate": "success rate", "avg_time_to_success_s": "time to success (s, lower is better)",
+         "avg_final_dist_to_first_goal_m": "final distance to goal (m, lower is better)"}
 # reference categorical slots 1-2, fixed order (validator needs node, absent on Vista)
-SERIES = [("src", "starting policy (co-trained at σ, best_val)", "#2a78d6", "o"),
+SERIES = [("src", "starting policy", "#2a78d6", "o"),
           ("ft", "after target-only fine-tune", "#eb6834", "s")]
 INK, INK2, GRID, SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 SCRATCH_OUT = "$SCRATCH/cross_embodied_diffusion/outputs/diffusion"
-FAMILY = "InHand-Rotation"
+SOURCE_LABEL = {"loo": "no target\n(leave-one-out)", "0": "σ 0\n(co-train)", "100": "σ 100\n(target-only)"}
+
+
+def source_label(tok: str) -> str:
+    return SOURCE_LABEL.get(tok, f"σ {tok}\n(ambient)")
 
 
 def rows(path: Path) -> list[dict]:
@@ -60,12 +70,16 @@ def value(run: Path, which: str, own: str, what: str, seed: int, metric: str) ->
 def collect(args) -> list[dict]:
     recs = []
     for hand in HANDS:
-        own = f"{FAMILY}-{hand}"
-        for s in args.sigmas:
+        own = f"{args.family}-{hand}"
+        for s in args.sources:
             for k in args.seeds:
-                src = args.runs / f"{own}_sigma{s}_seed{k}"
-                ft = args.ft_runs / f"{own}_sigma{s}_ft_best_val_lr{args.lr}_seed{k}"
-                for kind, run, which in (("src", src, "best_val"), ("ft", ft, args.ft_which)):
+                if s == "loo":
+                    src, src_which = args.loo_runs / f"{own}_loo_seed{k}", "last0"
+                    ft = args.loo_ft_runs / f"{own}_loo_ft_latest_lr{args.lr}_seed{k}"
+                else:
+                    src, src_which = args.runs / f"{own}_sigma{s}_seed{k}", "best_val"
+                    ft = args.ft_runs / f"{own}_sigma{s}_ft_best_val_lr{args.lr}_seed{k}"
+                for kind, run, which in (("src", src, src_which), ("ft", ft, args.ft_which)):
                     v = value(run, which, own, args.what, args.eval_seed, args.metric)
                     if v is not None:
                         recs.append({"target": hand, "sigma": s, "seed": k, "kind": kind, "which": which,
@@ -77,7 +91,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--runs", type=Path, default=Path(os.path.expandvars(f"{SCRATCH_OUT}/ambient_ta_r")))
     ap.add_argument("--ft-runs", type=Path, default=Path(os.path.expandvars(f"{SCRATCH_OUT}/ambient_ta_r_ft")))
-    ap.add_argument("--sigmas", type=int, nargs="+", default=[0, 15, 100])
+    ap.add_argument("--family", default="InHand-Rotation", choices=["InHand-Rotation", "Grasp"])
+    ap.add_argument("--sources", nargs="+", default=["0", "15", "100"], help="sigma values and/or loo")
+    ap.add_argument("--loo-runs", type=Path, default=Path(os.path.expandvars(f"{SCRATCH_OUT}/loo_r")))
+    ap.add_argument("--loo-ft-runs", type=Path, default=Path(os.path.expandvars(f"{SCRATCH_OUT}/loo_r_ft")))
+    ap.add_argument("--title", default=None)
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
     ap.add_argument("--lr", default="1e-05")
     ap.add_argument("--ft-which", default="last0")
@@ -99,14 +117,14 @@ def main() -> None:
 
     panels = HANDS + ["mean over hands"]
     fig, axes = plt.subplots(1, len(panels), figsize=(15, 3.9), sharey=True, facecolor=SURFACE)
-    xs = np.arange(len(args.sigmas))
+    xs = np.arange(len(args.sources))
     rng = np.random.default_rng(0)
     for ax, panel in zip(axes, panels):
         ax.set_facecolor(SURFACE)
         for si, (kind, name, color, marker) in enumerate(SERIES):
             off = (si - 0.5) * 0.18
             means = []
-            for xi, s in enumerate(args.sigmas):
+            for xi, s in enumerate(args.sources):
                 if panel == "mean over hands":
                     # per seed: mean over the hands that have this (sigma, seed, kind)
                     vals = []
@@ -124,7 +142,7 @@ def main() -> None:
                     markeredgecolor=SURFACE, markeredgewidth=1.2, zorder=3, label=name)
         ax.set_title(panel, fontsize=10.5, color=INK)
         ax.set_xticks(xs)
-        ax.set_xticklabels([f"σ {s}" for s in args.sigmas], fontsize=9, color=INK2)
+        ax.set_xticklabels([source_label(s) for s in args.sources], fontsize=8.5, color=INK2)
         ax.set_xlim(-0.5, len(xs) - 0.5)
         ax.tick_params(colors=INK2, length=0, labelsize=9)
         ax.grid(axis="y", color=GRID, linewidth=0.8, zorder=0)
@@ -139,8 +157,9 @@ def main() -> None:
     fig.legend(h, [f"{lab[0]}", f"{lab[1]} ({args.ft_which})"], loc="upper left", bbox_to_anchor=(0.005, 0.89),
                ncol=2, frameon=False, fontsize=9, labelcolor=INK2)
     where = "on the target hand" if args.what == "target" else "on the four other hands (forgetting)"
-    fig.suptitle(f"{FAMILY}: fine-tuning from co-trained (σ 0), ambient (σ 15) and target-only (σ 100) starting "
-                 f"policies, {where}", x=0.01, ha="left", color=INK, fontsize=11.5)
+    title = args.title or ("fine-tuning from co-trained (σ 0), ambient (σ 15) and target-only (σ 100) starting "
+                           "policies")
+    fig.suptitle(f"{args.family}: {title}, {where}", x=0.01, ha="left", color=INK, fontsize=11.5)
     n = len({(r['target'], r['sigma'], r['seed']) for r in recs if r['kind'] == 'ft'})
     fig.text(0.01, 0.015, f"100 episodes per run at held-out eval seed {args.eval_seed}; dots = training seeds "
              f"({n} fine-tunes scored), line = seed mean. Target data: 50k random draw (_K50kr). Fine-tune: lr "
