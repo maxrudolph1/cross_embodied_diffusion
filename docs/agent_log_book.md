@@ -50,11 +50,8 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
   done: check `task_1061197_*.err`, count `selection.json` in `ambient_ta_gr/` (75) and the best_val rows at seeds
   1234 and 4321, then plot with `plot_ambient_sigma.py --family Grasp --runs .../ambient_ta_gr` (check it reads
   Grasp `success_rate`) and write E23 against rotation E18/E19 ([A46](#a46), RUNS E23 row).
-- **E22 queued 2026-10-09:** `1060968` (loo-chain, 3 x 5 nodes, 12:00), each node pre-train → fine-tune → evals
-  (~9.5 h once started). `1060945` cancelled. When done: check `task_1060968_*.err` for chain failures, count
-  `selection.json` in `loo_r/` and `loo_r_ft/` (15 each) and the eval rows, then write E22 (compare with E21 σ 0)
-  ([A45](#a45), RUNS E22 row, CHANGES 79).
-  `plot_condition_boxes.py` for the `<Task>_sigma<S>_ft_*` names and the seed-4321 rows.
+- **E22 done** (2026-10-10): leave-one-out pre-train + fine-tune 1.16 vs σ 0 + fine-tune 1.17 at seed 4321; zero-shot
+  0.00; LOO fine-tunes forget the other hands completely ([E22](experiment_log_book.md#e22)).
 - Earlier finished jobs: `1049683` (rotation ambient σ sweep, 55 runs), has
   finished and been re-scored: [E18](experiment_log_book.md#e18). Earlier: `1043385` / `1045839`
   ([E14](experiment_log_book.md#e14)–[E16](experiment_log_book.md#e16)).
@@ -108,6 +105,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A47](#a47) | 2026-10-10 | E22 done and written up (LOO + fine-tune = σ 0 + fine-tune); E23 grasp sweep finishing. |
 | [A46](#a46) | 2026-10-09 | Built random-draw grasp 50k targets and pools, checked them against the frozen grasp normalizer, set up the E23 grasp σ sweep (75 runs). |
 | [A45](#a45) | 2026-10-09 | Finished E21 (forgetting, seed 1234, why σ 15 fine-tunes gain little); set up E22 leave-one-out pre-train + fine-tune (15 + 15 runs). |
 | [A44](#a44) | 2026-10-08 | Switched to working on `main`; ran the E21 evals on idev c639-092; E21 target results: fine-tuning from σ 0 beats σ 15. |
@@ -158,6 +156,24 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a47"></a>
+### A47 — 2026-10-10 — E22 results; E23 status
+
+**Request.** The jobs have run: check the status.
+
+**Done.**
+- `1060968` (E22): 3/3 COMPLETED (9h01-9h14), 15 chains done with no failures, first real use of chained tasks
+  (CHANGES 79). All 150 expected E22 eval rows present. E22 results written (table only, no figure yet).
+- `1061197` (E23) at 2026-10-10 ~04:00: 9/15 jobs COMPLETED (6h42-7h09), 6 still running near the end; 70/75 runs
+  complete.
+
+**Verified / not verified.** Verified: job states, chain logs, eval coverage. Not verified: E22 per-seed spread (only
+3-seed means tabulated).
+
+**Pointers.** RUNS: E22, E23 rows · Experiments: [E22](experiment_log_book.md#e22)
+
+---
 
 <a id="a46"></a>
 ### A46 — 2026-10-09 — Grasp 50kr data and the E23 sweep set up

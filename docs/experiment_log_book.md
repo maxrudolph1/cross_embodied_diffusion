@@ -38,7 +38,7 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 | # | Date | Finding |
 |---|---|---|
 | [E23](#e23) | 2026-10-09 | *Planned:* grasp ambient σ sweep (0–100 step 10) on random-draw 50k targets, to compare with rotation E18/E19. |
-| [E22](#e22) | 2026-10-09 | *Planned:* leave-one-out pre-training (other 4 hands only, no target data), then fine-tuning on each target, 3 seeds. |
+| [E22](#e22) | 2026-10-10 | Pre-training without any target data, then fine-tuning on the target 50k, matches co-training with the target mixed in, then fine-tuning: 1.16 vs 1.17 successes before drop (held-out seed 4321). The pre-train alone scores 0.00 on its unseen target. |
 | [E21](#e21) | 2026-10-08 | Fine-tuning from full co-training (σ 0) beats fine-tuning from the best ambient runs (σ 15): 1.17 vs 0.90 successes before drop at held-out seed 4321 (target-only start: 0.71). Ambient gating gives the best policy *before* fine-tuning (0.86) but gains almost nothing from it. The σ curve replicates at seed 4321. |
 | [E20](#e20) | 2026-10-07 | Per target and metric, co-train-then-fine-tune is best (mean 1.23 successes before drop vs 0.75 pooled ambient, 0.63 target-only, 0.42 full co-training; 3 seeds); full co-training is worst for 4 of 5 hands. |
 | [E19](#e19) | 2026-10-07 | With 3 seeds, rotation ambient gating peaks on a plateau at σ 9–20 (mean 0.80–0.85 vs 0.63 target-only, 0.42 co-training, consistent across seeds); the best σ is hand-specific (Allegro/LEAP/Shadow 2–6, Sharpa/Wuji ≥ 9–15), and σ 15 is the only setting at or above target-only for every hand. |
@@ -111,11 +111,11 @@ steps, eval seeds 1234 and 4321 (first episode per env; grasp success rate), in 
 ---
 
 <a id="e22"></a>
-### E22 — 2026-10-09 — Leave-one-out pre-training, then target fine-tuning (planned)
+### E22 — 2026-10-10 — Leave-one-out pre-training, then target fine-tuning
 
 **Question.** How good is a policy pre-trained with no target-embodiment data at all, zero-shot on the target and
 after fine-tuning on the target's 50k? How does it compare with E21's σ 0 start (target 50k mixed in at 1.3%)?
-**Status.** set up, not submitted (RUNS "E22" row).
+**Status.** done (`1060968`, 2026-10-09 17:30 → 10-10 02:44; all 15 chains completed, every eval row present).
 
 **Data.** Each target's `_K50kr` pooled store ([E18](#e18)), with the target gated out (`--ambient-tmin` 100 for the
 target, 0 for the others): the pre-train sees the other four hands at 1M and no target window. Fine-tune: the
@@ -134,9 +134,35 @@ target's 50k random draw only.
   (best_val, last0).
 - Comparison: E21's σ 0 fine-tunes (same targets, seeds, fine-tune recipe and eval).
 
-**Results.** Pending.
+**Results (rotation, successes before drop, 100 episodes, seed 4321, mean of 3 seeds; LOO = leave-one-out).**
 
-**Links.** RUNS: E22 row · Agent log: [A45](agent_log_book.md#a45) · CHANGES: item 77
+| Target | LOO pre-train, zero-shot on target (last0) | LOO + fine-tune (last0) | E21: σ 0 co-train (best_val) | E21: σ 0 + fine-tune (last0) |
+|---|---|---|---|---|
+| Allegro | 0.00 | **1.55** | 0.80 | 1.45 |
+| LEAP | 0.00 | **1.45** | 0.73 | 1.37 |
+| Shadow | 0.00 | 0.69 | 0.20 | **0.85** |
+| Sharpa | 0.00 | 0.90 | 0.28 | **0.92** |
+| Wuji | 0.00 | 1.21 | 0.20 | **1.25** |
+| **Mean** | 0.00 | 1.16 | 0.44 | 1.17 |
+
+- LOO + fine-tune, other checkpoints: best_val 1.06 (seed 4321); last0 at seed 1234 1.17.
+- The LOO pre-trains work on the four hands they trained on: 1.39 mean over those hands (seed 4321, last0), about
+  the σ 0 co-trained policies on their non-target hands (1.37, E21).
+- Forgetting (mean over the four other hands, seed 4321): LOO + fine-tune 0.00 at both last0 and best_val, against
+  0.26 (last0) / 0.87 (best_val) for σ 0 + fine-tune (E21).
+
+**Takeaways.**
+- **The target's 50k adds nothing during co-training when a fine-tune follows**: pre-training on the four other hands
+  alone and then fine-tuning reaches the same target score as co-training with the target mixed in (1.16 vs 1.17;
+  better for Allegro/LEAP, worse for Shadow, equal within seed noise for Sharpa/Wuji). What transfers is the other
+  hands' data.
+- Zero-shot transfer to an unseen hand is nil (0.00 for every hand): the observation identifies the hand (E5), and
+  an unseen hand's obs/action columns were never trained.
+- After a LOO fine-tune the policy no longer works on the other hands at all, even at the early best_val checkpoint,
+  whereas σ 0's best_val keeps 0.87. Including the target in co-training is what lets a short fine-tune keep the
+  other hands.
+
+**Links.** RUNS: E22 row · Agent log: [A45](agent_log_book.md#a45), [A47](agent_log_book.md#a47) · CHANGES: items 77-79
 
 ---
 

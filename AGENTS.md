@@ -264,6 +264,9 @@ were wrong in different ways.
   policy *without* fine-tuning (0.86) but gains only +0.04 from it: its low-noise steps already saw only target
   data (the noise-first sampler gives the 50k target 1.3% of samples at σ 0, 100% at t < σ). The σ 0 fine-tune
   forgets the other hands (1.37 -> 0.26 at last0; its best_val, epochs 1-5, keeps 0.87 with 1.04 on the target).
+- The target's 50k is not needed in pre-training when a fine-tune follows (E22, rotation, seed 4321): pre-training
+  on the other four hands only, then fine-tuning, gives 1.16 vs 1.17 for co-training with the target. Zero-shot on
+  the unseen hand is 0.00, and the fine-tuned policy then fails the other hands (0.00), unlike σ 0's best_val (0.87).
 - **Never evaluate at env seed 0.** The 1M demo stores were collected at seed 0, so a seed-0 eval
   replays training start states, and the old `subsets_50k/` are the first ~100 episodes of the 1M
   stores (100% overlap). Report at seed 1234. Target-only 50k grasp policies memorize (0.92-0.95
