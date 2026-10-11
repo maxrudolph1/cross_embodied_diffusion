@@ -46,11 +46,10 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 - **E21 done** (2026-10-09): fine-tuned from σ 0 1.17 vs σ 15 0.90 vs σ 100 0.71 at held-out seed 4321 (1234
   agrees); σ 0's fine-tune forgets the other hands (1.37 → 0.26 at last0, 0.87 at best_val). Why σ 15 gains little
   (target sample share) and three proposed follow-ups are in [E21](experiment_log_book.md#e21).
-- **E23 done except one run** (2026-10-10): grasp success falls with σ (0.58 at σ 0 → 0.08 at 100, seed 4321);
-  `Grasp-LEAP_sigma0_seed2` (`1061197_12`) was still training: re-render `plot_ambient_sigma.py --family Grasp` (both
-  seeds) when it lands. Open question: random-draw grasp targets score far below the old subsets ([E23](experiment_log_book.md#e23)).
-- **E24 ready (user, login node):** `bash slurm_jobs/submit_e24_grasp_ft.sh` (20 grasp fine-tunes + evals, waits for
-  `1061197`) ([A48](#a48), RUNS E24 row).
+- **E23 + E24 done** (2026-10-11): grasp gating hurts at every σ; fine-tune from σ 0 (0.58 → 0.69), not from the
+  best ambient σ (0.29 → 0.31). Random-draw grasp targets have almost no fresh-reset start states, which evals use:
+  likely why grasp scores dropped ([E23](experiment_log_book.md#e23)). E24 forgetting baseline running on idev
+  c636-061 (`cross_e24_src/p*.log`); when done: `plot_finetune_sources.py --family Grasp --what others ...` (A49).
 - **E22 done** (2026-10-10): leave-one-out pre-train + fine-tune 1.16 vs σ 0 + fine-tune 1.17 at seed 4321; zero-shot
   0.00; LOO fine-tunes forget the other hands completely ([E22](experiment_log_book.md#e22)).
 - Earlier finished jobs: `1049683` (rotation ambient σ sweep, 55 runs), has
@@ -106,6 +105,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A49](#a49) | 2026-10-11 | E23/E24 analysed and plotted; found why random-draw grasp targets score low (training starts ≠ eval starts). |
 | [A48](#a48) | 2026-10-10 | E22 figures; E23 grasp results and figures (σ 0 best, gating hurts); E24 grasp fine-tunes set up. |
 | [A47](#a47) | 2026-10-10 | E22 done and written up (LOO + fine-tune = σ 0 + fine-tune); E23 grasp sweep finishing. |
 | [A46](#a46) | 2026-10-09 | Built random-draw grasp 50k targets and pools, checked them against the frozen grasp normalizer, set up the E23 grasp σ sweep (75 runs). |
@@ -158,6 +158,28 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a49"></a>
+### A49 — 2026-10-11 — E23/E24 results; grasp start-state mismatch
+
+**Request.** The jobs are done: analyse the results and push the plots.
+
+**Done.**
+- `1061197` (E23) 15/15 and `1062769` (E24) 4/4 COMPLETED; 75/75 + 20/20 runs; no missing eval rows. E23 figures
+  re-rendered with all 75 runs; E24 figure (CHANGES 82); E23/E24 written up.
+- Investigated E23's open question: start-step observations of fresh-reset (first ~100) vs auto-reset episodes in
+  the grasp 1M stores differ strongly (last action, velocities, hand pose, object position relative to the hand),
+  and evals start from fresh resets only; a random 50k draw has 3/100 fresh starts.
+- Forgetting baseline for E24 (sources on the other hands) was never scheduled; running it on idev c636-061
+  (`cross_e24_src/run.sh`, 6 processes). The E24 forgetting figure waits on it.
+
+**Verified / not verified.** Verified: coverage, per-term start statistics (Allegro, Shadow). Not verified: that the
+mismatch causes the drop (no retraining), rotation's start-state picture, why auto-reset differs.
+
+**Pointers.** RUNS: E23, E24, idev c636-061 rows · CHANGES 82 · Experiments: [E23](experiment_log_book.md#e23),
+[E24](experiment_log_book.md#e24)
+
+---
 
 <a id="a48"></a>
 ### A48 — 2026-10-10 — E22 plots, E23 grasp results, E24 set up

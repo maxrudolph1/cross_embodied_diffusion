@@ -37,7 +37,7 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 | # | Date | Finding |
 |---|---|---|
-| [E24](#e24) | 2026-10-10 | *Planned:* grasp fine-tunes from σ 0 (3 seeds) and each hand's best ambient σ (seed 0). |
+| [E24](#e24) | 2026-10-11 | Grasp fine-tuning, as for rotation: from σ 0 0.58 → 0.69, from each hand's best ambient σ 0.29 → 0.31 (seed 4321). |
 | [E23](#e23) | 2026-10-10 | Grasp is hurt by ambient gating at every σ: success falls from 0.58 (σ 0, full co-training) to 0.31 (σ 10) and ~0.08–0.10 from σ 30 on (seed 4321), unlike rotation's σ 9–20 plateau. Scores on random-draw targets are far below the old first-episode subsets (target-only 0.10 vs 0.38): open question. |
 | [E22](#e22) | 2026-10-10 | Pre-training without any target data, then fine-tuning on the target 50k, matches co-training with the target mixed in, then fine-tuning: 1.16 vs 1.17 successes before drop (held-out seed 4321). The pre-train alone scores 0.00 on its unseen target. |
 | [E21](#e21) | 2026-10-08 | Fine-tuning from full co-training (σ 0) beats fine-tuning from the best ambient runs (σ 15): 1.17 vs 0.90 successes before drop at held-out seed 4321 (target-only start: 0.71). Ambient gating gives the best policy *before* fine-tuning (0.86) but gains almost nothing from it. The σ curve replicates at seed 4321. |
@@ -84,11 +84,12 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 ## Entries
 
 <a id="e24"></a>
-### E24 — 2026-10-10 — Grasp fine-tuning from co-trained and best ambient runs (planned)
+### E24 — 2026-10-11 — Grasp fine-tuning from co-trained and best ambient runs
 
 **Question.** Does fine-tuning on the target help grasp the way it helps rotation (E21), and does starting from the
 best ambient run do better or worse than starting from full co-training?
-**Status.** set up, not submitted (RUNS "E24" row).
+**Status.** done (`1062769`, 4/4 COMPLETED, 20/20 fine-tunes, all eval rows). Forgetting baseline (sources on
+the other hands) running on idev c636-061 (RUNS), so the forgetting figure is pending.
 
 **Protocol.** From E23 runs' `policy_best_val.pt`: σ 0 × seeds 0-2, and each hand's best ambient σ among 10-90
 (chosen on seed 1234: Allegro 10, LEAP 20, Shadow 10, Sharpa 10, Wuji 10; seed 0 only, the only seed trained) = 20
@@ -96,7 +97,24 @@ fine-tunes (`ambient_ta_gr_ft/`). E21 recipe: target-only gating, lr 1e-5, 10 ep
 best_rollout/best_val/last0 on the target at seeds 1234 and 4321, best_val/last0 on the other hands at 4321.
 No σ 100 control (not requested). The ambient arm has 1 seed.
 
-**Results.** Pending.
+**Results (grasp success rate, own hand, held-out seed 4321; start = source best_val, fine-tuned = last0).**
+
+| Target | σ 0: start → fine-tuned (3 seeds) | best ambient σ: start → fine-tuned (seed 0) | σ 100 (not fine-tuned) |
+|---|---|---|---|
+| Allegro | 0.88 → **0.95** | σ 10: 0.40 → 0.47 | 0.12 |
+| LEAP | 0.33 → **0.53** | σ 20: 0.17 → 0.14 | 0.10 |
+| Shadow | 0.40 → **0.55** | σ 10: 0.43 → 0.41 | 0.10 |
+| Sharpa | 0.57 → **0.74** | σ 10: 0.28 → 0.29 | 0.03 |
+| Wuji | 0.69 → 0.66 | σ 10: 0.16 → 0.23 | 0.06 |
+| **Mean** | 0.58 → **0.69** | 0.29 → 0.31 | 0.08 |
+
+- σ 0 fine-tuned per seed: 0.73 / 0.68 / 0.65. Fine-tune best_val gives the same means (σ 0 0.69, ambient 0.33).
+- σ 0 + fine-tune is best for every hand; it gains for 4 of 5 hands (Wuji flat). The ambient starts gain ≈ 0.
+
+![E24: grasp fine-tuning from sigma 0 and best ambient sigma, seed 4321](plots/finetune_sources_grasp_target_success_rate.png)
+
+**Takeaways.** Same as rotation (E21): fine-tune from full co-training; ambient-gated starts gain nothing from a
+target-only fine-tune. Absolute grasp numbers are depressed by the start-state mismatch found in E23.
 
 **Links.** RUNS: E24 row · Agent log: [A48](agent_log_book.md#a48) · CHANGES: item 81
 
@@ -108,8 +126,8 @@ No σ 100 control (not requested). The ambient arm has 1 seed.
 **Question.** Does ambient gating help a scarce (50k) grasp target the way it helps rotation (E18/E19: plateau at σ
 9–20)? Bundle reported grasp hurt monotonically by gating; the term-aligned co-training result for grasp (E14) was
 +0.38..+0.44 over target-only on the old first-episode subsets, which E17 showed memorize.
-**Status.** results from 74/75 runs (`1061197`; `Grasp-LEAP_sigma0_seed2` still training at 2026-10-10 ~04:20, its
-seed-1234 point is a provisional in-training score and it has no seed-4321 row yet).
+**Status.** done (`1061197`, 15/15 COMPLETED, 75/75 runs, every best_val row at seeds 1234 and 4321; figures final
+2026-10-11).
 
 **Data.** New random-draw grasp targets (`subsets_50kr/Grasp-<Hand>_expert_50kr.zarr`, draw seed 0, 100 episodes,
 49.8–50.0k steps) pooled with the other four hands at 1M (`padded_ta/Grasp_pad5_scarce<Hand>_K50kr.zarr`, 4.05M
@@ -132,14 +150,23 @@ steps, eval seeds 1234 and 4321 (first episode per env; grasp success rate), in 
 | seed 1234 | 0.55 | 0.29 | 0.20 | 0.12 | 0.12 | 0.12 | 0.11 | 0.11 | 0.11 | 0.10 | 0.10 |
 | seed 4321 | **0.58** | 0.31 | 0.17 | 0.10 | 0.10 | 0.08 | 0.09 | 0.09 | 0.08 | 0.08 | 0.08 |
 
-- Per hand σ 0 / σ 100 at seed 4321: Allegro 0.88/0.12, LEAP 0.34/0.10, Shadow 0.40/0.10, Sharpa 0.57/0.03, Wuji
+- Per hand σ 0 / σ 100 at seed 4321: Allegro 0.88/0.12, LEAP 0.33/0.10, Shadow 0.40/0.10, Sharpa 0.57/0.03, Wuji
   0.69/0.06. Best ambient σ (10-90, seed 1234): Allegro 10 (0.38), LEAP 20 (0.16), Shadow 10 (0.41, the only hand
   where an ambient σ beats σ 0, 0.37), Sharpa 10 (0.23), Wuji 10 (0.30).
 - Time to success rises and final distance to goal barely changes with σ (metrics figure).
-- **Open question:** the old first-episode-subset runs (`ambient_ta`, E14, seed 1234) score much higher: σ 0 0.76,
-  σ 100 0.38 (mean), against 0.55 / 0.10 here, although seed 1234 is unseen for both and a random draw should
-  generalize no worse. Not explained yet; worth checking how the two 50k sets differ (episode lengths, start
-  states, success filtering) before reading the grasp numbers as absolute.
+- **Why the random-draw grasp scores are low (found 2026-10-11): the training episodes start differently from the
+  eval episodes.** The old first-episode-subset runs (`ambient_ta`, E14, seed 1234) score σ 0 0.76 / σ 100 0.38
+  against 0.55 / 0.10 here. Evals score each env's first episode after a fresh `env.reset()`. In the 1M grasp stores
+  (256 envs, auto-reset), the first episodes start from a fresh reset, but later ones start after an auto-reset, from
+  visibly different states. Start-step obs, Grasp-Allegro, first 100 episodes vs episodes 300+ (Shadow alike):
+  `actions` (last action) std 0.000 vs 0.514, all velocities 0.000 vs 0.01-0.22, `hand_dof_pos` std 0.054 vs 0.154
+  with mean shifts up to 2.9 SD, `hand_root_quat` 2.8 SD, `object_pos_rel_hand` 2.7 SD. So a fresh-reset start (hand
+  at its default pose, zero velocity, zero last action) is rare in a random draw (3/100 episodes), and the old subsets
+  were all of that kind, which matches the eval. This explains low target-only numbers better than "random draws
+  generalize worse"; it is shown for start states only, not tested by retraining. Co-training is hit less because
+  ~256 of each source hand's ~2000 episodes are fresh starts.
+  Not checked: rotation (E18 random-draw targets did not drop: target-only 0.63-0.64 vs 0.70 on old subsets), and why
+  auto-reset does not restore the hand pose/last action (env reset events).
 
 ![E23: grasp success vs ambient sigma per hand, seed 4321](plots/ambient_sigma_grasp_seed4321.png)
 
@@ -151,7 +178,9 @@ Seed-1234 versions (with the old-subset σ 0/100 runs as hollow diamonds): `plot
 **Takeaways.**
 - For grasp, full co-training (σ 0) is best and any gating hurts, roughly monotonically, as Bundle reported. Rotation's
   σ 9–20 plateau does not carry over. A reading, not tested: grasp needs the other hands at the low-noise end.
-- Target-only grasp from a random 50k draw barely works (0.08 at seed 4321).
+- Target-only grasp from a random 50k draw barely works (0.08 at seed 4321), most likely because its training starts
+  hardly include the fresh-reset starts that evals use (above). Fix options: draw target subsets that keep the
+  fresh-reset episodes in proportion, or (better) also score auto-reset episodes; then rerun the σ 0/100 arms.
 
 **Links.** RUNS: E23 row · Agent log: [A46](agent_log_book.md#a46), [A48](agent_log_book.md#a48) · CHANGES: items 80, 81
 · COLLECTIONS: grasp `50kr`

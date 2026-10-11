@@ -267,6 +267,10 @@ were wrong in different ways.
 - The target's 50k is not needed in pre-training when a fine-tune follows (E22, rotation, seed 4321): pre-training
   on the other four hands only, then fine-tuning, gives 1.16 vs 1.17 for co-training with the target. Zero-shot on
   the unseen hand is 0.00, and the fine-tuned policy then fails the other hands (0.00), unlike σ 0's best_val (0.87).
+- **Demo episodes after an auto-reset start differently from evals** (E23, grasp): evals score each env's first
+  episode after a fresh reset (hand at default pose, zero velocity, zero last action), but in the 1M stores only the
+  first ~256 episodes start that way. A random 50k draw (~100 episodes) has ~3 such starts, which likely explains
+  low grasp scores on random-draw targets (target-only 0.08). Keep this in mind when subsampling or evaluating.
 - **Never evaluate at env seed 0.** The 1M demo stores were collected at seed 0, so a seed-0 eval
   replays training start states, and the old `subsets_50k/` are the first ~100 episodes of the 1M
   stores (100% overlap). Report at seed 1234. Target-only 50k grasp policies memorize (0.92-0.95

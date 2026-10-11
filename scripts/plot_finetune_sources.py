@@ -11,7 +11,8 @@ training seeds, the line joins the seed means.
 
 --sources (item 81) lists the starting points: a sigma value (co-trained at that sigma; source best_val, fine-tune
 <Task>_sigma<S>_ft_best_val_*) or `loo` (leave-one-out pre-train, E22; source last0 from --loo-runs, fine-tune
-<Task>_loo_ft_latest_* in --loo-ft-runs). --family Grasp for grasp runs.
+<Task>_loo_ft_latest_* in --loo-ft-runs) or `amb` (each hand's own ambient sigma from --amb Hand=S ..., E24).
+--family Grasp for grasp runs.
 
 Rows: 100 envs x 1500 steps at `--eval-seed` (4321 = held-out test seed, never used for selection). Runs without
 the needed rows are skipped. Writes <out>/<prefix>_<what>_<metric>.png and <prefix>_<what>_summary.csv.
@@ -44,11 +45,12 @@ SERIES = [("src", "starting policy", "#2a78d6", "o"),
           ("ft", "after target-only fine-tune", "#eb6834", "s")]
 INK, INK2, GRID, SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 SCRATCH_OUT = "$SCRATCH/cross_embodied_diffusion/outputs/diffusion"
-SOURCE_LABEL = {"loo": "no target\n(leave-one-out)", "0": "σ 0\n(co-train)", "100": "σ 100\n(target-only)"}
+SOURCE_LABEL = {"loo": "no target\n(LOO)", "0": "σ 0\nco-train", "100": "σ 100\ntarget-only",
+                "amb": "best σ\nambient"}
 
 
 def source_label(tok: str) -> str:
-    return SOURCE_LABEL.get(tok, f"σ {tok}\n(ambient)")
+    return SOURCE_LABEL.get(tok, f"σ {tok}\nambient")
 
 
 def rows(path: Path) -> list[dict]:
@@ -77,8 +79,9 @@ def collect(args) -> list[dict]:
                     src, src_which = args.loo_runs / f"{own}_loo_seed{k}", "last0"
                     ft = args.loo_ft_runs / f"{own}_loo_ft_latest_lr{args.lr}_seed{k}"
                 else:
-                    src, src_which = args.runs / f"{own}_sigma{s}_seed{k}", "best_val"
-                    ft = args.ft_runs / f"{own}_sigma{s}_ft_best_val_lr{args.lr}_seed{k}"
+                    sig = args.amb[hand] if s == "amb" else s
+                    src, src_which = args.runs / f"{own}_sigma{sig}_seed{k}", "best_val"
+                    ft = args.ft_runs / f"{own}_sigma{sig}_ft_best_val_lr{args.lr}_seed{k}"
                 for kind, run, which in (("src", src, src_which), ("ft", ft, args.ft_which)):
                     v = value(run, which, own, args.what, args.eval_seed, args.metric)
                     if v is not None:
@@ -96,6 +99,7 @@ def main() -> None:
     ap.add_argument("--loo-runs", type=Path, default=Path(os.path.expandvars(f"{SCRATCH_OUT}/loo_r")))
     ap.add_argument("--loo-ft-runs", type=Path, default=Path(os.path.expandvars(f"{SCRATCH_OUT}/loo_r_ft")))
     ap.add_argument("--title", default=None)
+    ap.add_argument("--amb", nargs="*", default=[], help="Hand=sigma pairs for the `amb` source")
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
     ap.add_argument("--lr", default="1e-05")
     ap.add_argument("--ft-which", default="last0")
@@ -106,6 +110,7 @@ def main() -> None:
     ap.add_argument("--prefix", default="finetune_sources_rotation")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
+    args.amb = {k: int(v) for k, v in (x.split("=") for x in args.amb)}
     recs = collect(args)
     if not recs:
         raise SystemExit("no scored runs found")

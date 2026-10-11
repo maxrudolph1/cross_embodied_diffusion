@@ -10,6 +10,16 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
 
 ---
 
+## 2026-10-11 — E24 plot
+
+### 82. `plot_finetune_sources.py`: per-hand `amb` source, shorter source labels
+
+- `--sources amb` with `--amb Hand=S ...` uses each hand's own ambient σ (E24). Source tick labels shortened (they
+  collided with three sources): `σ 0 / co-train`, `best σ / ambient`, `σ 100 / target-only`, `no target / (LOO)`.
+  E21/E22 figures re-rendered with the new labels (data unchanged).
+
+---
+
 ## 2026-10-10 — E22/E23 plots, E24 grasp fine-tunes
 
 ### 81. Plot scripts for grasp and leave-one-out; `build_chain_manifest.py --cross-which`; `submit_e24_grasp_ft.sh` (NEW)
