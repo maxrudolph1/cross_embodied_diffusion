@@ -88,8 +88,8 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 **Question.** Does fine-tuning on the target help grasp the way it helps rotation (E21), and does starting from the
 best ambient run do better or worse than starting from full co-training?
-**Status.** done (`1062769`, 4/4 COMPLETED, 20/20 fine-tunes, all eval rows). Forgetting baseline (sources on
-the other hands) running on idev c636-061 (RUNS), so the forgetting figure is pending.
+**Status.** done (`1062769`, 4/4 COMPLETED, 20/20 fine-tunes, all eval rows; forgetting baseline scored on idev
+c636-061 2026-10-11, 80/80 rows).
 
 **Protocol.** From E23 runs' `policy_best_val.pt`: σ 0 × seeds 0-2, and each hand's best ambient σ among 10-90
 (chosen on seed 1234: Allegro 10, LEAP 20, Shadow 10, Sharpa 10, Wuji 10; seed 0 only, the only seed trained) = 20
@@ -110,6 +110,24 @@ No σ 100 control (not requested). The ambient arm has 1 seed.
 
 - σ 0 fine-tuned per seed: 0.73 / 0.68 / 0.65. Fine-tune best_val gives the same means (σ 0 0.69, ambient 0.33).
 - σ 0 + fine-tune is best for every hand; it gains for 4 of 5 hands (Wuji flat). The ambient starts gain ≈ 0.
+
+**Forgetting (success rate, mean over the four other hands, seed 4321; start best_val → fine-tuned last0 (best_val)).**
+
+| Target | σ 0 | best ambient σ |
+|---|---|---|
+| Allegro | 0.98 → 0.77 (0.86) | 0.97 → 0.89 (0.96) |
+| LEAP | 0.99 → 0.88 (0.98) | 0.95 → 0.97 (0.96) |
+| Shadow | 0.99 → 0.68 (0.94) | 0.96 → 0.88 (0.90) |
+| Sharpa | 0.98 → 0.90 (0.97) | 0.95 → 0.93 (0.95) |
+| Wuji | 0.99 → 0.82 (0.97) | 0.94 → 0.85 (0.93) |
+| **Mean** | 0.99 → 0.81 (0.95) | 0.95 → 0.90 (0.94) |
+
+![E24: the same grasp policies on the four other hands, seed 4321](plots/finetune_sources_grasp_others_success_rate.png)
+
+- Grasp fine-tuning at lr 1e-5 keeps most of the other hands (0.81 at last0, 0.95 at best_val), unlike rotation
+  (0.26 / 0.87, E21); consistent with E16 on the old subsets (grasp 0.82).
+- **Unlike rotation, grasp hands gated to t ≥ 10-20 still work: the ambient sources score 0.94-0.97 on the other
+  hands.** In rotation, hands trained only at t ≥ 10-15 fail (E12, E21: 0.13). Not tested above σ 20 for grasp.
 
 ![E24: grasp fine-tuning from sigma 0 and best ambient sigma, seed 4321](plots/finetune_sources_grasp_target_success_rate.png)
 

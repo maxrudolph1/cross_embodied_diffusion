@@ -48,8 +48,8 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
   (target sample share) and three proposed follow-ups are in [E21](experiment_log_book.md#e21).
 - **E23 + E24 done** (2026-10-11): grasp gating hurts at every σ; fine-tune from σ 0 (0.58 → 0.69), not from the
   best ambient σ (0.29 → 0.31). Random-draw grasp targets have almost no fresh-reset start states, which evals use:
-  likely why grasp scores dropped ([E23](experiment_log_book.md#e23)). E24 forgetting baseline running on idev
-  c636-061 (`cross_e24_src/p*.log`); when done: `plot_finetune_sources.py --family Grasp --what others ...` (A49).
+  likely why grasp scores dropped ([E23](experiment_log_book.md#e23)). E24 forgetting done: grasp fine-tunes keep
+  most of the other hands (0.81 last0), and grasp hands gated at σ 10-20 still work (0.95). Nothing running.
 - **E22 done** (2026-10-10): leave-one-out pre-train + fine-tune 1.16 vs σ 0 + fine-tune 1.17 at seed 4321; zero-shot
   0.00; LOO fine-tunes forget the other hands completely ([E22](experiment_log_book.md#e22)).
 - Earlier finished jobs: `1049683` (rotation ambient σ sweep, 55 runs), has
@@ -170,8 +170,10 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 - Investigated E23's open question: start-step observations of fresh-reset (first ~100) vs auto-reset episodes in
   the grasp 1M stores differ strongly (last action, velocities, hand pose, object position relative to the hand),
   and evals start from fresh resets only; a random 50k draw has 3/100 fresh starts.
-- Forgetting baseline for E24 (sources on the other hands) was never scheduled; running it on idev c636-061
-  (`cross_e24_src/run.sh`, 6 processes). The E24 forgetting figure waits on it.
+- Forgetting baseline for E24 (sources on the other hands) was never scheduled; ran it on idev c636-061
+  (`cross_e24_src/run.sh`, 6 processes, 80 evals, 14:52-16:35); E24 forgetting figure and table added.
+- The user asked which other tasks the repo has: only Grasp and InHand-Rotation × 5 hands (`registration.py`), both
+  on the ContactDB `cylinder_medium` object by default.
 
 **Verified / not verified.** Verified: coverage, per-term start statistics (Allegro, Shadow). Not verified: that the
 mismatch causes the drop (no retraining), rotation's start-state picture, why auto-reset differs.

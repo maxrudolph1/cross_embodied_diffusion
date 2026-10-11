@@ -249,9 +249,9 @@ were wrong in different ways.
   random-draw 50k target set): mean successes 0.42 at sigma 0, a plateau of 0.80-0.85 at sigma 9-20,
   0.63 at 100, consistent across seeds. Best sigma is hand-specific (Allegro/LEAP/Shadow 2-6, Sharpa
   >= 15, Wuji >= 9); sigma 15 is the only setting >= target-only for every hand. Grasp (E23, random-draw targets,
-  1 seed; σ 0/100 3 seeds): gating hurts at every σ, 0.58 at σ 0 → 0.31 at 10 → ~0.08 from 30 on (seed 4321). Robust in both: an embodiment trained
-  only on the coarse end of the schedule is completely non-functional (0.000; Vista
-  2026-10-01: LEAP 1.8 at sigma 0 -> 0.00 at sigma 10).
+  1 seed; σ 0/100 3 seeds): gating hurts at every σ, 0.58 at σ 0 → 0.31 at 10 → ~0.08 from 30 on (seed 4321). In rotation an embodiment trained
+  only on the coarse end of the schedule is non-functional (0.000; Vista 2026-10-01: LEAP 1.8 at sigma 0 -> 0.00
+  at sigma 10; E21: 0.13 at sigma 15). Not so for grasp: hands gated at sigma 10-20 still succeed 0.94-0.97 (E24).
 - Adversarial invariance training does not work on the Allegro/LEAP pair:
   a fresh probe trained after the encoder freezes stays at ≥0.977 balanced
   accuracy regardless of reversal strength, while task information drops
@@ -262,7 +262,8 @@ were wrong in different ways.
 - Fine-tune from full co-training (σ 0), not from ambient-gated runs (E21, rotation, held-out seed 4321, 3 seeds):
   fine-tuned from σ 0 1.17 vs σ 15 0.90 vs σ 100 0.71 successes before drop, for every hand. Ambient σ 15 is the best
   policy *without* fine-tuning (0.86) but gains only +0.04 from it: its low-noise steps already saw only target
-  data (the noise-first sampler gives the 50k target 1.3% of samples at σ 0, 100% at t < σ). The σ 0 fine-tune
+  data (the noise-first sampler gives the 50k target 1.3% of samples at σ 0, 100% at t < σ). Grasp agrees
+  (E24): σ 0 0.58 → 0.69 vs best ambient σ 0.29 → 0.31; grasp fine-tunes keep the other hands (0.81 last0). The σ 0 fine-tune
   forgets the other hands (1.37 -> 0.26 at last0; its best_val, epochs 1-5, keeps 0.87 with 1.04 on the target).
 - The target's 50k is not needed in pre-training when a fine-tune follows (E22, rotation, seed 4321): pre-training
   on the other four hands only, then fine-tuning, gives 1.16 vs 1.17 for co-training with the target. Zero-shot on
