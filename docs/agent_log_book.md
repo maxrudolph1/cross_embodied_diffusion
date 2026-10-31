@@ -34,7 +34,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 - **Repo/branch:** `cross_embodied_diffusion`, `main`; user asked to push this work to GitHub.
 - **Active work:** new `Baoding-{Hand}` and `Pen-Spinning-{Hand}` RL tasks for all five existing hands
-  (CHANGES 83). Baoding-Allegro checkpoint750 has **86% held-out success** (E26); pen spinning remains unsolved.
+  (CHANGES 83). Baoding-Allegro checkpoint750 has **86% held-out success**, checkpoint999 **78%** (E26); pen spinning remains unsolved.
 - **Current GPU:** Vista `c641-101`, existing idev allocation `1109030`, one GH200. **Slurm is now authorized**. This compute node rejects sbatch; the ready
   `slurm_jobs/submit_dexterity_fast.sh` must be run from a login node. No new batch IDs yet.
 - **Completed local pilots:** Allegro, 100 PPO iterations × 1024 envs × 32 rollout steps for each task,
@@ -50,9 +50,10 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
   initially; other hands have smoke/geometry checks, not trained experts. Runtime edits make the
   old driver stop safely after1000; waiter PIDs3693755/3693756 evaluate that checkpoint and resume
   into `{baoding,pen}_allegro_continued_20261031/` with shared caches and live logs.
-- **Batch plan:** eight other-hand tasks, short gh-dev bootstrap (4nodes/PACK2/500iterations/2h),
-  then dependent gh continuation (8×1node/PACK1/8h). Login scheduler projections pending. Dedicated
-  GPU measured2.10–2.30× faster per policy than two policies/GPU; see E26. Both phases pin source.
+  Baoding handoff verified:1000 iterations complete, checkpoint999 evaluated78%, stage3000 running.
+- **Batch plan:** eight other-hand tasks, gh only (8×1node/PACK1/8h), stages1k/3k/10k.
+  User will launch from the head node; scheduler projections pending. Dedicated GPU measured
+  2.10–2.30× faster per policy than two policies/GPU; see E26. Submission pins source.
 - **Diffusion work is unchanged:** no new demonstrations or diffusion schemas for these commands.
   Generic `collect-demos` currently lacks their success handling; use the dedicated expert evaluator.
 - **Previous experiments:** E21–E24 completed October 9–11; no diffusion jobs remain active according
@@ -158,21 +159,23 @@ Current packed batch1024×32 equals old rotation2048×16 transition budget; did 
 Evaluated Baoding checkpoint750 on100 held-out episodes:86% success,2.0767 best revolutions.
 Saved full MP4/JSON and versioned preview/benchmark plots (E26).
 
-Prepared immutable-source, scratch-backed Vista launcher and one-command gh-dev→gh chain for the
+Prepared immutable-source, scratch-backed Vista launcher and one-command gh-only submission for the
 eight non-Allegro tasks. Existing Allegro runs remain on currentGPU. Added shared sequential Warp
 cache, unbuffered live logs/progress, external checkpoint resume and status CLI; corrected partition
 usage counting. See CHANGES84. Submission attempted only as test-only probe, which returned
 "sbatch not available on compute nodes. Use a login node." Actual job submission requires login-node
-execution; no queued job IDs are invented. Requested scheduler projections from user asynchronously.
+execution; no queued job IDs are invented. User rejected gh-dev and confirmed they will launch
+from the head node. The fast wrapper now rejects other partitions.
 
 Runtime edits trigger the live drivers' source guard at their completed1000 checkpoint. Started
 explicit continuation waiters (PIDs3693755/3693756), which wait for completion, evaluate, and resume
 3k/10k stages in new roots without killing current workers or replaying completed updates. Task
 semantics/hashes are unchanged; only the harness is updated.
 
-**Verified / not verified.**14 CPU runtime/continuation/evaluation tests pass; shell syntax/Ruff pass;
-launcher dry-run mapping and mock dependency/job-ID chaining verified. Actual submission and queue
-start times unavailable from this node. No claim of a measured8h runtime on every other hand or
+**Verified / not verified.**17 CPU runtime/continuation/evaluation/checkpoint-integrity tests pass; shell syntax/Ruff pass;
+launcher dry-run mapping and mocked single-submission/job-ID handling verified. Actual submission and queue
+start times unavailable from this node. Local immutable-source batch smoke completed stage1 training,
+evaluation and MP4, then resumed checkpoint for stage2; second evaluation running at20:09UTC. No claim of a measured8h runtime on every other hand or
 solved pen spinning. Native and all-ten GPU task checks from A50 remain applicable (tasks unchanged).
 
 **Pointers.** RUNS local and prepared batch rows · CHANGES84 · [E26](experiment_log_book.md#e26).

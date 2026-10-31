@@ -1,0 +1,3 @@
+checkpoint,eval_seed,episodes,success_rate,best_revolutions,mean_duration_s,failure_rate,timeout_rate
+outputs/dexterity/baoding_allegro_staged_20261031/stage_1000/model_750.pt,1234,100,0.86,2.076659030793235,21.901999999999997,0.14,0.86
+outputs/dexterity/baoding_allegro_staged_20261031/stage_1000/model_999.pt,1234,100,0.78,1.7215016975160689,21.248,0.17,0.83

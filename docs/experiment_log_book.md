@@ -124,6 +124,14 @@ deterministic actor, 24 s maximum, no censoring. **86/100 success**, mean best u
 **2.0767**, mean episode duration **21.902 s**, 14% drop / 86% timeout, mean tracking error **0.02691 m**.
 This is a useful initial expert candidate, not evidence for all hands or pen spinning.
 
+The later `model_999.pt` checkpoint was also evaluated with exactly the same held-out protocol:
+**78/100 success**,1.7215 mean best revolutions,21.248s mean duration,17%drop /83%timeout.
+Learning is not monotonic; retain checkpoint750 rather than claiming the last checkpoint is best.
+Both scores are reported, not just the higher one. [Checkpoint comparison CSV](plots/dexterity_eval_20261031.csv).
+The1000-iteration checkpoint and video are under the original run's `eval_1000/`; training resumed
+from999 in `outputs/dexterity/baoding_allegro_continued_20261031/stage_3000/`.
+
+
 ![Baoding Allegro checkpoint 750: first 12 seconds of held-out env 0](plots/baoding_allegro_750_20261031.gif)
 
 The first 12 seconds of env 0 are shown without selecting a successful episode. Full MP4 and
@@ -135,21 +143,20 @@ GIF: ffmpeg first 12 s, fps=12, width=400, palettegen/paletteuse (same recipe as
 
 **Scheduling evidence (2026-10-31).** `gh` recent started-job waits: 1 node median31.0h (n76),
 2 nodes34.2h(n14), 3–4 nodes33.6h(n10), 5–8 nodes32.9h(n27), 9–16 nodes32.9h(n6).
-`gh-dev`: 1 node0.7h(n8), 2 nodes0.1h(n1), 3–4 nodes1.5h(n1); these small samples are weak evidence.
-Pending gh-dev5–8-node jobs included a 74h resource wait and a held job. These are biased queue
-observations, not promised start times. Exact scheduler projections require a login node; sbatch
-(including test-only) is explicitly disabled here. QOS confirmed gh-dev2h/1running/3submitted/8nodes;
+These are biased queue observations, not promised start times. Exact scheduler projections require
+a login node; sbatch (including test-only) is explicitly disabled here. QOS confirmed
 gh48h/20running/40submitted/96nodes. Current gh usage2submitted/1running; gg idev excluded.
+The user rejected gh-dev and will launch the prepared jobs on the head node.
 
 **Decision.** Full runs: one policy per GPU, eight one-node gh array tasks for the other hands;
 8h limit is a conservative provisional bound from Allegro measurements, not a measured all-hand bound.
-For earlier videos, first run a short500-iteration gh-dev stage, provisionally4nodes/PACK2/2h,
-then resume checkpoints in gh. Choose alternate node count if login-node test-only projections
-favor it. Both phases share immutable source; each task reuses its private node-local Warp cache.
+Fresh gh runs evaluate and render at1000/3000/10000 iterations. Choose alternate node count if
+login-node test-only projections favor it. Jobs use immutable source; each task reuses its
+private node-local Warp cache.
 Existing Allegro policies continue locally without restarting. Warm-cache reuse and unbuffered live
 logs are operational improvements; no additional throughput gain is claimed without measurement.
 
-**Links.** RUNS: idev1109030, prepared dexterity bootstrap/full submission · [A51](agent_log_book.md#a51) · CHANGES84.
+**Links.** RUNS: idev1109030, prepared gh-only dexterity submission · [A51](agent_log_book.md#a51) · CHANGES84.
 
 ---
 

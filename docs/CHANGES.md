@@ -19,9 +19,10 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
   Generic node/array/PACK mapping, pinned Git source archive copied to node-local
   workspace, `PYTHONPATH` isolation, repo-relative scratch outputs, isolated per-task
   temp/cache paths, robust TACC job-ID parsing, task subsets and dependencies.
-- Fast wrapper defaults to the eight non-Allegro tasks, 500 iterations on gh-dev
-  (4 nodes/PACK2/2 h), then gh continuation (8 one-node array tasks/PACK1/8 h),
-  using latest valid per-task bootstrap checkpoint and cumulative 1k/3k/10k stages.
+- Fast wrapper defaults to eight non-Allegro tasks in one gh-only submission:
+  eight one-node array tasks/PACK1/8 h, cumulative 1k/3k/10k stages.
+  Rejects other partitions; clears inherited resume/dependency settings for fresh runs.
+  The user rejected the earlier gh-dev proposal before any submission.
   Compute-node submissions/probes fail explicitly; dry-run remains available.
 - `train_dexterity_expert.py` and `run_dexterity_local.py` honor
   `DEXTERITY_CACHE_ROOT` across sequential training/evaluation stages, stream logs
@@ -30,7 +31,8 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
   `--resume model_N.pt` without repeating completed iterations. No task reward,
   physics timestep, PPO horizon, batch size, model or compiler changes.
 - `scripts/dexterity_status.py` reads workflow/TensorBoard/progress/checkpoints
-  without GPU use. `continue_dexterity_after_stage.py` preserves the live local
+  without GPU use, including held-out reports written by continuation waiters.
+  `continue_dexterity_after_stage.py` preserves the live local
   runs: waits for their final stage-1000 checkpoint and old source guard to stop,
   evaluates it, then resumes in a fresh workflow under the updated harness.
 - Fixed `queue_wait_stats.sh` to count only the selected partition and report

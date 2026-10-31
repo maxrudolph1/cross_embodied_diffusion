@@ -87,16 +87,17 @@ For Slurm expert training on Vista, from a **login node** in this checkout:
 # Scheduler projections, then a review of every planned task (no submission):
 PROBE_ONLY=1 bash slurm_jobs/submit_dexterity_fast.sh
 DRY_RUN=1 bash slurm_jobs/submit_dexterity_fast.sh
-# Submit the short stage and its dependent full-training array:
+# Submit the gh training array:
 bash slurm_jobs/submit_dexterity_fast.sh
 ```
 
-The default trains the eight non-Allegro combinations: a 500-iteration `gh-dev`
-stage (4 nodes, two policies/node, 2 h), followed by eight independent `gh` jobs
-(one policy/GPU, 8 h) resuming to 1k/3k/10k iterations. Existing Allegro runs are
-excluded. Override `TASKS`, `BOOT_NODES`/`BOOT_PACK`, and `FULL_NODES`/`FULL_PACK`
-when scheduler projections favor a different shape. Both phases use the same
-immutable source archive; outputs live under `$SCRATCH/cross_embodied_diffusion/outputs/dexterity/`.
+The default trains the eight non-Allegro combinations in **gh only**: eight
+independent one-node jobs, one policy/GPU, an 8-hour limit, and evaluation at
+1k/3k/10k cumulative iterations. Existing Allegro runs are excluded. There is no
+bootstrap partition or dependency. Override `TASKS`, `NODES`, `PACK`, `STAGES`,
+and `TIME_LIMIT` when measurements and scheduler projections favor another shape.
+The launcher rejects non-gh partition overrides. Jobs use an immutable source
+archive; outputs live under `$SCRATCH/cross_embodied_diffusion/outputs/dexterity/`.
 Each stage automatically evaluates and records video. `DEXTERITY_CACHE_ROOT`
 keeps a task-private Warp cache on node-local storage across its stages.
 
