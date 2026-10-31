@@ -45,8 +45,8 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 - **Verification:** all ten task/hand combinations pass GPU finite-step/reset checks. Native geometry
   and synthetic progress tests cover static holding, axial roll, reverse motion, lost tracking,
   and reset isolation. Fixed a first-reset stale-palm bug using a nominal home-pose reference.
-- **Next local training:** staged PPO runs with evaluation/video after 1k/3k/10k total iterations,
-  using `scripts/run_dexterity_local.py`; exact status/commands in RUNS. Only Allegro is trained
+- **Running locally:** staged PPO runs with evaluation/video after 1k/3k/10k total iterations,
+  using `scripts/run_dexterity_local.py` (driver PIDs 3690957 / 3690958, source `a3fbb3f`); exact status/commands in RUNS. Only Allegro is trained
   initially; other hands have smoke/geometry checks, not trained experts.
 - **Diffusion work is unchanged:** no new demonstrations or diffusion schemas for these commands.
   Generic `collect-demos` currently lacks their success handling; use the dedicated expert evaluator.
@@ -165,7 +165,9 @@ checkpoint reload, held-out evaluation and video encoding. Initial pilots predat
 scored under the corrected environment. They have legacy metadata without task hashes, explicitly
 warned by the evaluator. New staged runs start from scratch with final task hashes. No claim that
 all hands learn, that these are final expert policies, or that native diagnostics predict GPU success.
-No Slurm submission or use of any other GPU.
+No Slurm submission or use of any other GPU. Final combined CPU suite: 19 tests pass;
+Baoding trajectory/geometry and five-hand nominal-anchor standalone checks pass; Ruff/diff checks pass.
+Code/pilot figures committed as `a3fbb3f`; staged training launched afterward from this clean source.
 
 **Pointers.** RUNS: idev `1109030` / `c641-101` · CHANGES 83 · E25 · COLLECTIONS unchanged (no datasets).
 
