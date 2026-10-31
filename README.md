@@ -81,6 +81,34 @@ does not select a successful rollout. Omitting `--checkpoint` produces an explic
 labeled zero-action diagnostic. Do not interpret a pilot or diagnostic video as a
 trained expert. Omitting `--task` from the smoke checker checks all ten new tasks.
 
+For Slurm expert training on Vista, from a **login node** in this checkout:
+
+```bash
+# Scheduler projections, then a review of every planned task (no submission):
+PROBE_ONLY=1 bash slurm_jobs/submit_dexterity_fast.sh
+DRY_RUN=1 bash slurm_jobs/submit_dexterity_fast.sh
+# Submit the short stage and its dependent full-training array:
+bash slurm_jobs/submit_dexterity_fast.sh
+```
+
+The default trains the eight non-Allegro combinations: a 500-iteration `gh-dev`
+stage (4 nodes, two policies/node, 2 h), followed by eight independent `gh` jobs
+(one policy/GPU, 8 h) resuming to 1k/3k/10k iterations. Existing Allegro runs are
+excluded. Override `TASKS`, `BOOT_NODES`/`BOOT_PACK`, and `FULL_NODES`/`FULL_PACK`
+when scheduler projections favor a different shape. Both phases use the same
+immutable source archive; outputs live under `$SCRATCH/cross_embodied_diffusion/outputs/dexterity/`.
+Each stage automatically evaluates and records video. `DEXTERITY_CACHE_ROOT`
+keeps a task-private Warp cache on node-local storage across its stages.
+
+Live status (also works with a scratch run root):
+
+```bash
+.venv/bin/python scripts/dexterity_status.py --roots outputs/dexterity
+```
+
+Training logs stream immediately; `progress.json` records wall-clock iteration
+timing. Training success and held-out success are displayed separately.
+
 The generic `collect-demos`, `eval-policy`, and diffusion task schemas have **not yet
 been extended to these task commands**. First establish and evaluate RL experts with
 the scripts above before collecting cross-embodiment demonstrations.

@@ -23,7 +23,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from train_dexterity_expert import positive_int, repo_path
+from train_dexterity_expert import positive_int, repo_path, warp_cache_path
 
 
 def now() -> str:
@@ -45,6 +45,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--keep-last", type=positive_int, default=3)
     parser.add_argument("--video-steps", type=positive_int, default=1500)
     parser.add_argument("--device", default="cuda:0")
+    parser.add_argument("--resume", type=repo_path,
+                        help="Continue a model_N.pt checkpoint; stages remain cumulative totals.")
     args = parser.parse_args(argv)
     if any(right <= left for left, right in zip(args.stages, args.stages[1:])):
         parser.error("--stages must be strictly increasing cumulative iteration counts")
@@ -56,7 +58,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--output-dir must be under outputs/ or logs/")
     if args.output_dir.exists() and (not args.output_dir.is_dir() or any(args.output_dir.iterdir())):
         parser.error("--output-dir must be a fresh empty directory")
+    if args.resume is not None:
+        if not args.resume.is_file():
+            parser.error(f"Resume checkpoint does not exist: {args.resume}")
+        try:
+            completed = checkpoint_completed_iterations(args.resume)
+        except ValueError as exc:
+            parser.error(str(exc))
+        if args.stages[0] <= completed:
+            parser.error(f"First stage must exceed {completed} completed checkpoint iterations")
     return args
+
+
+def checkpoint_completed_iterations(checkpoint: Path) -> int:
+    match = re.fullmatch(r"model_(\d+)\.pt", checkpoint.name)
+    if match is None:
+        raise ValueError("Resume requires a numbered model_N.pt checkpoint")
+    return int(match[1]) + 1
 
 
 def write_workflow(path: Path, workflow: dict) -> None:
@@ -110,8 +128,8 @@ def main() -> None:
     for count in args.stages:
         workflow["stages"].append({"cumulative_iterations": count, "status": "pending"})
     write_workflow(workflow_path, workflow)
-    previous_count = 0
-    checkpoint = None
+    previous_count = checkpoint_completed_iterations(args.resume) if args.resume else 0
+    checkpoint = args.resume
     active_stage = None
     try:
         for stage in workflow["stages"]:
@@ -123,7 +141,7 @@ def main() -> None:
             eval_log = args.output_dir / f"stage_{count}.eval.log"
             if source_hashes() != snapshot:
                 raise RuntimeError("Source changed during the workflow; stopped before mixing task implementations")
-            train_command = [python, "scripts/train_dexterity_expert.py", "--task", args.task,
+            train_command = [python, "-u", "scripts/train_dexterity_expert.py", "--task", args.task,
                              "--output-dir", str(training_dir), "--num-envs", str(args.num_envs),
                              "--iterations", str(count - previous_count), "--seed", str(args.seed),
                              "--save-interval", str(args.save_interval), "--keep-last", str(args.keep_last),
@@ -137,6 +155,7 @@ def main() -> None:
             environment = dict(os.environ)
             environment["MUJOCO_GL"] = "egl"
             environment["OMP_NUM_THREADS"] = "1"
+            environment["PYTHONUNBUFFERED"] = "1"
             execute(train_command, train_log, environment)
             if source_hashes() != snapshot:
                 raise RuntimeError("Source changed during training; evaluation stopped to preserve task identity")
@@ -146,14 +165,17 @@ def main() -> None:
             checkpoint = training_dir / f"model_{training['final_iteration']}.pt"
             if not checkpoint.is_file():
                 raise FileNotFoundError(f"Final checkpoint missing: {checkpoint}")
-            eval_command = [python, "scripts/eval_dexterity_expert.py", "--task", args.task,
+            eval_command = [python, "-u", "scripts/eval_dexterity_expert.py", "--task", args.task,
                             "--checkpoint", str(checkpoint), "--output-dir", str(evaluation_dir),
                             "--num-envs", str(args.eval_envs), "--seed", str(args.eval_seed),
                             "--device", args.device, "--video", "--video-steps", str(args.video_steps)]
             stage.update({"status": "evaluating", "checkpoint": str(checkpoint),
                           "eval_argv": eval_command, "eval_command": shlex.join(eval_command)})
             write_workflow(workflow_path, workflow)
-            environment["WARP_CACHE_PATH"] = str(args.output_dir / f"eval_{count}_warp_cache")
+            environment["WARP_CACHE_PATH"] = str(
+                warp_cache_path(training_dir, environment) if environment.get("DEXTERITY_CACHE_ROOT")
+                else args.output_dir / f"eval_{count}_warp_cache"
+            )
             execute(eval_command, eval_log, environment)
             metrics_path = evaluation_dir / f"policy_seed{args.eval_seed}.json"
             video_path = evaluation_dir / f"policy_seed{args.eval_seed}_env0.mp4"

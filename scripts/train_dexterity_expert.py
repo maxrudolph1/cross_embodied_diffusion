@@ -20,6 +20,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -77,6 +78,19 @@ def prune_checkpoints(directory: Path, keep_last: int) -> None:
         path.unlink()
 
 
+def warp_cache_path(output_dir: Path, environment=None) -> Path:
+    """A launcher supplies a task-private cache shared by sequential stages."""
+    environment = os.environ if environment is None else environment
+    root = environment.get("DEXTERITY_CACHE_ROOT")
+    return Path(root) / "warp" if root else output_dir / "warp_cache"
+
+
+def write_progress(path: Path, progress: dict) -> None:
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(progress, indent=2) + "\n")
+    temporary.replace(path)
+
+
 def main() -> None:
     args = parse_args()
     if not Path("src/mjlab_hand").is_dir():
@@ -84,7 +98,7 @@ def main() -> None:
     os.environ.setdefault("MUJOCO_GL", "egl")
     os.environ.setdefault("OMP_NUM_THREADS", "1")
     os.environ.setdefault("MUJOCO_EGL_DEVICE_ID", args.device.split(":")[1])
-    os.environ["WARP_CACHE_PATH"] = str(args.output_dir / "warp_cache")
+    os.environ["WARP_CACHE_PATH"] = str(warp_cache_path(args.output_dir))
 
     import torch
     from mjlab.envs import ManagerBasedRlEnv
@@ -118,13 +132,16 @@ def main() -> None:
     dump_yaml(params / "env.yaml", asdict(env_cfg))
     dump_yaml(params / "agent.yaml", asdict(agent_cfg))
     revision = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True)
+    source_revision = (os.environ.get("DEXTERITY_SOURCE_REVISION")
+                       or os.environ.get("SOURCE_REVISION")
+                       or (revision.stdout.strip() if revision.returncode == 0 else None))
     provenance = {
         "task": args.task,
         "task_signature": signature,
         "command": shlex.join([sys.executable, *sys.argv]),
         "arguments": {key: str(value) if isinstance(value, Path) else value
                       for key, value in vars(args).items()},
-        "git_revision": revision.stdout.strip() if revision.returncode == 0 else None,
+        "git_revision": source_revision,
         "started_utc": datetime.now(timezone.utc).isoformat(),
         "device_name": torch.cuda.get_device_name(args.device),
         "status": "running",
@@ -151,6 +168,40 @@ def main() -> None:
             prune_checkpoints(args.output_dir, args.keep_last)
 
         runner.save = save_with_retention
+        # Record actual update completion using the monotonic clock, independently
+        # of upstream log buffering/ETA. This performs no tensor-to-host transfers.
+        original_update = runner.alg.update
+        start_iteration = runner.current_learning_iteration
+        completed_updates = 0
+        learn_start = time.monotonic()
+        last_update = learn_start
+
+        def update_with_progress():
+            nonlocal completed_updates, last_update
+            result = original_update()
+            now = time.monotonic()
+            completed_updates += 1
+            duration = now - last_update
+            last_update = now
+            if completed_updates == 1 or completed_updates % 10 == 0 or completed_updates == args.iterations:
+                progress = {
+                    "task": args.task, "pid": os.getpid(), "status": "training",
+                    "updated_utc": datetime.now(timezone.utc).isoformat(),
+                    "completed_iteration": start_iteration + completed_updates - 1,
+                    "completed_updates_this_run": completed_updates,
+                    "requested_updates_this_run": args.iterations,
+                    "elapsed_learning_s": now - learn_start,
+                    "last_iteration_s": duration,
+                    "mean_iteration_s": (now - learn_start) / completed_updates,
+                    "transitions_this_run": completed_updates * args.num_envs * agent_cfg.num_steps_per_env,
+                }
+                write_progress(args.output_dir / "progress.json", progress)
+                print(f"[PROGRESS] {args.task} iteration={progress['completed_iteration']} "
+                      f"updates={completed_updates}/{args.iterations} "
+                      f"last={duration:.3f}s mean={progress['mean_iteration_s']:.3f}s", flush=True)
+            return result
+
+        runner.alg.update = update_with_progress
         runner.learn(num_learning_iterations=args.iterations, init_at_random_ep_len=True)
         provenance["status"] = "complete"
         provenance["final_iteration"] = runner.current_learning_iteration
@@ -161,6 +212,11 @@ def main() -> None:
     finally:
         provenance["finished_utc"] = datetime.now(timezone.utc).isoformat()
         metadata_path.write_text(json.dumps(provenance, indent=2) + "\n")
+        progress_path = args.output_dir / "progress.json"
+        if progress_path.is_file():
+            progress = json.loads(progress_path.read_text())
+            progress.update(status=provenance["status"], updated_utc=provenance["finished_utc"])
+            write_progress(progress_path, progress)
         if env is not None:
             env.close()
 

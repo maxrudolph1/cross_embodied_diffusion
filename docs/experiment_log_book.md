@@ -37,6 +37,7 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 | # | Date | Finding |
 |---|---|---|
+| [E26](#e26) | 2026-10-31 | Dedicated GH200s speed up each RL expert 2.10–2.30×; Baoding-Allegro checkpoint 750 reaches 86% held-out success, while pen remains in training. |
 | [E25](#e25) | 2026-10-31 | Baoding and pen-spinning Allegro pilots train/evaluate end to end, but neither completes a revolution after 100 PPO iterations; staged local learning continues. |
 | [E24](#e24) | 2026-10-11 | Grasp fine-tuning, as for rotation: from σ 0 0.58 → 0.69, from each hand's best ambient σ 0.29 → 0.31 (seed 4321). |
 | [E23](#e23) | 2026-10-10 | Grasp is hurt by ambient gating at every σ: success falls from 0.58 (σ 0, full co-training) to 0.31 (σ 10) and ~0.08–0.10 from σ 30 on (seed 4321), unlike rotation's σ 9–20 plateau. Scores on random-draw targets are far below the old first-episode subsets (target-only 0.10 vs 0.38): open question. |
@@ -84,8 +85,78 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 ## Entries
 
+<a id="e26"></a>
+### E26 — 2026-10-31 — Fast RL scheduling and a successful Baoding policy
+
+**Question.** How can the new experts finish sooner, and does Baoding's training success generalize?
+**Status:** throughput benchmark and checkpoint-750 eval done; local training continues; batch
+submission prepared but blocked on this compute node until launched from a login node.
+
+**Data.** Online simulation only, no new demonstration stores. Same task definitions, state/action
+spaces, PPO architecture and normalization as E25. Throughput measured on Allegro only.
+
+**Policy inputs/outputs.** Baoding 79→16, pen 66→16, one action per 20 ms step, empirical observation
+normalization; PPO rollout 1024 envs × 32 steps = 32,768 transitions/update. Past rotation RL used
+2048 × 16, the same transition count but a different temporal horizon. We did not change the horizon,
+physics, rewards, model precision or compiler to manufacture a speedup.
+
+**Throughput protocol.** Existing two policies sharing c641-101's GH200; recent 50 TensorBoard
+wall-time intervals form the packed baseline. Pause only the competing process for 45 seconds
+(SIGSTOP, unconditional SIGCONT), discard the first 3 seconds, measure event-time deltas of the
+remaining worker. Then swap roles. Both processes were verified resumed. This compares nearby
+training states, not bitwise identical rollouts; no process was killed or restarted.
+
+| Policy | Two policies/GPU mean s/iteration | One policy/GPU mean s/iteration | Solo intervals | Speedup | 10k solo compute estimate |
+|---|---:|---:|---:|---:|---:|
+| Baoding-Allegro | 2.087 | 0.909 | 45 | 2.30× | 2.52 h |
+| Pen-Spinning-Allegro | 2.844 | 1.353 | 30 | 2.10× | 3.76 h |
+
+![Measured RL wall times](plots/dexterity_throughput_20261031.png)
+
+[CSV](plots/dexterity_throughput_20261031.csv), [raw intervals/protocol](plots/dexterity_throughput_20261031.json).
+Recreate: `.venv/bin/python scripts/plot_dexterity_throughput.py --input
+ docs/plots/dexterity_throughput_20261031.json --output docs/plots/dexterity_throughput_20261031.png`.
+Extrapolations exclude initialization/evaluation and do not establish other hands' runtime.
+
+**Held-out Baoding result.** `outputs/dexterity/baoding_allegro_staged_20261031/stage_1000/model_750.pt`,
+seed 0 training; evaluated with seed 1234, 100 first fresh-reset episodes, random initial phases,
+deterministic actor, 24 s maximum, no censoring. **86/100 success**, mean best uninterrupted revolutions
+**2.0767**, mean episode duration **21.902 s**, 14% drop / 86% timeout, mean tracking error **0.02691 m**.
+This is a useful initial expert candidate, not evidence for all hands or pen spinning.
+
+![Baoding Allegro checkpoint 750: first 12 seconds of held-out env 0](plots/baoding_allegro_750_20261031.gif)
+
+The first 12 seconds of env 0 are shown without selecting a successful episode. Full MP4 and
+per-episode JSON: `outputs/dexterity/baoding_allegro_750_eval_20261031/`.
+Exact evaluation: `.venv/bin/python scripts/eval_dexterity_expert.py --task Baoding-Allegro
+ --checkpoint outputs/dexterity/baoding_allegro_staged_20261031/stage_1000/model_750.pt
+ --output-dir outputs/dexterity/baoding_allegro_750_eval_20261031 --num-envs 100 --video --video-steps 1500`.
+GIF: ffmpeg first 12 s, fps=12, width=400, palettegen/paletteuse (same recipe as E25).
+
+**Scheduling evidence (2026-10-31).** `gh` recent started-job waits: 1 node median31.0h (n76),
+2 nodes34.2h(n14), 3–4 nodes33.6h(n10), 5–8 nodes32.9h(n27), 9–16 nodes32.9h(n6).
+`gh-dev`: 1 node0.7h(n8), 2 nodes0.1h(n1), 3–4 nodes1.5h(n1); these small samples are weak evidence.
+Pending gh-dev5–8-node jobs included a 74h resource wait and a held job. These are biased queue
+observations, not promised start times. Exact scheduler projections require a login node; sbatch
+(including test-only) is explicitly disabled here. QOS confirmed gh-dev2h/1running/3submitted/8nodes;
+gh48h/20running/40submitted/96nodes. Current gh usage2submitted/1running; gg idev excluded.
+
+**Decision.** Full runs: one policy per GPU, eight one-node gh array tasks for the other hands;
+8h limit is a conservative provisional bound from Allegro measurements, not a measured all-hand bound.
+For earlier videos, first run a short500-iteration gh-dev stage, provisionally4nodes/PACK2/2h,
+then resume checkpoints in gh. Choose alternate node count if login-node test-only projections
+favor it. Both phases share immutable source; each task reuses its private node-local Warp cache.
+Existing Allegro policies continue locally without restarting. Warm-cache reuse and unbuffered live
+logs are operational improvements; no additional throughput gain is claimed without measurement.
+
+**Links.** RUNS: idev1109030, prepared dexterity bootstrap/full submission · [A51](agent_log_book.md#a51) · CHANGES84.
+
+---
+
 <a id="e25"></a>
 ### E25 — 2026-10-31 — Baoding and pen-spinning expert bootstrapping
+
+> **Update 2026-10-31:** Baoding checkpoint750 reaches86% held-out success; see [E26](#e26). The100-iteration results below remain valid.
 
 **Question.** Can we generate RL experts for two new dexterity tasks before collecting cross-hand
 BC demonstrations? **Status:** initial implementation/pilots done; longer local training in progress.

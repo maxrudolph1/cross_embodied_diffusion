@@ -10,8 +10,8 @@
 #   2. submit->start wait of jobs that STARTED in the last <days>, by node
 #      count (all users; biased low -- jobs still waiting are excluded);
 #   3. age of jobs still PENDING, by node count (biased the other way);
-#   4. your own queue usage against the per-user caps (40 submitted /
-#      20 running jobs, 96 running nodes; every array element is a job);
+#   4. your own queue usage in this partition against its per-user caps
+#      (every array element is a job; other partitions do not count);
 #   5. the scheduler's own projected start time per size via
 #      `sbatch --test-only` (nothing is submitted). Only works on a login
 #      node -- sbatch is disabled on compute/idev nodes; there it prints the
@@ -68,8 +68,13 @@ for k in ORDER:
 "
 
 echo
-echo "== Your queue usage (caps: 40 submitted, 20 running jobs, 96 running nodes)"
-mine=$(squeue -u "$USER" -h -r -o "%T %D")
+case "$PART" in
+    gh) CAPS="40 submitted, 20 running jobs, 96 running nodes" ;;
+    gh-dev) CAPS="3 submitted, 1 running job, 8 running nodes; 2 h max" ;;
+    *) CAPS="check partition/QOS limits with sacctmgr" ;;
+esac
+echo "== Your $PART queue usage (caps: $CAPS)"
+mine=$(squeue -p "$PART" -u "$USER" -h -r -o "%T %D")
 echo "   submitted jobs: $(echo -n "$mine" | grep -c .)   running jobs: $(echo "$mine" | grep -c '^RUNNING')   running nodes: $(echo "$mine" | awk '$1=="RUNNING"{s+=$2} END{print s+0}')"
 
 echo

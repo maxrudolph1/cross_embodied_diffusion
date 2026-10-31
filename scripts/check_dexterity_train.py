@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from dexterity_runtime import check_checkpoint_task
-from train_dexterity_expert import parse_args, prune_checkpoints, repo_path
+from train_dexterity_expert import parse_args, prune_checkpoints, repo_path, warp_cache_path
 
 
 class TrainerTest(unittest.TestCase):
@@ -31,6 +31,13 @@ class TrainerTest(unittest.TestCase):
         for path in ("/tmp/output", "outputs/../bad"):
             with self.assertRaises(argparse.ArgumentTypeError):
                 repo_path(path)
+
+    def test_launcher_cache_reused_across_stage_output_directories(self):
+        environment = {"DEXTERITY_CACHE_ROOT": "/tmp/test_task_cache"}
+        self.assertEqual(warp_cache_path(Path("outputs/stage_500"), environment),
+                         warp_cache_path(Path("outputs/stage_1000"), environment))
+        self.assertEqual(warp_cache_path(Path("outputs/stage_500"), {}),
+                         Path("outputs/stage_500/warp_cache"))
 
     def test_checkpoint_mismatch_fails_before_loading_weights(self):
         with tempfile.TemporaryDirectory() as directory:

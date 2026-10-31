@@ -64,8 +64,9 @@ of that benchmark**, not the RL benchmark itself:
 local staged driver `scripts/run_dexterity_local.py`. Initial Allegro pilots do not
 yet solve either task. The generic demo collector and diffusion schemas do not yet
 support their success commands; do not label these episodes with the old fallback.
-The current user restriction is to use the already allocated GPU only, with no new
-Slurm submissions until authorized. See RUNS for live local training status.
+Slurm submission is authorized as of 2026-10-31 (A51). Use
+`slurm_jobs/submit_dexterity_fast.sh` from a login node; compute nodes cannot submit.
+See RUNS for live local training and batch preparation status.
 
 ## Data paths are repo-relative; bulk storage is symlinked in
 

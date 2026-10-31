@@ -10,6 +10,37 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
 
 ---
 
+## 2026-10-31 — Fast Vista RL submission and visible training
+
+### 84. Measured dedicated-GPU scheduling, staged Slurm launcher, cache reuse and live progress
+
+- Added `slurm_jobs/vista_dexterity_experts.sbatch`, `submit_dexterity_experts.sh`,
+  `submit_dexterity_fast.sh`, and `scripts/run_dexterity_batch_node.py`.
+  Generic node/array/PACK mapping, pinned Git source archive copied to node-local
+  workspace, `PYTHONPATH` isolation, repo-relative scratch outputs, isolated per-task
+  temp/cache paths, robust TACC job-ID parsing, task subsets and dependencies.
+- Fast wrapper defaults to the eight non-Allegro tasks, 500 iterations on gh-dev
+  (4 nodes/PACK2/2 h), then gh continuation (8 one-node array tasks/PACK1/8 h),
+  using latest valid per-task bootstrap checkpoint and cumulative 1k/3k/10k stages.
+  Compute-node submissions/probes fail explicitly; dry-run remains available.
+- `train_dexterity_expert.py` and `run_dexterity_local.py` honor
+  `DEXTERITY_CACHE_ROOT` across sequential training/evaluation stages, stream logs
+  unbuffered, record atomic `progress.json` with monotonic wall timing every ten
+  PPO updates, retain archive source-revision provenance, and allow an external
+  `--resume model_N.pt` without repeating completed iterations. No task reward,
+  physics timestep, PPO horizon, batch size, model or compiler changes.
+- `scripts/dexterity_status.py` reads workflow/TensorBoard/progress/checkpoints
+  without GPU use. `continue_dexterity_after_stage.py` preserves the live local
+  runs: waits for their final stage-1000 checkpoint and old source guard to stop,
+  evaluates it, then resumes in a fresh workflow under the updated harness.
+- Fixed `queue_wait_stats.sh` to count only the selected partition and report
+  gh-dev's 3 submitted / 1 running / 8 nodes / 2 h caps separately from gh.
+- `scripts/plot_dexterity_throughput.py` regenerates E26's measured wall-time chart
+  and CSV from its recorded benchmark JSON. Checkpoint 750 held-out Baoding video
+  and score are recorded in E26; no claim that pen spinning is solved.
+- Validation and measured scheduling evidence: A51 / E26 / RUNS. No batch job is
+  considered submitted until a real scheduler job ID is recorded there.
+
 ## 2026-10-31 — Baoding and pen-spinning RL experts
 
 ### 83. New dexterity tasks, local expert training and evaluation

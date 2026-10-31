@@ -30,13 +30,13 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 ## Current state
 
-*Last updated 2026-10-31 (A50).*
+*Last updated 2026-10-31 (A51).*
 
 - **Repo/branch:** `cross_embodied_diffusion`, `main`; user asked to push this work to GitHub.
 - **Active work:** new `Baoding-{Hand}` and `Pen-Spinning-{Hand}` RL tasks for all five existing hands
-  (CHANGES 83). These are experimental; **no successful expert has been established yet**.
-- **Current GPU:** Vista `c641-101`, existing idev allocation `1109030`, one GH200. User explicitly
-  restricted work to this GPU and prohibited new batch submissions for now. No Slurm jobs were submitted.
+  (CHANGES 83). Baoding-Allegro checkpoint750 has **86% held-out success** (E26); pen spinning remains unsolved.
+- **Current GPU:** Vista `c641-101`, existing idev allocation `1109030`, one GH200. **Slurm is now authorized**. This compute node rejects sbatch; the ready
+  `slurm_jobs/submit_dexterity_fast.sh` must be run from a login node. No new batch IDs yet.
 - **Completed local pilots:** Allegro, 100 PPO iterations × 1024 envs × 32 rollout steps for each task,
   seed 0; outputs `outputs/dexterity/{baoding,pen}_allegro_pilot_20261031/`. Both last checkpoints
   evaluated on 100 fresh-reset episodes at seed 1234: **0% full-revolution success**. Baoding
@@ -47,7 +47,12 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
   and reset isolation. Fixed a first-reset stale-palm bug using a nominal home-pose reference.
 - **Running locally:** staged PPO runs with evaluation/video after 1k/3k/10k total iterations,
   using `scripts/run_dexterity_local.py` (driver PIDs 3690957 / 3690958, source `a3fbb3f`); exact status/commands in RUNS. Only Allegro is trained
-  initially; other hands have smoke/geometry checks, not trained experts.
+  initially; other hands have smoke/geometry checks, not trained experts. Runtime edits make the
+  old driver stop safely after1000; waiter PIDs3693755/3693756 evaluate that checkpoint and resume
+  into `{baoding,pen}_allegro_continued_20261031/` with shared caches and live logs.
+- **Batch plan:** eight other-hand tasks, short gh-dev bootstrap (4nodes/PACK2/500iterations/2h),
+  then dependent gh continuation (8×1node/PACK1/8h). Login scheduler projections pending. Dedicated
+  GPU measured2.10–2.30× faster per policy than two policies/GPU; see E26. Both phases pin source.
 - **Diffusion work is unchanged:** no new demonstrations or diffusion schemas for these commands.
   Generic `collect-demos` currently lacks their success handling; use the dedicated expert evaluator.
 - **Previous experiments:** E21–E24 completed October 9–11; no diffusion jobs remain active according
@@ -85,6 +90,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A51](#a51) | 2026-10-31 | Benchmarked RL packing, prepared fast staged Slurm submission and live logs, and verified Baoding-Allegro at 86% held-out success. |
 | [A50](#a50) | 2026-10-31 | Added Baoding/pen spinning across five hands, fixed reset anchors, checked GPU execution and trained/evaluated local Allegro pilots; longer expert learning remains in progress. |
 | [A49](#a49) | 2026-10-11 | E23/E24 analysed and plotted; found why random-draw grasp targets score low (training starts ≠ eval starts). |
 | [A48](#a48) | 2026-10-10 | E22 figures; E23 grasp results and figures (σ 0 best, gating hurts); E24 grasp fine-tunes set up. |
@@ -139,6 +145,40 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a51"></a>
+### A51 — 2026-10-31 — Faster RL jobs, Slurm preparation and Baoding success
+
+**Request.** Slurm is now authorized; get RL jobs running/results visible quickly, using past lessons.
+
+**Done.** Reviewed old RL scripts and A7–A10 driver/throughput lessons, current PPO event timestamps,
+queue waits and QOS limits. Controlled brief competitor pauses measured2.30× Baoding /2.10× pen
+per-policy speedup on a dedicated GPU. Existing workers resumed; no training progress discarded.
+Current packed batch1024×32 equals old rotation2048×16 transition budget; did not change horizon.
+Evaluated Baoding checkpoint750 on100 held-out episodes:86% success,2.0767 best revolutions.
+Saved full MP4/JSON and versioned preview/benchmark plots (E26).
+
+Prepared immutable-source, scratch-backed Vista launcher and one-command gh-dev→gh chain for the
+eight non-Allegro tasks. Existing Allegro runs remain on currentGPU. Added shared sequential Warp
+cache, unbuffered live logs/progress, external checkpoint resume and status CLI; corrected partition
+usage counting. See CHANGES84. Submission attempted only as test-only probe, which returned
+"sbatch not available on compute nodes. Use a login node." Actual job submission requires login-node
+execution; no queued job IDs are invented. Requested scheduler projections from user asynchronously.
+
+Runtime edits trigger the live drivers' source guard at their completed1000 checkpoint. Started
+explicit continuation waiters (PIDs3693755/3693756), which wait for completion, evaluate, and resume
+3k/10k stages in new roots without killing current workers or replaying completed updates. Task
+semantics/hashes are unchanged; only the harness is updated.
+
+**Verified / not verified.**14 CPU runtime/continuation/evaluation tests pass; shell syntax/Ruff pass;
+launcher dry-run mapping and mock dependency/job-ID chaining verified. Actual submission and queue
+start times unavailable from this node. No claim of a measured8h runtime on every other hand or
+solved pen spinning. Native and all-ten GPU task checks from A50 remain applicable (tasks unchanged).
+
+**Pointers.** RUNS local and prepared batch rows · CHANGES84 · [E26](experiment_log_book.md#e26).
+No new demonstrations; COLLECTIONS unchanged.
+
+---
 
 <a id="a50"></a>
 ### A50 — 2026-10-31 — New Baoding and pen-spinning expert pipeline
