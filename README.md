@@ -24,6 +24,67 @@ Dexterous manipulation tasks based on [mjlab](https://github.com/mujocolab/mjlab
 
 `{Hand}` can be one of `Shadow`, `Allegro`, `LEAP`, `Sharpa`, or `Wuji`.
 
+### Experimental Baoding and pen spinning
+
+`Baoding-{Hand}` tracks two labeled balls around a horizontal orbit. Success requires
+measured ball motion through a full revolution while tracking; advancing the target
+alone does not count. `Pen-Spinning-{Hand}` rewards directed end-over-end rotation
+of a horizontal pen while retaining it near the hand. Axial rolling does not count
+as spinning. Both families are registered for all five hands.
+
+**Status (2026-10-31): initial local pilots; successful expert policies are not yet
+verified.** These are new independently implemented tasks, inspired by
+[MyoChallenge Baoding](https://github.com/amathislab/myochallenge),
+[PenSpin](https://github.com/HaozhiQi/penspin), and
+[dexterous-gym pen spinning](https://github.com/henrycharlesworth/dexterous-gym/blob/master/dexterous_gym/envs/pen_spin.py).
+Their reset geometry and learning recipes still need empirical validation across hands.
+
+Run from the repo root on an already allocated GPU. The following trainer stays on
+that GPU and never submits jobs. Use a fresh output directory for each run:
+
+```bash
+.venv/bin/python scripts/check_dexterity_envs.py --task Baoding-Allegro
+.venv/bin/python scripts/train_dexterity_expert.py \
+  --task Baoding-Allegro --output-dir outputs/dexterity/baoding_allegro_pilot \
+  --num-envs 1024 --iterations 100 --seed 0 --save-interval 50
+
+.venv/bin/python scripts/eval_dexterity_expert.py \
+  --task Baoding-Allegro \
+  --checkpoint outputs/dexterity/baoding_allegro_pilot/model_99.pt \
+  --output-dir outputs/dexterity/baoding_allegro_eval --num-envs 100 --seed 1234 --video
+```
+
+Replace `Baoding-Allegro` with `Pen-Spinning-Allegro` and use separate output paths
+for a pen-spinning pilot. Training saves TensorBoard logs, configurations and run
+metadata, and retains the newest three checkpoints (`--keep-last`). Resume with
+`--resume <checkpoint>` and a fresh output directory; `--iterations` then specifies
+additional training iterations. Newly saved metadata checks task compatibility
+before resuming or evaluating; legacy checkpoints without a signature emit a warning.
+
+For longer training on the current GPU with automatic evaluation and video after
+each cumulative stage:
+
+```bash
+.venv/bin/python scripts/run_dexterity_local.py --task Baoding-Allegro \
+  --output-dir outputs/dexterity/baoding_staged --stages 1000 3000 10000
+```
+
+This submits no scheduler jobs. Its `workflow.json` records progress, checkpoint
+paths, evaluation summaries and videos. See [E25](docs/experiment_log_book.md#e25)
+for the initial results and viewable pilot videos; neither 100-iteration pilot
+completes the task yet.
+
+Evaluation scores each environment's first fresh-reset episode and writes JSON with
+per-episode metrics, success, failures, timeouts and censored rollouts. The MP4 shows
+environment 0 from that same evaluation, ending at its first episode boundary; it
+does not select a successful rollout. Omitting `--checkpoint` produces an explicitly
+labeled zero-action diagnostic. Do not interpret a pilot or diagnostic video as a
+trained expert. Omitting `--task` from the smoke checker checks all ten new tasks.
+
+The generic `collect-demos`, `eval-policy`, and diffusion task schemas have **not yet
+been extended to these task commands**. First establish and evaluate RL experts with
+the scripts above before collecting cross-embodiment demonstrations.
+
 ## Installation
 
 ```bash

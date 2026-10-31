@@ -30,52 +30,32 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 ## Current state
 
-*Last updated 2026-10-07 (A43).*
+*Last updated 2026-10-31 (A50).*
 
-- **Repo location:** `/work/09312/rudolph/documents/cross_embodied_diffusion` (`~/documents/cross_embodied_diffusion`),
-  branch **`main`** (since 2026-10-08, at the user's request: work on `main` and push there).
-  `~/cross_embodied_diffusion` is a compatibility symlink to it on Vista. `bundle-migration` is the same commit as
-  `main` at the switch (`84e9956`) and is no longer updated.
-- **Nothing of this project is running.** The fine-grid sweep `1052839` finished and is scored:
-  [E19](experiment_log_book.md#e19) (σ 9–20 plateau, 3 seeds), [E20](experiment_log_book.md#e20) (regime box plots).
-- **Queued 2026-10-07 14:56:** E21 fine-tunes `1056188` (45 runs) and `ev-base4321` `1056189`; the other 4 evals go
-  in with `bash slurm_jobs/submit_e21_evals_rest.sh` (login node) ([A43](#a43), RUNS E21 row).
-- **2026-10-08 status:** training `1056188` and `ev-base4321` `1056189` done (45/45 fine-tunes; 205/205 E18+E19 runs
-  scored at seed 4321). Seed-4321 σ curve (mean over hands of 3-seed means) matches seed 1234: σ0 0.44, σ1–6
-  0.70–0.73, σ9 0.82, σ12 0.86, σ15 0.86, σ18 0.81, σ20 0.80, σ100 0.62. The 4 remaining evals are still queued.
-- **E21 done** (2026-10-09): fine-tuned from σ 0 1.17 vs σ 15 0.90 vs σ 100 0.71 at held-out seed 4321 (1234
-  agrees); σ 0's fine-tune forgets the other hands (1.37 → 0.26 at last0, 0.87 at best_val). Why σ 15 gains little
-  (target sample share) and three proposed follow-ups are in [E21](experiment_log_book.md#e21).
-- **E23 + E24 done** (2026-10-11): grasp gating hurts at every σ; fine-tune from σ 0 (0.58 → 0.69), not from the
-  best ambient σ (0.29 → 0.31). Random-draw grasp targets have almost no fresh-reset start states, which evals use:
-  likely why grasp scores dropped ([E23](experiment_log_book.md#e23)). E24 forgetting done: grasp fine-tunes keep
-  most of the other hands (0.81 last0), and grasp hands gated at σ 10-20 still work (0.95). Nothing running.
-- **E22 done** (2026-10-10): leave-one-out pre-train + fine-tune 1.16 vs σ 0 + fine-tune 1.17 at seed 4321; zero-shot
-  0.00; LOO fine-tunes forget the other hands completely ([E22](experiment_log_book.md#e22)).
-- Earlier finished jobs: `1049683` (rotation ambient σ sweep, 55 runs), has
-  finished and been re-scored: [E18](experiment_log_book.md#e18). Earlier: `1043385` / `1045839`
-  ([E14](experiment_log_book.md#e14)–[E16](experiment_log_book.md#e16)).
-- **Headline results:**
-  - Co-training on all five hands, then fine-tuning on the 50k target, beats both co-training alone and
-    target-only training in both families ([E15](experiment_log_book.md#e15)).
-  - Rotation, ambient gating: σ 10–20 is best (mean 0.85 successes before drop vs 0.64 target-only, 0.43 full
-    co-training; one seed) ([E18](experiment_log_book.md#e18)).
-  - **Never evaluate at env seed 0:** the 1M demos were collected at seed 0, and the old `subsets_50k/` are the
-    first ~100 episodes of the 1M stores. Target-only 50k grasp memorizes its ~100 starts
-    ([E17](experiment_log_book.md#e17)). Reporting evals use seed 1234.
-- **Next steps / open items**
-  1. **Promote kept runs before `$SCRATCH` purges them:** `scripts/promote_outputs.sh diffusion/ambient_ta`,
-     `diffusion/ambient_ta_ft`, `diffusion/ambient_ta_r` (135 runs, ~0.8 GB+ each; `/work` was at 707 GB of
-     1 TB on 2026-10-04).
-  2. Follow-ups suggested by E18, not yet decided by the user: more seeds (σ 0, 10, 20, 100), a finer σ grid
-     in 1–20, a grasp sweep on random-draw subsets (grasp `50kr` subsets/pools not built yet), and fine-tuning
-     from the σ 10–20 runs.
-  3. Runs on the old `subsets_50k/` / `_K50k` stores have inflated first in-training evals and `best_rollout`
-     (E17). Use `best_val` / `last0` for them, and `_K50kr` stores for new rotation work.
-  4. Open discrepancy: under our frozen min/max, the normalized action std is 0.24/0.26, against Bundle's
-     quoted 0.077 (CHANGES item 63). σ values may not map 1:1 onto Bundle's.
-  5. `$SCRATCH/ced_docs` (the A38 clone used while `/work` was read-only) can be deleted.
-  6. Work happens on `main` (2026-10-08); `bundle-migration` stopped at `84e9956`.
+- **Repo/branch:** `cross_embodied_diffusion`, `main`; user asked to push this work to GitHub.
+- **Active work:** new `Baoding-{Hand}` and `Pen-Spinning-{Hand}` RL tasks for all five existing hands
+  (CHANGES 83). These are experimental; **no successful expert has been established yet**.
+- **Current GPU:** Vista `c641-101`, existing idev allocation `1109030`, one GH200. User explicitly
+  restricted work to this GPU and prohibited new batch submissions for now. No Slurm jobs were submitted.
+- **Completed local pilots:** Allegro, 100 PPO iterations × 1024 envs × 32 rollout steps for each task,
+  seed 0; outputs `outputs/dexterity/{baoding,pen}_allegro_pilot_20261031/`. Both last checkpoints
+  evaluated on 100 fresh-reset episodes at seed 1234: **0% full-revolution success**. Baoding
+  best progress 0.027 revolutions, duration 14.04 s; pen 0.098 revolutions, duration 1.28 s (E25).
+  Videos are explicitly pilot results, not final experts.
+- **Verification:** all ten task/hand combinations pass GPU finite-step/reset checks. Native geometry
+  and synthetic progress tests cover static holding, axial roll, reverse motion, lost tracking,
+  and reset isolation. Fixed a first-reset stale-palm bug using a nominal home-pose reference.
+- **Next local training:** staged PPO runs with evaluation/video after 1k/3k/10k total iterations,
+  using `scripts/run_dexterity_local.py`; exact status/commands in RUNS. Only Allegro is trained
+  initially; other hands have smoke/geometry checks, not trained experts.
+- **Diffusion work is unchanged:** no new demonstrations or diffusion schemas for these commands.
+  Generic `collect-demos` currently lacks their success handling; use the dedicated expert evaluator.
+- **Previous experiments:** E21–E24 completed October 9–11; no diffusion jobs remain active according
+  to the last recorded audit. Co-training then fine-tuning remains the strongest scarce-target recipe;
+  random grasp subsets contain few fresh-reset states. See E14–E24 for protocols and findings.
+- **Still relevant:** keep reporting eval seed 1234 (not demonstration seed 0); promote valuable old
+  scratch runs before purge. The normalized action-scale discrepancy with Bundle remains open.
+
 
 ## Environment & install (living reference)
 
@@ -105,6 +85,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A50](#a50) | 2026-10-31 | Added Baoding/pen spinning across five hands, fixed reset anchors, checked GPU execution and trained/evaluated local Allegro pilots; longer expert learning remains in progress. |
 | [A49](#a49) | 2026-10-11 | E23/E24 analysed and plotted; found why random-draw grasp targets score low (training starts ≠ eval starts). |
 | [A48](#a48) | 2026-10-10 | E22 figures; E23 grasp results and figures (σ 0 best, gating hurts); E24 grasp fine-tunes set up. |
 | [A47](#a47) | 2026-10-10 | E22 done and written up (LOO + fine-tune = σ 0 + fine-tune); E23 grasp sweep finishing. |
@@ -158,6 +139,37 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a50"></a>
+### A50 — 2026-10-31 — New Baoding and pen-spinning expert pipeline
+
+**Request.** Implement Baoding and pen spinning, train RL experts, record videos and push to GitHub.
+Use only the current GPU; no new Slurm submissions yet. Subagent implementation/review authorized.
+
+**Done.** Added both task families for all five hands, independent primitive object assets, measured
+revolution success and hand-specific reset poses. Added local PPO training, staged training/evaluation,
+strict checkpoint/task matching, first-episode held-out evaluation and streamed MP4 recording. See
+CHANGES 83 for exact source changes and design references. Investigated native versus GPU reset
+behavior: nominal zero-action stability was misleading under reset jitter; first command reset also
+used stale palm poses. Shared nominal-reference helper fixes initial zeros and Shadow wrist drift.
+
+Ran all ten task combinations on this allocation (8 envs, 50 random-action steps), then reran seeded
+first-reset/partial-reset checks. Trained Allegro pilots (100 iterations each, 1024 envs, seed 0), then
+scored `model_99.pt` on 100 held-out episodes with random reset phases, deterministic actor and seed
+1234. Both have 0% success; these are pipeline/learning diagnostics, not expert policies. Saved MP4s
+under each pilot's `eval/`, GIF previews and curves under `docs/plots/` (E25). No data collection.
+
+**Verified / not verified.** Verified native scenes, collision-free tested reset samples, metric
+regressions, finite GPU observations/rewards, first/repeated/subset reset consistency, PPO updates,
+checkpoint reload, held-out evaluation and video encoding. Initial pilots predate the reset-anchor fix;
+scored under the corrected environment. They have legacy metadata without task hashes, explicitly
+warned by the evaluator. New staged runs start from scratch with final task hashes. No claim that
+all hands learn, that these are final expert policies, or that native diagnostics predict GPU success.
+No Slurm submission or use of any other GPU.
+
+**Pointers.** RUNS: idev `1109030` / `c641-101` · CHANGES 83 · E25 · COLLECTIONS unchanged (no datasets).
+
+---
 
 <a id="a49"></a>
 ### A49 — 2026-10-11 — E23/E24 results; grasp start-state mismatch

@@ -37,6 +37,7 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 | # | Date | Finding |
 |---|---|---|
+| [E25](#e25) | 2026-10-31 | Baoding and pen-spinning Allegro pilots train/evaluate end to end, but neither completes a revolution after 100 PPO iterations; staged local learning continues. |
 | [E24](#e24) | 2026-10-11 | Grasp fine-tuning, as for rotation: from σ 0 0.58 → 0.69, from each hand's best ambient σ 0.29 → 0.31 (seed 4321). |
 | [E23](#e23) | 2026-10-10 | Grasp is hurt by ambient gating at every σ: success falls from 0.58 (σ 0, full co-training) to 0.31 (σ 10) and ~0.08–0.10 from σ 30 on (seed 4321), unlike rotation's σ 9–20 plateau. Scores on random-draw targets are far below the old first-episode subsets (target-only 0.10 vs 0.38): open question. |
 | [E22](#e22) | 2026-10-10 | Pre-training without any target data, then fine-tuning on the target 50k, matches co-training with the target mixed in, then fine-tuning: 1.16 vs 1.17 successes before drop (held-out seed 4321). The pre-train alone scores 0.00 on its unseen target. |
@@ -82,6 +83,81 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 ---
 
 ## Entries
+
+<a id="e25"></a>
+### E25 — 2026-10-31 — Baoding and pen-spinning expert bootstrapping
+
+**Question.** Can we generate RL experts for two new dexterity tasks before collecting cross-hand
+BC demonstrations? **Status:** initial implementation/pilots done; longer local training in progress.
+
+**Data.** Online MuJoCo/Warp rollouts only; no offline demonstrations or new COLLECTIONS entries.
+Primitive 18 mm / 25 g Baoding balls and a 16 cm / 20 g capsule pen. Five hand embodiments are
+registered; initial learning runs use Allegro only. Task designs draw on the independent references in
+[CHANGES 83](CHANGES.md#83-new-dexterity-tasks-local-expert-training-and-evaluation).
+
+**Policy inputs/outputs.** PPO MLP actor/critic (512/256/128), empirical observation normalization,
+one action per 20 ms control step. Allegro Baoding: 79 observations (joint position/velocity, last
+16 actions, both-ball state and phase goals) → 16 joint-target actions. Allegro pen: 66 observations
+(joint position/velocity, object pose/velocity, pen axis, spin command, last action) → 16 actions.
+Actions clip to [-1,1], then existing hand-specific position mapping and EMA apply. This is RL,
+not a diffusion/chunk policy; no demonstration normalizer is fitted.
+
+**Protocol.** Each initial pilot: seed 0, 1024 envs, 32 rollout steps/iteration, 100 PPO iterations
+(3,276,800 transitions), local GH200 in existing allocation 1109030. Save iterations 0/50/99.
+Score last checkpoint `model_99.pt`, deterministic actor, 100 first fresh-reset episodes at seed
+1234, no observation corruption, training reset randomization retained. Horizon 24 s Baoding / 20 s
+pen; all episodes finish, no censoring. The video shows env 0 without choosing a successful rollout.
+Pilots were trained before the nominal reset-anchor fix and evaluated with that fix; Allegro's
+fixed palm anchor after forward is unchanged. Treat these as implementation diagnostics.
+
+Success means an actual full uninterrupted directed revolution: both labeled balls track the
+moving orbit for Baoding; pen long-axis heading turns fully while retained and sufficiently
+horizontal. Static holding, axial pen roll, and back/forth movement do not count. `best_revolutions`
+is maximum uninterrupted directed progress before a drop or loss of validity.
+
+**Initial held-out results (not experts):**
+
+| Task | Full-revolution success | Mean best revolutions | Mean episode duration | Drop/failure | Timeout |
+|---|---:|---:|---:|---:|---:|
+| Baoding-Allegro | 0/100 | 0.0273 | 14.0424 s | 60% | 40% |
+| Pen-Spinning-Allegro | 0/100 | 0.0984 | 1.2840 s | 100% | 0% |
+
+![Training diagnostics for the two initial Allegro pilots](plots/dexterity_allegro_pilots_20261031.png)
+
+[Held-out summary CSV](plots/dexterity_allegro_pilots_20261031.csv). Recreate curves/table:
+
+```bash
+.venv/bin/python scripts/plot_dexterity_pilots.py \
+  --runs outputs/dexterity/baoding_allegro_pilot_20261031 outputs/dexterity/pen_allegro_pilot_20261031 \
+  --output docs/plots/dexterity_allegro_pilots_20261031.png
+```
+
+**Pilot video previews — neither solves the task.** Baoding preview is the first 8 seconds of
+held-out env 0; pen preview is env 0's first episode. Original MP4s are in each run's
+`eval/policy_seed1234_env0.mp4`. GIFs preserve elapsed time (15 fps), resized to 480 px.
+
+![Baoding 100-iteration pilot: holding, not a completed orbit](plots/baoding_allegro_pilot_20261031.gif)
+
+![Pen 100-iteration pilot: partial motion then drop, not an expert](plots/pen_allegro_pilot_20261031.gif)
+
+Recreate each GIF with `ffmpeg -i <mp4> -vf
+'fps=15,scale=480:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse' <gif>`;
+add `-t 8` before the Baoding input. Figures/GIFs are versioned; bulk checkpoints/MP4s are not.
+
+**Takeaways.** The expert pipeline runs end to end, but 100 iterations are insufficient. Baoding
+learns retention before coordinated orbiting; the pen pilot still drops quickly. All ten GPU task
+configs pass smoke tests, which proves finite execution/reset correctness, not learnability. Native
+zero-action stability is strongly affected by random reset/friction changes. The first-reset bug
+was caught by checking actual spawn positions, not merely finite outputs.
+
+**Next local stage.** Train fresh Allegro policies with the corrected tasks, score/video after
+1k/3k/10k iterations; only this allocated GPU, no batch submission. The staged driver records
+`workflow.json`, each stage's exact configs, `training.json`, metrics and video. No successful
+expert, full five-hand expert suite or cross-embodiment demonstration dataset is claimed yet.
+
+**Links.** RUNS: idev `1109030`, `c641-101` · [A50](agent_log_book.md#a50) · CHANGES 83.
+
+---
 
 <a id="e24"></a>
 ### E24 — 2026-10-11 — Grasp fine-tuning from co-trained and best ambient runs

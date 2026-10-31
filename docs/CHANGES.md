@@ -10,6 +10,56 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
 
 ---
 
+## 2026-10-31 — Baoding and pen-spinning RL experts
+
+### 83. New dexterity tasks, local expert training and evaluation
+
+- Added `src/mjlab_hand/baoding/` and `src/mjlab_hand/pen_spinning/`, registered
+  `Baoding-{Hand}` and `Pen-Spinning-{Hand}` for Allegro, LEAP, Shadow, Sharpa and Wuji.
+  Existing grasp/rotation registrations and rewards are unchanged.
+- Baoding uses two primitive 18 mm / 25 g balls, antipodal horizontal targets with
+  an 8-second period, joint distance tracking and signed measured orbit progress.
+  Success requires both balls to complete one uninterrupted tracked revolution.
+  Progress resets when tracking is lost; best progress and success survive until
+  the episode resets. Reset lift is separate from the orbit height.
+- Pen spinning uses a primitive 16 cm / 20 g capsule, colored ends, directed
+  horizontal end-over-end motion, retention/tilt/velocity/action costs. Axial roll
+  does not count. Success requires one uninterrupted directed revolution. Positive
+  spin reward is capped; negative motion is not capped, preventing an asymmetric
+  speed oscillation from earning positive net reward. Hand-specific poses and reset
+  jitter avoid initial object penetration; thin-object physics uses 2 ms substeps.
+- Added local-only `scripts/train_dexterity_expert.py` (RSL-RL PPO, TensorBoard,
+  exact configs/provenance, resume, bounded checkpoint retention) and
+  `scripts/eval_dexterity_expert.py` (held-out fresh-reset episodes, explicit
+  censoring, streamed first-env video, task metrics). Evaluation retains random
+  reset phases and disables observation noise. `scripts/dexterity_runtime.py`
+  checks checkpoint/task identity instead of silently changing task definitions.
+- Added `mdp/fixed_hand_reference.py`: native MuJoCo home-pose anchor computed once
+  before first reset, with per-environment origins added exactly once. Commands
+  never derive reset positions from stale live palm poses; Shadow wrist motion
+  cannot move the task goal. `check_fixed_hand_reference.py` checks real scene
+  keyframes and translated worlds.
+- `scripts/run_dexterity_local.py` stages local training → evaluation/video at
+  cumulative iteration counts, snapshots source, records atomic workflow status,
+  and stops on errors/source drift. No scheduler or remote GPU access.
+- `scripts/plot_dexterity_pilots.py` produces the E25 training plot/held-out CSV;
+  pilot GIFs are encoded with documented ffmpeg commands. README explains the
+  experimental status and supported expert workflow.
+- Tests/diagnostics: `scripts/check_baoding.py`, `scripts/check_baoding_settle.py`,
+  `tests/test_pen_spinning.py`, `scripts/check_dexterity_envs.py`,
+  `scripts/check_dexterity_train.py`, and `scripts/check_dexterity_eval.py`.
+- These are independent implementations informed by
+  [MyoChallenge Baoding](https://github.com/amathislab/myochallenge/blob/main/src/envs/baoding.py),
+  [its curriculum notes](https://github.com/amathislab/myochallenge/blob/main/docs/summary.md),
+  [PenSpin](https://github.com/HaozhiQi/penspin), and
+  [dexterous-gym](https://github.com/henrycharlesworth/dexterous-gym/blob/master/dexterous_gym/envs/pen_spin.py).
+  No upstream task code was copied. These are robotic-hand tasks, not a reproduction
+  of the muscle-actuated MyoChallenge benchmark or AdaDex's human-reference training.
+- Generic demonstration collection and diffusion schemas have not been extended.
+  Establish expert performance first. No Slurm jobs submitted; all GPU work for
+  this change stays in allocation `1109030` on `c641-101`. Verification and pilot
+  results are recorded in A50 / E25 and RUNS.
+
 ## 2026-10-11 — E24 plot
 
 ### 82. `plot_finetune_sources.py`: per-hand `amb` source, shorter source labels

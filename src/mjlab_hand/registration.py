@@ -13,6 +13,8 @@ _TASK_MODULES = (
     "mjlab_hand.in_hand_rotation.config.shadow",
     "mjlab_hand.in_hand_rotation.config.sharpa",
     "mjlab_hand.in_hand_rotation.config.wuji",
+    "mjlab_hand.baoding.config",
+    "mjlab_hand.pen_spinning.config",
 )
 
 

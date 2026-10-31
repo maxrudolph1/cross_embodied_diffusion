@@ -58,6 +58,15 @@ of that benchmark**, not the RL benchmark itself:
    state-equivalence probes, fine-tuning) build on steps 2-4 — see
    `docs/experiment_log_book.md`.
 
+**New experimental RL tasks (2026-10-31, CHANGES 83 / E25):** `Baoding-{Hand}` and
+`Pen-Spinning-{Hand}` are registered for all five hands. Their expert workflows are
+`scripts/train_dexterity_expert.py`, `scripts/eval_dexterity_expert.py`, and the
+local staged driver `scripts/run_dexterity_local.py`. Initial Allegro pilots do not
+yet solve either task. The generic demo collector and diffusion schemas do not yet
+support their success commands; do not label these episodes with the old fallback.
+The current user restriction is to use the already allocated GPU only, with no new
+Slurm submissions until authorized. See RUNS for live local training status.
+
 ## Data paths are repo-relative; bulk storage is symlinked in
 
 The repo is used on more than one server and by more than one person. Code,
