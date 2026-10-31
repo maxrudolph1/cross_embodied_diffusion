@@ -68,6 +68,18 @@ def status(root: Path) -> dict:
     if completed:
         last = completed[-1]
         row["held_out"] = {"stage": last["cumulative_iterations"], **last["summary"]}
+    else:
+        # A continuation waiter can evaluate a completed checkpoint after the
+        # original driver's source guard stops; its report still belongs here.
+        reports = []
+        for path in root.glob("eval_*/policy_seed*.json"):
+            match = re.fullmatch(r"eval_(\d+)", path.parent.name)
+            report = read_json(path)
+            if match and report.get("summary"):
+                reports.append((int(match[1]), report["summary"]))
+        if reports:
+            count, summary = max(reports, key=lambda value: value[0])
+            row["held_out"] = {"stage": count, **summary}
     return row
 
 
