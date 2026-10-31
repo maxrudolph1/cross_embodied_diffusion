@@ -30,13 +30,13 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 ## Current state
 
-*Last updated 2026-10-31 (A51).*
+*Last updated 2026-10-31 (A52).*
 
 - **Repo/branch:** `cross_embodied_diffusion`, `main`; user asked to push this work to GitHub.
 - **Active work:** new `Baoding-{Hand}` and `Pen-Spinning-{Hand}` RL tasks for all five existing hands
   (CHANGES 83). Baoding-Allegro checkpoint750 has **86% held-out success**, checkpoint999 **78%** (E26); pen spinning remains unsolved.
 - **Current GPU:** Vista `c641-101`, existing idev allocation `1109030`, one GH200. **Slurm is now authorized**. This compute node rejects sbatch; the ready
-  `slurm_jobs/submit_dexterity_fast.sh` must be run from a login node. No new batch IDs yet.
+  `slurm_jobs/submit_dexterity_fast.sh` was launched by the user from login1: array1112641, all eight pending Priority at15:18CT.
 - **Completed local pilots:** Allegro, 100 PPO iterations × 1024 envs × 32 rollout steps for each task,
   seed 0; outputs `outputs/dexterity/{baoding,pen}_allegro_pilot_20261031/`. Both last checkpoints
   evaluated on 100 fresh-reset episodes at seed 1234: **0% full-revolution success**. Baoding
@@ -50,9 +50,9 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
   initially; other hands have smoke/geometry checks, not trained experts. Runtime edits make the
   old driver stop safely after1000; waiter PIDs3693755/3693756 evaluate that checkpoint and resume
   into `{baoding,pen}_allegro_continued_20261031/` with shared caches and live logs.
-  Baoding handoff verified:1000 iterations complete, checkpoint999 evaluated78%, stage3000 running.
+  Both handoffs verified: stage3000 running. Baoding checkpoint999 evaluated78%; pen0%.
 - **Batch plan:** eight other-hand tasks, gh only (8×1node/PACK1/8h), stages1k/3k/10k.
-  User will launch from the head node; scheduler projections pending. Dedicated GPU measured
+  Submitted from the head node; scheduler start estimate unavailable. Dedicated GPU measured
   2.10–2.30× faster per policy than two policies/GPU; see E26. Submission pins source.
 - **Diffusion work is unchanged:** no new demonstrations or diffusion schemas for these commands.
   Generic `collect-demos` currently lacks their success handling; use the dedicated expert evaluator.
@@ -91,6 +91,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A52](#a52) | 2026-10-31 | Confirmed gh array1112641 submission and started minute-by-minute queue/training monitoring. |
 | [A51](#a51) | 2026-10-31 | Benchmarked RL packing, prepared fast staged Slurm submission and live logs, and verified Baoding-Allegro at 86% held-out success. |
 | [A50](#a50) | 2026-10-31 | Added Baoding/pen spinning across five hands, fixed reset anchors, checked GPU execution and trained/evaluated local Allegro pilots; longer expert learning remains in progress. |
 | [A49](#a49) | 2026-10-11 | E23/E24 analysed and plotted; found why random-draw grasp targets score low (training starts ≠ eval starts). |
@@ -146,6 +147,28 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a52"></a>
+### A52 — 2026-10-31 — Monitor submitted expert array
+
+**Request.** Monitor the jobs.
+
+**Done.** Confirmed array1112641_0–7 submitted by login1 at15:18:14CT, sourcec4edc4d,
+run tag dexterity_gh_20261031_201809. All eight pending Priority; scheduler gives no start estimate.
+Started read-only monitor PID3695402 on existing idev1109030, polling every60seconds:
+queue, accounting exit codes and training status JSON. Script, PID, latest.json, history.jsonl and
+monitor.log are under outputs/dexterity/monitor_1112641/. It runs up to48hours but ends if its
+host allocation ends; it records status and does not send notifications or automatically repair jobs.
+
+**Verified.** Local Baoding iteration1359 and pen1019 advancing toward3000. Both source-guard
+handoffs succeeded; old failed workflow status is superseded, not a current training failure.
+Pen checkpoint999 held-out100seed1234: success0%, bestrevolutions0.22208, duration9.4628s,
+drop81%. Immutable batch smoke completed both train/resume/eval/video stages.
+No new datasets or source changes; COLLECTIONS/CHANGES unchanged.
+
+**Pointers.** RUNS1112641; E26; A51.
+
+---
 
 <a id="a51"></a>
 ### A51 — 2026-10-31 — Faster RL jobs, Slurm preparation and Baoding success

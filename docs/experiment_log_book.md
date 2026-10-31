@@ -127,6 +127,11 @@ This is a useful initial expert candidate, not evidence for all hands or pen spi
 The later `model_999.pt` checkpoint was also evaluated with exactly the same held-out protocol:
 **78/100 success**,1.7215 mean best revolutions,21.248s mean duration,17%drop /83%timeout.
 Learning is not monotonic; retain checkpoint750 rather than claiming the last checkpoint is best.
+Pen-Allegro checkpoint999 also completed the same100-episode seed1234 held-out evaluation:
+0% success, mean best progress0.22208revolutions, mean duration9.4628s, drop81%.
+Report/video: outputs/dexterity/pen_allegro_staged_20261031/eval_1000/.
+It resumed toward3000 iterations; pen spinning remains unsolved.
+
 Both scores are reported, not just the higher one. [Checkpoint comparison CSV](plots/dexterity_eval_20261031.csv).
 The1000-iteration checkpoint and video are under the original run's `eval_1000/`; training resumed
 from999 in `outputs/dexterity/baoding_allegro_continued_20261031/stage_3000/`.
