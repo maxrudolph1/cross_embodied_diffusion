@@ -246,3 +246,12 @@ If you find this project useful, please consider citing it:
   year={2026}
 }
 ```
+
+
+To work through remaining experts on one existing GPU allocation, use
+`scripts/run_dexterity_serial.py --manifest <expert-manifest.json> --output-dir outputs/dexterity/<new-run>
+--wait-root <currently-running-workflow> --deadline <ISO-time-with-offset>`.
+It waits for the current workflow, then trains the other tasks in1k/3k/10k rounds,
+resuming checkpoints and evaluating/rendering each round. It does not submit or
+cancel Slurm jobs; avoid duplicate queued work before starting it. Progress is in
+`<new-run>/serial.json`; all10k stages may not fit the allocation.

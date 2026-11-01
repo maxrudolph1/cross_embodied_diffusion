@@ -30,16 +30,20 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 ## Current state
 
-*Last updated 2026-11-01 (A53).*
+*Last updated 2026-11-01 (A54).*
 
 - **Repo/branch:** `cross_embodied_diffusion`, `main`; user asked to push this work to GitHub.
 - **Active work:** both Allegro workflows completed10000 PPO iterations. Held-out100episodes seed1234:
   Baoding96% success (3000:97%); pen0% (both stages). Full videos in each continued run's eval_10000/.
 - **Current GPU:** c638-091, idev1111059, expires2026-11-03 01:52:52CST.
   Started Baoding-LEAP locally in outputs/dexterity/baoding_leap_local_20261101/, PID3949891.
-- **Batch queue:**1112641_0–7 remain pending Priority as of2026-11-01 12:38CST; scheduler projects
-  November2 05:02:27CST, not guaranteed. gh has no idle nodes; keep accrued queue age.
-  New monitor PID3949852 runs here, outputs/dexterity/monitor_1112641_20261101/.
+- **Local serial scheduler:** PID3957529 waits for current LEAP to finish, then runs the other
+  seven task/hand combinations in rounds1000/3000/10000 on this GPU, with eval/video at each.
+  State: outputs/dexterity/serial_local_1111059_20261101/serial.json; deadline November3 01:52:52CST.
+- **Batch array1112641:** all eight CANCELLED on November1 around16:49CST.
+  Attempting scancel --state=PENDING1112641_0 was followed by cancellation of the whole array,
+  broader than intended. User was told; final serial scheduler has no scheduler commands and owns
+  all remaining tasks locally. Unrelated allocation1111059 and pending1114509 were untouched.
 - **Completed local pilots:** Allegro, 100 PPO iterations × 1024 envs × 32 rollout steps for each task,
   seed 0; outputs `outputs/dexterity/{baoding,pen}_allegro_pilot_20261031/`. Both last checkpoints
   evaluated on 100 fresh-reset episodes at seed 1234: **0% full-revolution success**. Baoding
@@ -48,8 +52,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 - **Verification:** all ten task/hand combinations pass GPU finite-step/reset checks. Native geometry
   and synthetic progress tests cover static holding, axial roll, reverse motion, lost tracking,
   and reset isolation. Fixed a first-reset stale-palm bug using a nominal home-pose reference.
-- **Local workflow:** Baoding-LEAP stages1000/3000/10000, one policy/GPU. Pending array task0
-  is also Baoding-LEAP; compare local progress before it starts to avoid unnecessary duplication.
+- **Local workflow:** Baoding-LEAP stages1000/3000/10000, one policy/GPU. Array duplicate cancelled; serial scheduler waits for completion before using this GPU.
 - **Previous allocation:**1109030 on c641-101 expires November1 13:45CST; both Allegro runs finished.
 - **Diffusion work is unchanged:** no new demonstrations or diffusion schemas for these commands.
   Generic `collect-demos` currently lacks their success handling; use the dedicated expert evaluator.
@@ -88,6 +91,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A54](#a54) | 2026-11-01 | Scheduled remaining experts locally in evaluation rounds and recorded array cancellation. |
 | [A53](#a53) | 2026-11-01 | Diagnosed priority wait, recovered completed Allegro results and started LEAP on the newly available GPU. |
 | [A52](#a52) | 2026-10-31 | Confirmed gh array1112641 submission and started minute-by-minute queue/training monitoring. |
 | [A51](#a51) | 2026-10-31 | Benchmarked RL packing, prepared fast staged Slurm submission and live logs, and verified Baoding-Allegro at 86% held-out success. |
@@ -145,6 +149,37 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a54"></a>
+### A54 — 2026-11-01 — Complete remaining work on the allocated GPU
+
+**Request.** Complete what can run on this GPU rather than waiting for the queue.
+
+**Done.** Current LEAP is around5200/10000iterations at16:49CST, held-out0% so far.
+Added run_dexterity_serial.py: waits for the live workflow to finish, then traverses remaining
+manifest tasks at1000,3000,10000 cumulative updates with checkpoint resume and eval/video
+after every stage. One policy at a time, per-task caches, persistent status/logs; failure skips
+only that hand's later rounds. Stops starting work30minutes before allocation expiry.
+Started PID3957529, exact argv in outputs/dexterity/serial_local_1111059_20261101.launch.json.
+There are about33hours left; completion of every10k run is not guaranteed.
+
+**Cancellation incident.** Attempted to cancel only pending duplicate1112641_0 using
+scancel --state=PENDING1112641_0 (space between flag and ID in actual argv).
+The following sacct query reported1112641_[0-7] CANCELLED by886155 and scontrol no longer
+found individual elements. This was broader than intended and disclosed immediately.
+No cause is asserted beyond the observed command and scheduler result. Removed cancellation
+logic entirely from the final serial script. Superseded waiter3957353 was stopped before it
+launched any training. All seven remaining tasks are included in the replacement local schedule.
+No new Slurm submission, no other allocations changed.
+
+**Verified.** CPU integration test exercises two tasks through all three rounds with checkpoint
+resume, skips the already completed task, and validates final state. Ruff passes. Live scheduler
+state says waiting while the original LEAP worker continues; subsequent GPU rounds not yet run.
+Existing LEAP source guard unchanged. No dataset changes or new expert claims.
+
+**Pointers.** CHANGES85; RUNS1111059/1112641. COLLECTIONS and E26 results unchanged.
+
+---
 
 <a id="a53"></a>
 ### A53 — 2026-11-01 — Queue delay and immediate local LEAP training

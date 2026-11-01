@@ -10,6 +10,23 @@ Numbered items are cited from code comments ("See CHANGES.md item N", meaning th
 
 ---
 
+## 2026-11-01 — Local serial expert rounds
+
+### 85. Fill the current allocation with staged training across remaining hands
+
+- Added scripts/run_dexterity_serial.py: waits for an existing workflow to complete,
+  skips its task, runs the manifest's other tasks sequentially at1k/3k/10k cumulative
+  updates, resumes intact checkpoints, and uses the existing driver for held-out
+  evaluation and MP4 generation after every round. Private caches persist per task.
+- Atomic serial.json, per-stage logs, child exit status, and an allocation deadline
+  preserve progress. Do not start a new stage in the last30minutes; an already running
+  stage can still hit the allocation limit, leaving its retained checkpoints.
+- This script performs no scheduler mutations. Initial cancellation logic was removed
+  before the final scheduler was launched following the A54 cancellation incident.
+- scripts/check_dexterity_serial.py tests stage order, prior-task exclusion, checkpoint
+  resume and final status through mocked child execution without GPU work.
+- No task reward, physics, PPO configuration or existing source-guarded scripts changed.
+
 ## 2026-10-31 — Fast Vista RL submission and visible training
 
 ### 84. Measured dedicated-GPU scheduling, staged Slurm launcher, cache reuse and live progress
