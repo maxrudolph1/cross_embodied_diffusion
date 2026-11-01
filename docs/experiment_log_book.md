@@ -146,6 +146,19 @@ Exact evaluation: `.venv/bin/python scripts/eval_dexterity_expert.py --task Baod
  --output-dir outputs/dexterity/baoding_allegro_750_eval_20261031 --num-envs 100 --video --video-steps 1500`.
 GIF: ffmpeg first 12 s, fps=12, width=400, palettegen/paletteuse (same recipe as E25).
 
+**Completed Allegro runs (audited November1).** Same100-episode seed1234 protocol:
+
+| Task | PPO iterations | Success | Best revolutions | Duration(s) |
+|---|---:|---:|---:|---:|
+| baoding | 3000 | 0.97 | 2.8114305379241706 | 23.612399999999997 |
+| baoding | 10000 | 0.96 | 2.853663897961378 | 23.108800000000002 |
+| pen | 3000 | 0.0 | 0.22696022253483533 | 11.904200000000001 |
+| pen | 10000 | 0.0 | 0.25221328854560854 | 12.585799999999999 |
+
+Reports and MP4s: outputs/dexterity/{baoding,pen}_allegro_continued_20261031/eval_{3000,10000}/.
+Baoding is a useful expert candidate; pen still fails a full revolution after10k iterations.
+[Final metrics CSV](plots/dexterity_final_allegro_20261101.csv).
+
 **Scheduling evidence (2026-10-31).** `gh` recent started-job waits: 1 node median31.0h (n76),
 2 nodes34.2h(n14), 3–4 nodes33.6h(n10), 5–8 nodes32.9h(n27), 9–16 nodes32.9h(n6).
 These are biased queue observations, not promised start times. Exact scheduler projections require

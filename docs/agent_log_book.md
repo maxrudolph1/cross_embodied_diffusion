@@ -30,13 +30,16 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 ## Current state
 
-*Last updated 2026-10-31 (A52).*
+*Last updated 2026-11-01 (A53).*
 
 - **Repo/branch:** `cross_embodied_diffusion`, `main`; user asked to push this work to GitHub.
-- **Active work:** new `Baoding-{Hand}` and `Pen-Spinning-{Hand}` RL tasks for all five existing hands
-  (CHANGES 83). Baoding-Allegro checkpoint750 has **86% held-out success**, checkpoint999 **78%** (E26); pen spinning remains unsolved.
-- **Current GPU:** Vista `c641-101`, existing idev allocation `1109030`, one GH200. **Slurm is now authorized**. This compute node rejects sbatch; the ready
-  `slurm_jobs/submit_dexterity_fast.sh` was launched by the user from login1: array1112641, all eight pending Priority at15:18CT.
+- **Active work:** both Allegro workflows completed10000 PPO iterations. Held-out100episodes seed1234:
+  Baoding96% success (3000:97%); pen0% (both stages). Full videos in each continued run's eval_10000/.
+- **Current GPU:** c638-091, idev1111059, expires2026-11-03 01:52:52CST.
+  Started Baoding-LEAP locally in outputs/dexterity/baoding_leap_local_20261101/, PID3949891.
+- **Batch queue:**1112641_0–7 remain pending Priority as of2026-11-01 12:38CST; scheduler projects
+  November2 05:02:27CST, not guaranteed. gh has no idle nodes; keep accrued queue age.
+  New monitor PID3949852 runs here, outputs/dexterity/monitor_1112641_20261101/.
 - **Completed local pilots:** Allegro, 100 PPO iterations × 1024 envs × 32 rollout steps for each task,
   seed 0; outputs `outputs/dexterity/{baoding,pen}_allegro_pilot_20261031/`. Both last checkpoints
   evaluated on 100 fresh-reset episodes at seed 1234: **0% full-revolution success**. Baoding
@@ -45,15 +48,9 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 - **Verification:** all ten task/hand combinations pass GPU finite-step/reset checks. Native geometry
   and synthetic progress tests cover static holding, axial roll, reverse motion, lost tracking,
   and reset isolation. Fixed a first-reset stale-palm bug using a nominal home-pose reference.
-- **Running locally:** staged PPO runs with evaluation/video after 1k/3k/10k total iterations,
-  using `scripts/run_dexterity_local.py` (driver PIDs 3690957 / 3690958, source `a3fbb3f`); exact status/commands in RUNS. Only Allegro is trained
-  initially; other hands have smoke/geometry checks, not trained experts. Runtime edits make the
-  old driver stop safely after1000; waiter PIDs3693755/3693756 evaluate that checkpoint and resume
-  into `{baoding,pen}_allegro_continued_20261031/` with shared caches and live logs.
-  Both handoffs verified: stage3000 running. Baoding checkpoint999 evaluated78%; pen0%.
-- **Batch plan:** eight other-hand tasks, gh only (8×1node/PACK1/8h), stages1k/3k/10k.
-  Submitted from the head node; scheduler start estimate unavailable. Dedicated GPU measured
-  2.10–2.30× faster per policy than two policies/GPU; see E26. Submission pins source.
+- **Local workflow:** Baoding-LEAP stages1000/3000/10000, one policy/GPU. Pending array task0
+  is also Baoding-LEAP; compare local progress before it starts to avoid unnecessary duplication.
+- **Previous allocation:**1109030 on c641-101 expires November1 13:45CST; both Allegro runs finished.
 - **Diffusion work is unchanged:** no new demonstrations or diffusion schemas for these commands.
   Generic `collect-demos` currently lacks their success handling; use the dedicated expert evaluator.
 - **Previous experiments:** E21–E24 completed October 9–11; no diffusion jobs remain active according
@@ -91,6 +88,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A53](#a53) | 2026-11-01 | Diagnosed priority wait, recovered completed Allegro results and started LEAP on the newly available GPU. |
 | [A52](#a52) | 2026-10-31 | Confirmed gh array1112641 submission and started minute-by-minute queue/training monitoring. |
 | [A51](#a51) | 2026-10-31 | Benchmarked RL packing, prepared fast staged Slurm submission and live logs, and verified Baoding-Allegro at 86% held-out success. |
 | [A50](#a50) | 2026-10-31 | Added Baoding/pen spinning across five hands, fixed reset anchors, checked GPU execution and trained/evaluated local Allegro pilots; longer expert learning remains in progress. |
@@ -147,6 +145,29 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a53"></a>
+### A53 — 2026-11-01 — Queue delay and immediate local LEAP training
+
+**Request.** Jobs still not running; investigate and make progress.
+
+**Done.** Queue1112641 remains Priority after about22h. Scheduler projection November2 05:02:27CST;
+gh568allocated,1completing,5planned,2reserved, none idle. Recent one-node median wait33.1h(n75),
+two-node38.0h(n20),5–8node36.3h(n34); no evidence to reset queue age by resubmitting.
+Discovered current session moved to idle GH200 c638-091/idev1111059 with37h remaining.
+Started Baoding-LEAP stages1k/3k/10k, PID3949891; launch argv in adjacent .launch.json.
+Initial launch rejected a nonempty output directory before GPU training; moved launcher metadata
+outside the run root and relaunched. Existing queue preserved. Monitor PID3949852 records queue,
+accounting and local/batch progress every60s under outputs/dexterity/monitor_1112641_20261101/.
+Monitoring records status; it does not autonomously notify or repair jobs.
+
+**Results.** Both Allegro workflows completed on previous allocation. Baoding97% at3k,
+96% at10k; pen0% at both.100held-out episodes, seed1234. Videos already generated.
+No source or dataset changes.
+
+**Pointers.** RUNS1112641/1111059; E26 updated with final results; COLLECTIONS/CHANGES unchanged.
+
+---
 
 <a id="a52"></a>
 ### A52 — 2026-10-31 — Monitor submitted expert array
