@@ -30,15 +30,16 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 ## Current state
 
-*Last updated 2026-11-01 (A54).*
+*Last updated 2026-11-02 (A55).*
 
 - **Repo/branch:** `cross_embodied_diffusion`, `main`; user asked to push this work to GitHub.
 - **Active work:** both Allegro workflows completed10000 PPO iterations. Held-out100episodes seed1234:
   Baoding96% success (3000:97%); pen0% (both stages). Full videos in each continued run's eval_10000/.
 - **Current GPU:** c638-091, idev1111059, expires2026-11-03 01:52:52CST.
-  Started Baoding-LEAP locally in outputs/dexterity/baoding_leap_local_20261101/, PID3949891.
-- **Local serial scheduler:** PID3957529 waits for current LEAP to finish, then runs the other
-  seven task/hand combinations in rounds1000/3000/10000 on this GPU, with eval/video at each.
+  Baoding-LEAP completed10k with0% held-out success; outputs/dexterity/baoding_leap_local_20261101/.
+- **Local serial scheduler:** PID3957529 is running rounds on this GPU. All seven1k stages complete, plus
+  Baoding-Shadow/Sharpa/Wuji3k (held-out100%/22%/61%). Pen-LEAP around2440/3000 at08:19CST.
+  Monitor PID3982311 records all nested rounds every60s in outputs/dexterity/monitor_local_20261102/.
   State: outputs/dexterity/serial_local_1111059_20261101/serial.json; deadline November3 01:52:52CST.
 - **Batch array1112641:** all eight CANCELLED on November1 around16:49CST.
   Attempting scancel --state=PENDING1112641_0 was followed by cancellation of the whole array,
@@ -52,7 +53,8 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 - **Verification:** all ten task/hand combinations pass GPU finite-step/reset checks. Native geometry
   and synthetic progress tests cover static holding, axial roll, reverse motion, lost tracking,
   and reset isolation. Fixed a first-reset stale-palm bug using a nominal home-pose reference.
-- **Local workflow:** Baoding-LEAP stages1000/3000/10000, one policy/GPU. Array duplicate cancelled; serial scheduler waits for completion before using this GPU.
+- **Local workflow:** one policy/GPU, serial rounds active; all completed evaluations have MP4s.
+  Slurm currently shows only1111059 running and1114509 pending; no replacement training array.
 - **Previous allocation:**1109030 on c641-101 expires November1 13:45CST; both Allegro runs finished.
 - **Diffusion work is unchanged:** no new demonstrations or diffusion schemas for these commands.
   Generic `collect-demos` currently lacks their success handling; use the dedicated expert evaluator.
@@ -91,6 +93,7 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 
 | # | Date | Summary |
 |---|---|---|
+| [A55](#a55) | 2026-11-02 | Verified local rounds, recorded Shadow100%/Sharpa22%/Wuji61% Baoding results and refreshed monitoring. |
 | [A54](#a54) | 2026-11-01 | Scheduled remaining experts locally in evaluation rounds and recorded array cancellation. |
 | [A53](#a53) | 2026-11-01 | Diagnosed priority wait, recovered completed Allegro results and started LEAP on the newly available GPU. |
 | [A52](#a52) | 2026-10-31 | Confirmed gh array1112641 submission and started minute-by-minute queue/training monitoring. |
@@ -149,6 +152,26 @@ for anything still running.** The rules for agents are in [`../AGENTS.md`](../AG
 ---
 
 ## Entries
+
+<a id="a55"></a>
+### A55 — 2026-11-02 — Monitor local expert rounds
+
+**Request.** User thought jobs had launched; monitor them.
+
+**Verified.** squeue/sacct show only1111059 running,1114509 pending, old1112641 cancelled.
+Local serial scheduler3957529 is healthy: seven1k rounds plus three Baoding3k rounds complete,
+zero child failures; Pen-LEAP3k training around2440updates, training success~23% (not held-out).
+Baoding-LEAP finished10k at0%; Baoding-Shadow3k100%, Sharpa22%, Wuji61% on100episodes seed1234.
+All13 completed evaluation rows across LEAP and serial rounds have existing MP4s.
+
+**Done.** Recorded CSV/plot in E27. Replaced obsolete cancelled-array monitor3949852 with
+PID3982311, outputs/dexterity/monitor_local_20261102/, dynamically discovering nested round roots.
+Every60s records queue, accounting and training/evaluation status. No job cancellations,
+submissions or training changes. Approximately17.5h remain in this allocation.
+
+**Pointers.** E27; RUNS1111059. No source/dataset changes; CHANGES/COLLECTIONS unchanged.
+
+---
 
 <a id="a54"></a>
 ### A54 — 2026-11-01 — Complete remaining work on the allocated GPU

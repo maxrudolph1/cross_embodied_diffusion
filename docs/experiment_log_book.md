@@ -37,6 +37,7 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 
 | # | Date | Finding |
 |---|---|---|
+| [E27](#e27) | 2026-11-02 | Local Baoding3k reaches Shadow100%, Sharpa22%, Wuji61%; LEAP10k and completed pen1k evaluations remain0%. |
 | [E26](#e26) | 2026-10-31 | Dedicated GH200s speed up each RL expert 2.10–2.30×; Baoding-Allegro checkpoint 750 reaches 86% held-out success, while pen remains in training. |
 | [E25](#e25) | 2026-10-31 | Baoding and pen-spinning Allegro pilots train/evaluate end to end, but neither completes a revolution after 100 PPO iterations; staged local learning continues. |
 | [E24](#e24) | 2026-10-11 | Grasp fine-tuning, as for rotation: from σ 0 0.58 → 0.69, from each hand's best ambient σ 0.29 → 0.31 (seed 4321). |
@@ -84,6 +85,42 @@ diffusion timesteps t ≥ σ (out of 100). σ=0 is full co-training and σ=100 i
 ---
 
 ## Entries
+
+<a id="e27"></a>
+### E27 — 2026-11-02 — Early expert results across hands on one GPU
+
+**Question.** Which tasks/hands learn under the initial PPO recipe? **Status.** running.
+**Data.** Online simulator rollouts, no demonstration stores changed ([COLLECTIONS](COLLECTIONS.md)).
+**Policy inputs/outputs.** Same task-specific observations and per-hand joint actions as E25;
+single-step actor output, no diffusion action chunk/padding. Per-run params retain exact layouts
+and PPO normalization configuration; no recipe changes from CHANGES83.
+**Protocol.** Train seed0,1024environments,32rollout steps/update; cumulative1k/3k/10k rounds,
+checkpoint resume between rounds. Evaluate last checkpoint of each completed round on100
+fresh-reset episodes at seed1234, deterministic actor,24s maximum. No checkpoint cherry-picking.
+
+| Task | Latest completed iterations | Held-out success |
+|---|---:|---:|
+| Baoding-LEAP |10000|0%|
+| Baoding-Shadow |3000|100%|
+| Baoding-Sharpa |3000|22%|
+| Baoding-Wuji |3000|61%|
+| Pen-Spinning-LEAP |1000|0%|
+| Pen-Spinning-Shadow |1000|0%|
+| Pen-Spinning-Sharpa |1000|0%|
+| Pen-Spinning-Wuji |1000|0%|
+
+![Held-out expert learning by hand](plots/dexterity_rounds_20261102.png)
+
+[All completed rounds, report/video paths and progress metrics](plots/dexterity_rounds_20261102.csv).
+All13 reports have MP4 files. Roots: outputs/dexterity/baoding_leap_local_20261101 and
+outputs/dexterity/serial_local_1111059_20261101/Task/round_N/.
+At08:19CST Pen-LEAP3k is still training; its~23% training success is not a held-out score.
+**Takeaways.** Baoding transfers as a learnable task to Shadow/Wuji, but LEAP stalls despite10k.
+Sharpa's final training metric1.0 versus held-out0.22 needs investigation; do not substitute
+training success for evaluation. Pen results remain incomplete and the1k policies fail.
+**Links.** RUNS1111059; [A55](agent_log_book.md#a55); CHANGES83,85.
+
+---
 
 <a id="e26"></a>
 ### E26 — 2026-10-31 — Fast RL scheduling and a successful Baoding policy
